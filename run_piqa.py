@@ -34,12 +34,8 @@ from torch.utils.data.distributed import DistributedSampler
 import tokenization
 from bert import BertConfig
 from optimization import BERTAdam
-
-import nsml
-from nsml import DATASET_PATH, IS_ON_NSML
-
 from phrase import BertPhraseModel
-from post import write_predictions, write_context, write_question, get_questions
+from post import write_predictions, write_context, write_question, get_questions, write_hdf5
 from pre import convert_examples_to_features, read_squad_examples, convert_documents_to_features, \
     convert_questions_to_features, SquadExample
 
@@ -66,25 +62,50 @@ def main():
     parser.add_argument('--mode', type=str, default='train')
     parser.add_argument('--pause', type=int, default=0)
     parser.add_argument('--iteration', type=str, default='0')
-    parser.add_argument('--nfs', default=False, action='store_true')
+    parser.add_argument('--fs', type=str, default='local',
+                        help='local|nsml|nfs|nfs_nsml. `nfs_nsml` uses nfs as input and nsml as output')
 
+    # Data paths
+    parser.add_argument('--data_dir', default='ckpt/', type=str)
+    parser.add_argument("--train_file", default='train-v1.1.json', type=str,
+                        help="SQuAD json for training. E.g., train-v1.1.json")
+    parser.add_argument("--predict_file", default='dev-v1.1.json', type=str,
+                        help="SQuAD json for predictions. E.g., dev-v1.1.json or test-v1.1.json")
+    parser.add_argument('--gt_file', default='dev-v1.1.json', type=str, help='ground truth file needed for evaluation.')
+
+    # Metadata paths
+    parser.add_argument('--metadata_dir', default='ckpt/', type=str)
+    parser.add_argument("--vocab_file", default='vocab.txt', type=str,
+                        help="The vocabulary file that the BERT model was trained on.")
     parser.add_argument("--bert_model_option", default='large_uncased', type=str,
                         help="model architecture option. [large_uncased] or [base_uncased]")
     parser.add_argument("--bert_config_file", default='bert_config.json', type=str,
                         help="The config json file corresponding to the pre-trained BERT model. "
                              "This specifies the model architecture.")
-    parser.add_argument("--vocab_file", default='vocab.txt', type=str,
-                        help="The vocabulary file that the BERT model was trained on.")
-    parser.add_argument("--output_dir", default='squad_base', type=str,
-                        help="The output directory where the model checkpoints will be written.")
-
-    ## Other parameters
-    parser.add_argument("--train_file", default='train-v1.1.json', type=str,
-                        help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--predict_file", default='dev-v1.1.json', type=str,
-                        help="SQuAD json for predictions. E.g., dev-v1.1.json or test-v1.1.json")
     parser.add_argument("--init_checkpoint", default='pytorch_model.bin', type=str,
                         help="Initial checkpoint (usually from a pre-trained BERT model).")
+
+    # Output and load paths
+    parser.add_argument("--output_dir", default='out', type=str,
+                        help="The output directory where the model checkpoints will be written.")
+
+    parser.add_argument('--load_dir', default='out', type=str)
+
+    # Local paths (if we want to run cmd)
+    parser.add_argument('--eval_script', default='evaluate-v1.1.py', type=str)
+
+    # Do
+    parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
+    parser.add_argument("--do_predict", default=False, action='store_true', help="Whether to run eval on the dev set.")
+    parser.add_argument('--do_eval', default=False, action='store_true')
+    parser.add_argument('--do_embed_context', default=False, action='store_true')
+    parser.add_argument('--do_embed_question', default=False, action='store_true')
+    parser.add_argument('--do_merge_eval', default=False, action='store_true')
+    parser.add_argument('--do_benchmark', default=False, action='store_true')
+    parser.add_argument('--do_serve', default=False, action='store_true')
+    parser.add_argument('--do_index', default=False, action='store_true')
+
+    # Model options
     parser.add_argument("--do_case", default=False, action='store_true',
                         help="Whether to lower case the input text. Should be True for uncased "
                              "models and False for cased models.")
@@ -96,8 +117,6 @@ def main():
     parser.add_argument("--max_query_length", default=64, type=int,
                         help="The maximum number of tokens for the question. Questions longer than this will "
                              "be truncated to this length.")
-    parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
-    parser.add_argument("--do_predict", default=False, action='store_true', help="Whether to run eval on the dev set.")
     parser.add_argument("--train_batch_size", default=12, type=int, help="Total batch size for training.")
     parser.add_argument("--predict_batch_size", default=16, type=int, help="Total batch size for predictions.")
     parser.add_argument("--learning_rate", default=3e-5, type=float, help="The initial learning rate for Adam.")
@@ -143,43 +162,18 @@ def main():
                         default=False,
                         action='store_true',
                         help="Whether to use 16-bit float precision instead of 32-bit")
-
-    parser.add_argument('--gt_file', default='dev-v1.1.json', type=str, help='ground truth file.')
     parser.add_argument('--draft', default=False, action='store_true')
     parser.add_argument('--draft_num_examples', type=int, default=12)
     parser.add_argument('--span_vec_size', default=64, type=int)
-    parser.add_argument('--model', default='default', type=str, help='default')
-    parser.add_argument('--context_layer_idx', type=int, default=-1)
-    parser.add_argument('--question_layer_idx', type=int, default=-1)
-    parser.add_argument('--span_layer_idx', type=int, default=-1)
-    parser.add_argument('--do_eval', default=False, action='store_true')
-    parser.add_argument('--do_embed_context', default=False, action='store_true')
-    parser.add_argument('--do_embed_question', default=False, action='store_true')
-    parser.add_argument('--context_embed_dir', default='context_emb', type=str)
-    parser.add_argument('--question_embed_dir', default='question_emb', type=str)
     parser.add_argument('--span_threshold', default=-1e9, type=float)
-    parser.add_argument('--load_dir', default='squad_base', type=str)
-    parser.add_argument('--do_merge_eval', default=False, action='store_true')
     parser.add_argument('--filter_cf', default=0.0, type=float)
-    parser.add_argument('--indep', default=False, action='store_true')
-    parser.add_argument('--no_gelu', default=False, action='store_true')
-    parser.add_argument('--do_benchmark', default=False, action='store_true')
-    parser.add_argument('--do_serve', default=False, action='store_true')
     parser.add_argument('--port', default=9003, type=int)
-    parser.add_argument('--do_index', default=False, action='store_true')
     parser.add_argument('--parallel', default=False, action='store_true')
-    parser.add_argument('--data_dir', default='ckpt/', type=str)
-    parser.add_argument('--eval_script', default='evaluate-v1.1.py', type=str)
 
     args = parser.parse_args()
 
-    # NSML specific routine
-    if IS_ON_NSML:
-        data_dir = os.path.join(DATASET_PATH, 'train')
-        processor = nsml
-    else:
-        data_dir = args.data_dir
-
+    # Filesystem routines
+    if args.fs == 'local':
         class Processor(object):
             def __init__(self, path):
                 self._save = None
@@ -206,16 +200,43 @@ def main():
                     load_fn(path, **kwargs)
 
         processor = Processor(args.load_dir)
+    elif args.fs == 'nfs':
+        import nsml
+        from nsml import NSML_NFS_OUTPUT
+        args.data_dir = os.path.join(NSML_NFS_OUTPUT, args.data_dir)
+        args.metadata_dir = os.path.join(NSML_NFS_OUTPUT, args.metadata_dir)
+        # args.load_dir should be the session name
+        processor = nsml
+        args.output_dir = os.path.join(NSML_NFS_OUTPUT, args.output_dir)
+    elif args.fs == 'nsml':
+        import nsml
+        from nsml import DATASET_PATH
+        args.data_dir = os.path.join(DATASET_PATH, 'train')
+        args.metadata_dir = os.path.join(DATASET_PATH, 'train')
+        # args.load_dir should be the session name
+        processor = nsml
+        # args.output_dir is local, so no change
+    elif args.fs == 'nsml_nfs':
+        import nsml
+        from nsml import NSML_NFS_OUTPUT
+        args.data_dir = os.path.join(NSML_NFS_OUTPUT, args.data_dir)
+        args.metadata_dir = os.path.join(NSML_NFS_OUTPUT, args.metadata_dir)
+        # args.load_dir should be the session name
+        processor = nsml
+        # args.output_dir is local, so no change
+    else:
+        raise ValueError(args.fs)
 
-    args.bert_config_file = os.path.join(data_dir, args.bert_config_file.replace(".json", "") +
+    # Configure paths
+    args.train_file = os.path.join(args.data_dir, args.train_file)
+    args.predict_file = os.path.join(args.data_dir, args.predict_file)
+    args.gt_file = os.path.join(args.data_dir, args.gt_file)
+
+    args.bert_config_file = os.path.join(args.metadata_dir, args.bert_config_file.replace(".json", "") +
                                          "_" + args.bert_model_option + ".json")
-    args.vocab_file = os.path.join(data_dir, args.vocab_file)
-    args.train_file = os.path.join(data_dir, args.train_file)
-    args.predict_file = os.path.join(data_dir, args.predict_file)
-    args.gt_file = os.path.join(data_dir, args.gt_file)
-    args.init_checkpoint = os.path.join(data_dir, args.init_checkpoint.replace(".bin", "") +
+    args.init_checkpoint = os.path.join(args.metadata_dir, args.init_checkpoint.replace(".bin", "") +
                                         "_" + args.bert_model_option + ".bin")
-    # END
+    args.vocab_file = os.path.join(args.metadata_dir, args.vocab_file)
 
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -273,11 +294,8 @@ def main():
         num_train_steps = int(
             len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
 
-    if args.model == 'default':
-        model = BertPhraseModel(bert_config,
-                                span_vec_size=args.span_vec_size)
-    else:
-        raise ValueError(args.model)
+    model = BertPhraseModel(bert_config,
+                            span_vec_size=args.span_vec_size)
     print('Number of parameters:', sum(p.numel() for p in model.parameters()))
 
     if args.do_train and args.init_checkpoint is not None:
@@ -653,95 +671,77 @@ def main():
         print('latency per query: %dms' % ((end - start) * 1000 / count))
 
     if args.do_index:
-        index_dir = os.path.basename(args.predict_file)
-        os.makedirs(index_dir)
-        if '-' not in args.predict_file:
+        if ':' not in args.predict_file:
             predict_files = [args.predict_file]
+            offsets = [0]
         else:
             dirname = os.path.dirname(args.predict_file)
             basename = os.path.basename(args.predict_file)
-            start, end = list(map(int, basename.split('-')))
+            start, end = list(map(int, basename.split(':')))
             predict_files = [os.path.join(dirname, str(i).zfill(4)) for i in range(start, end)]
+            offsets = [int(each) * 1000 for each in predict_files]
 
-        error_files = []
-        for predict_file in predict_files:
-            try:
-                target_dir = os.path.join(index_dir, os.path.basename(predict_file))
-                os.makedirs(target_dir)
-                context_examples = read_squad_examples(
-                    context_only=True,
-                    input_file=predict_file, is_training=False, draft=args.draft,
-                    draft_num_examples=args.draft_num_examples)
-                context_features = convert_documents_to_features(
-                    examples=context_examples,
-                    tokenizer=tokenizer,
-                    max_seq_length=args.max_seq_length,
-                    doc_stride=args.doc_stride)
+        for offset, predict_file in zip(offsets, predict_files):
+            context_examples = read_squad_examples(
+                context_only=True,
+                input_file=predict_file, is_training=False, draft=args.draft,
+                draft_num_examples=args.draft_num_examples)
 
-                logger.info("***** Running indexing on %s *****" % predict_file)
-                logger.info("  Num orig examples = %d", len(context_examples))
-                logger.info("  Num split examples = %d", len(context_features))
-                logger.info("  Batch size = %d", args.predict_batch_size)
+            for example in context_examples:
+                example.doc_idx += offset
 
-                all_input_ids = torch.tensor([f.input_ids for f in context_features], dtype=torch.long)
-                all_input_mask = torch.tensor([f.input_mask for f in context_features], dtype=torch.long)
-                all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
-                if args.fp16:
-                    all_input_ids, all_input_mask, all_example_index = tuple(
-                        t.half() for t in (all_input_ids, all_input_mask, all_example_index))
+            context_features = convert_documents_to_features(
+                examples=context_examples,
+                tokenizer=tokenizer,
+                max_seq_length=args.max_seq_length,
+                doc_stride=args.doc_stride)
 
-                context_data = TensorDataset(all_input_ids, all_input_mask, all_example_index)
+            logger.info("***** Running indexing on %s *****" % predict_file)
+            logger.info("  Num orig examples = %d", len(context_examples))
+            logger.info("  Num split examples = %d", len(context_features))
+            logger.info("  Batch size = %d", args.predict_batch_size)
 
-                if args.local_rank == -1:
-                    context_sampler = SequentialSampler(context_data)
-                else:
-                    context_sampler = DistributedSampler(context_data)
-                context_dataloader = DataLoader(context_data, sampler=context_sampler,
-                                                batch_size=args.predict_batch_size)
+            all_input_ids = torch.tensor([f.input_ids for f in context_features], dtype=torch.long)
+            all_input_mask = torch.tensor([f.input_mask for f in context_features], dtype=torch.long)
+            all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
+            if args.fp16:
+                all_input_ids, all_input_mask, all_example_index = tuple(
+                    t.half() for t in (all_input_ids, all_input_mask, all_example_index))
 
-                model.eval()
-                logger.info("Start indexing")
+            context_data = TensorDataset(all_input_ids, all_input_mask, all_example_index)
 
-                def get_context_results():
-                    for (input_ids, input_mask, example_indices) in context_dataloader:
-                        input_ids = input_ids.to(device)
-                        input_mask = input_mask.to(device)
-                        with torch.no_grad():
-                            batch_start, batch_end, batch_span_logits, batch_filter_logits = model(input_ids,
-                                                                                                   input_mask)
-                        for i, example_index in enumerate(example_indices):
-                            start = batch_start[i].detach().cpu().numpy()
-                            end = batch_end[i].detach().cpu().numpy()
-                            span_logits = batch_span_logits[i].detach().cpu().numpy()
-                            filter_logits = batch_filter_logits[i].detach().cpu().numpy()
-                            context_feature = context_features[example_index.item()]
-                            unique_id = int(context_feature.unique_id)
-                            yield ContextResult(unique_id=unique_id,
-                                                start=start,
-                                                end=end,
-                                                span_logits=span_logits,
-                                                filter_logits=filter_logits)
+            if args.local_rank == -1:
+                context_sampler = SequentialSampler(context_data)
+            else:
+                context_sampler = DistributedSampler(context_data)
+            context_dataloader = DataLoader(context_data, sampler=context_sampler,
+                                            batch_size=args.predict_batch_size)
 
-                def index_save(filename, **kwargs):
-                    write_context(context_examples, context_features, get_context_results(),
-                                  args.span_threshold, args.max_answer_length,
-                                  not args.do_case, filename, args.verbose_logging,
-                                  one_file_per_doc=True)
+            model.eval()
+            logger.info("Start indexing")
 
-                iteration = epoch + 1 if args.do_train else args.iteration
-                index_save(target_dir)
-            except:
-                print("Error: %s" % predict_file)
-                error_files.append(predict_file)
+            def get_context_results():
+                for (input_ids, input_mask, example_indices) in context_dataloader:
+                    input_ids = input_ids.to(device)
+                    input_mask = input_mask.to(device)
+                    with torch.no_grad():
+                        batch_start, batch_end, batch_span_logits = model(input_ids,
+                                                                          input_mask)
+                    for i, example_index in enumerate(example_indices):
+                        start = batch_start[i].detach().cpu().numpy()
+                        end = batch_end[i].detach().cpu().numpy()
+                        span_logits = batch_span_logits[i].detach().cpu().numpy()
+                        context_feature = context_features[example_index.item()]
+                        unique_id = int(context_feature.unique_id)
+                        yield ContextResult(unique_id=unique_id,
+                                            start=start,
+                                            end=end,
+                                            span_logits=span_logits,
+                                            filter_logits=None)
 
-        print('%d errors' % len(error_files))
-        if len(error_files):
-            print('error files:', ', '.join(error_files))
-
-        import shutil
-        print('Archiving at %s.zip' % index_dir)
-        shutil.make_archive(index_dir, 'zip', index_dir)
-        shutil.rmtree(index_dir)
+            hdf5_path = os.path.join(args.output_dir, 'index.hdf5')
+            write_hdf5(context_examples, context_features, get_context_results(),
+                       args.max_answer_length, not args.do_case, hdf5_path, args.verbose_logging)
 
     if args.do_serve:
         def get_vec(text):

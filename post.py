@@ -176,6 +176,79 @@ def get_documents(all_examples, all_features, all_results, threshold,
         yield metadata, vectors, phrases
 
 
+def get_metadata(example, features, results, max_answer_length, do_lower_case, verbose_logging):
+    start2char = []
+    end2char = []
+    start = np.concatenate([result.start[:len(feature.tokens)] for feature, result in zip(features, results)], axis=0)
+    end = np.concatenate([result.end[:len(feature.tokens)] for feature, result in zip(features, results)], axis=0)
+    span_logits = -1e9 * np.ones([np.shape(start)[0], max_answer_length])
+    idx = 0
+    for feature, result in zip(features, results):
+        for i in range(len(feature.tokens)):
+            for j in range(i, min(i + max_answer_length, len(feature.tokens))):
+                span_logits[idx, j - i] = result.span_logits[i, j]
+            idx += 1
+
+    full_text = ' '.join(example.doc_tokens)
+    offset = 0
+    for feature in features:
+        for idx in range(len(feature.tokens)):
+            if idx not in feature.token_to_orig_map or not feature.token_is_max_context.get(idx, False):
+                start2char.append(-1)
+                end2char.append(-1)
+            else:
+                _, start_pos, end_pos = get_final_text_(example, feature, idx, idx, do_lower_case,
+                                                        verbose_logging)
+                start2char.append(offset + start_pos)
+                end2char.append(offset + end_pos)
+        offset += len(feature.tokens)
+
+    metadata = {'did': example.doc_idx, 'pid': example.pid,
+                'context': full_text, 'title': example.title, 'start2char': start2char, 'end2char': end2char,
+                'start': start, 'end': end, 'span_logits': span_logits}
+    return metadata
+
+
+def write_hdf5(all_examples, all_features, all_results,
+               max_answer_length, do_lower_case, hdf5_path, verbose_logging):
+    assert len(all_examples) > 0
+
+    import h5py
+    f = h5py.File(hdf5_path, 'w')
+
+    id2feature = {feature.unique_id: feature for feature in all_features}
+    id2example = {id_: all_examples[id2feature[id_].example_index] for id_ in id2feature}
+
+    def add(example_, features_, results):
+        metadata = get_metadata(example_, features_, results, max_answer_length, do_lower_case, verbose_logging)
+        did, pid = str(metadata['did']), str(metadata['pid'])
+        dg = f[did] if did in f else f.create_group(did)
+        pd = dg.create_group(pid)
+        pd.create_dataset('start', data=metadata['start'])
+        pd.create_dataset('end', data=metadata['end'])
+        pd.create_dataset('span_logits', data=metadata['span_logits'])
+        pd.create_dataset('start2char', data=metadata['start2char'])
+        pd.create_dataset('end2char', data=metadata['end2char'])
+        pd.attrs['context'] = metadata['context']
+
+    example = None
+    features = []
+    results = []
+    for result in all_results:
+        example = id2example[result.unique_id]
+        feature = id2feature[result.unique_id]
+        if len(features) > 0 and feature.doc_span_index == 0:
+            # consume features
+            add(example, features, results)
+            features = []
+            results = []
+        features.append(feature)
+        results.append(result)
+    add(example, features, results)
+
+    f.close()
+
+
 def write_context(all_examples, all_features, all_results, threshold,
                   max_answer_length, do_lower_case, zip_dir, verbose_logging,
                   one_file_per_doc=False):
