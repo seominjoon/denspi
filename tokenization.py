@@ -70,9 +70,9 @@ def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
     vocab = collections.OrderedDict()
     index = 0
-    with open(vocab_file, "r") as reader:
+    with open(vocab_file, "rb") as reader:
         while True:
-            token = convert_to_unicode(reader.readline())
+            token = convert_to_unicode(reader.readline().decode('utf-8'))
             if not token:
                 break
             token = token.strip()
@@ -181,7 +181,7 @@ class BasicTokenizer(object):
             i += 1
 
         return ["".join(x) for x in output]
-    
+
     def _tokenize_chinese_chars(self, text):
         """Adds whitespace around any CJK character."""
         output = []
@@ -214,9 +214,9 @@ class BasicTokenizer(object):
             (cp >= 0xF900 and cp <= 0xFAFF) or  #
             (cp >= 0x2F800 and cp <= 0x2FA1F)):  #
             return True
-    
+
         return False
-    
+
     def _clean_text(self, text):
         """Performs invalid character removal and whitespace cleanup on text."""
         output = []
@@ -325,7 +325,7 @@ def _is_punctuation(char):
     # Punctuation class but we treat them as punctuation anyways, for
     # consistency.
     if ((cp >= 33 and cp <= 47) or (cp >= 58 and cp <= 64) or
-            (cp >= 91 and cp <= 96) or (cp >= 123 and cp <= 126)):
+        (cp >= 91 and cp <= 96) or (cp >= 123 and cp <= 126)):
         return True
     cat = unicodedata.category(char)
     if cat.startswith("P"):

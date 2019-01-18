@@ -5,3 +5,5 @@ six
 flask
 flask_cors
 tornado
+konlpy
+spacy

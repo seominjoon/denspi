@@ -72,12 +72,82 @@ dl:
 	--do_train \
 	--do_predict \
 	--do_eval \
-	--do_embed_question \
-	--do_embed_context \
-	--filter_cf 0.1 \
 	--num_train_epochs 1 \
 	--draft_num_examples 1 \
 	--train_batch_size 1 \
 	--predict_batch_size 1 \
 	--draft \
 	--no_cuda
+
+kor_dl:
+	python run_piqa_korquad.py \
+	--bert_model_option 'base_cased' \
+	--data_dir ~/data/korquad_bert/train \
+	--eval_script evaluate-v1.0.py \
+	--train_file KorQuAD_v1.0_train.json \
+	--gt_file KorQuAD_v1.0_dev.json \
+	--predict_file KorQuAD_v1.0_dev.json \
+	--do_train \
+	--do_predict \
+	--do_eval \
+	--num_train_epochs 1 \
+	--draft_num_examples 1 \
+	--train_batch_size 1 \
+	--predict_batch_size 1 \
+	--draft \
+	--no_cuda
+
+k018:
+	nsml run -d korquad_bert -g 1 -e run_piqa_korquad.py --memory 16G -a " \
+	--bert_model_option 'base_cased' \
+	--eval_script evaluate-v1.0.py \
+	--train_file KorQuAD_v1.0_train.json \
+	--gt_file KorQuAD_v1.0_dev.json \
+	--predict_file KorQuAD_v1.0_dev.json \
+	--do_train \
+	--do_predict \
+	--num_train_epochs 1 \
+	--do_case \
+	--do_eval"
+
+
+k019:
+	nsml run -d korquad_bert -g 1 -e run_piqa_korquad.py --memory 16G -a " \
+	--bert_model_option 'base_cased' \
+	--eval_script evaluate-v1.0.py \
+	--train_file KorQuAD_v1.0_train.json \
+	--gt_file KorQuAD_v1.0_dev.json \
+	--predict_file KorQuAD_v1.0_dev.json \
+	--do_train \
+	--do_predict \
+	--num_train_epochs 3 \
+	--do_case \
+	--do_eval"
+
+k020:
+	nsml run -d korquad_bert -g 1 -e run_piqa_korquad.py --memory 16G -a " \
+	--bert_model_option 'base_cased' \
+	--eval_script evaluate-v1.0.py \
+	--train_file KorQuAD_v1.0_train.json \
+	--gt_file KorQuAD_v1.0_dev.json \
+	--predict_file KorQuAD_v1.0_dev.json \
+	--do_train \
+	--do_predict \
+	--seed 29 \
+	--num_train_epochs 3 \
+	--do_case \
+	--do_eval"
+
+k021:
+	nsml run -d korquad_bert -g 2 -e run_piqa_korquad.py --memory 16G -a " \
+	--bert_model_option 'base_cased' \
+	--eval_script evaluate-v1.0.py \
+	--train_file KorQuAD_v1.0_train.json \
+	--gt_file KorQuAD_v1.0_dev.json \
+	--predict_file KorQuAD_v1.0_dev.json \
+	--do_train \
+	--do_predict \
+	--num_train_epochs 3 \
+	--do_case \
+	--max_seq_length 512 \
+	--do_eval"

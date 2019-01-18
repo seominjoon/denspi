@@ -92,7 +92,7 @@ class QuestionFeatures(object):
 
 
 def read_squad_examples(input_file, is_training, context_only=False, question_only=False,
-                        draft=False, draft_num_examples=12):
+                        draft=False, draft_num_examples=12, tokenizer=None):
     """Read a SQuAD json file into a list of SquadExample."""
     with open(input_file, "r") as reader:
         input_data = json.load(reader)["data"]
@@ -103,7 +103,7 @@ def read_squad_examples(input_file, is_training, context_only=False, question_on
         for pid, paragraph in enumerate(entry["paragraphs"]):
             if not question_only:
                 paragraph_text = paragraph["context"]
-                doc_tokens, char_to_word_offset = context_to_tokens_and_offset(paragraph_text)
+                doc_tokens, char_to_word_offset = context_to_tokens_and_offset(paragraph_text, tokenizer=tokenizer)
             if context_only:
                 example = SquadExample(
                     doc_tokens=doc_tokens,
@@ -489,7 +489,7 @@ def convert_documents_to_features(examples, tokenizer, max_seq_length, doc_strid
     return features
 
 
-def context_to_tokens_and_offset(context):
+def _context_to_tokens_and_offset(context):
     def is_whitespace(c):
         if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F:
             return True
@@ -510,3 +510,22 @@ def context_to_tokens_and_offset(context):
         char_to_word_offset.append(len(doc_tokens) - 1)
 
     return doc_tokens, char_to_word_offset
+
+
+def context_to_tokens_and_offset(context, tokenizer=None):
+    if tokenizer is None:
+        return _context_to_tokens_and_offset(context)
+    # Tokenizer must be content-preserving (e.g. PTB changes " to '', which is not acceptable)
+    doc_tokens = tokenizer(context)
+    char_to_word_offset = []
+    cur_pos = 0
+    for word_pos, token in enumerate(doc_tokens):
+        new_pos = context.find(token, cur_pos)
+        # set previous word's offset
+        assert cur_pos >= 0, "cannot find `%s` in `%s`" % (token, context)
+        char_to_word_offset.extend([max(0, word_pos-1)] * (new_pos - cur_pos))
+        assert context[len(char_to_word_offset)] == token[0]
+        char_to_word_offset.extend([word_pos] * len(token))
+        cur_pos = new_pos + len(token)
+    return doc_tokens, char_to_word_offset
+

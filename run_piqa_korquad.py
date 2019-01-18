@@ -24,6 +24,8 @@ import logging
 import json
 import os
 import random
+
+from konlpy.tag import Mecab
 from tqdm import tqdm as tqdm_
 
 import numpy as np
@@ -40,7 +42,8 @@ from nsml import DATASET_PATH, IS_ON_NSML
 
 from phrase import BertPhraseModel
 from post import write_predictions, write_context, write_question, get_questions
-from pre import convert_examples_to_features, read_squad_examples, convert_documents_to_features, \
+from pre import convert_examples_to_features, read_squad_examples as _read_squad_examples, \
+    convert_documents_to_features, \
     convert_questions_to_features, SquadExample
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -53,6 +56,12 @@ ContextResult = collections.namedtuple("ContextResult",
                                        ['unique_id', 'start', 'end', 'span_logits', 'filter_logits'])
 QuestionResult = collections.namedtuple("QuestionResult",
                                         ['unique_id', 'start', 'end'])
+
+m = Mecab()
+
+
+def read_squad_examples(*args, tokenizer=None, **kwargs):
+    return _read_squad_examples(*args, tokenizer=m.morphs, **kwargs)
 
 
 def tqdm(*args, mininterval=5.0, **kwargs):
