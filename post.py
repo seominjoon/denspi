@@ -219,11 +219,11 @@ def write_hdf5(all_examples, all_features, all_results,
     id2feature = {feature.unique_id: feature for feature in all_features}
     id2example = {id_: all_examples[id2feature[id_].example_index] for id_ in id2feature}
 
-    def add(example_, features_, results):
-        metadata = get_metadata(example_, features_, results, max_answer_length, do_lower_case, verbose_logging)
+    def add(example_, features_, results_):
+        metadata = get_metadata(example_, features_, results_, max_answer_length, do_lower_case, verbose_logging)
         did, pid = str(metadata['did']), str(metadata['pid'])
         dg = f[did] if did in f else f.create_group(did)
-        pd = dg[pid] if pid in dg else dg.create_group(pid)
+        pd = dg.create_group(pid)
         pd.create_dataset('start', data=metadata['start'])
         pd.create_dataset('end', data=metadata['end'])
         pd.create_dataset('span_logits', data=metadata['span_logits'])
@@ -231,7 +231,7 @@ def write_hdf5(all_examples, all_features, all_results,
         pd.create_dataset('end2char', data=metadata['end2char'])
         pd.attrs['context'] = metadata['context']
 
-    example = None
+    prev_example = None
     features = []
     results = []
     for result in all_results:
@@ -239,12 +239,14 @@ def write_hdf5(all_examples, all_features, all_results,
         feature = id2feature[result.unique_id]
         if len(features) > 0 and feature.doc_span_index == 0:
             # consume features
-            add(example, features, results)
-            features = []
-            results = []
-        features.append(feature)
-        results.append(result)
-    add(example, features, results)
+            add(prev_example, features, results)
+            features = [feature]
+            results = [result]
+        else:
+            features.append(feature)
+            results.append(result)
+        prev_example = example
+    add(prev_example, features, results)
 
     f.close()
 

@@ -196,8 +196,6 @@ p088_t051:
 	nsml run -d squad_bert_2 -g 1 -e run_piqa.py --memory 12G -a " \
 	--fs nsml \
 	--bert_model_option 'base_uncased' \
-	--do_predict \
-	--do_eval \
 	--do_index \
 	--load_dir KR18816/squad_bert_2/51 \
 	--iteration 3"
