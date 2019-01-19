@@ -7,3 +7,4 @@ flask_cors
 tornado
 konlpy
 spacy
+h5py

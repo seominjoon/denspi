@@ -177,7 +177,7 @@ def get_documents(all_examples, all_features, all_results, threshold,
         yield metadata, vectors, phrases
 
 
-def get_metadata(example, features, results, max_answer_length, do_lower_case, verbose_logging):
+def get_metadata(id2example, features, results, max_answer_length, do_lower_case, verbose_logging):
     start2char = []
     end2char = []
     start = np.concatenate([result.start[:len(feature.tokens)] for feature, result in zip(features, results)], axis=0)
@@ -190,8 +190,14 @@ def get_metadata(example, features, results, max_answer_length, do_lower_case, v
                 span_logits[idx, j - i] = result.span_logits[i, j]
             idx += 1
 
-    full_text = ' '.join(example.doc_tokens)
+    sep = ' [PAR] '
+    full_text = ""
+    prev_example = None
     for feature in features:
+        example = id2example[feature.unique_id]
+        if prev_example is not None and example.pid == 0:
+            new_ = ('' if full_text == "" else sep) + ' '.join(prev_example.doc_tokens)
+            full_text = full_text + new_
         for idx in range(len(feature.tokens)):
             if idx not in feature.token_to_orig_map or not feature.token_is_max_context.get(idx, False):
                 start2char.append(-1)
@@ -199,11 +205,13 @@ def get_metadata(example, features, results, max_answer_length, do_lower_case, v
             else:
                 _, start_pos, end_pos = get_final_text_(example, feature, idx, idx, do_lower_case,
                                                         verbose_logging)
-                start2char.append(start_pos)
-                end2char.append(end_pos)
+                start2char.append(len(full_text) + start_pos)
+                end2char.append(len(full_text) + end_pos)
+        prev_example = example
+    full_text = sep + ' '.join(prev_example.doc_tokens)
 
-    metadata = {'did': example.doc_idx, 'pid': example.pid,
-                'context': full_text, 'title': example.title, 'start2char': start2char, 'end2char': end2char,
+    metadata = {'did': prev_example.doc_idx,
+                'context': full_text, 'title': prev_example.title, 'start2char': start2char, 'end2char': end2char,
                 'start': start, 'end': end, 'span_logits': span_logits}
     return metadata
 
@@ -218,40 +226,36 @@ def write_hdf5(all_examples, all_features, all_results,
     id2feature = {feature.unique_id: feature for feature in all_features}
     id2example = {id_: all_examples[id2feature[id_].example_index] for id_ in id2feature}
 
-    def add(example_, features_, results_):
-        metadata = get_metadata(example_, features_, results_, max_answer_length, do_lower_case, verbose_logging)
-        did, pid = str(metadata['did']), str(metadata['pid'])
-        dg = f[did] if did in f else f.create_group(did)
-        pd = dg.create_group(pid)
-        pd.create_dataset('start', data=metadata['start'], compression='gzip')
-        pd.create_dataset('end', data=metadata['end'], compression='gzip')
-        pd.create_dataset('span_logits', data=metadata['span_logits'], compression='gzip')
-        pd.create_dataset('start2char', data=metadata['start2char'], compression='gzip')
-        pd.create_dataset('end2char', data=metadata['end2char'], compression='gzip')
-        pd.attrs['context'] = metadata['context']
+    def add(id2example_, features_, results_):
+        metadata = get_metadata(id2example_, features_, results_, max_answer_length, do_lower_case, verbose_logging)
+        dg = f.create_group(str(metadata['did']))
+        dg.create_dataset('start', data=metadata['start'])
+        dg.create_dataset('end', data=metadata['end'])
+        dg.create_dataset('span_logits', data=metadata['span_logits'])
+        dg.create_dataset('start2char', data=metadata['start2char'])
+        dg.create_dataset('end2char', data=metadata['end2char'])
+        dg.attrs['context'] = metadata['context']
 
-    prev_example = None
     features = []
     results = []
     t = None  # for threading
     for result in tqdm(all_results, total=len(features)):
         example = id2example[result.unique_id]
         feature = id2feature[result.unique_id]
-        if len(features) > 0 and feature.doc_span_index == 0:
+        if len(features) > 0 and example.pid == 0:
             # consume features
             if t is not None:
                 t.join()
-            t = threading.Thread(target=add, args=(prev_example, features, results))
+            t = threading.Thread(target=add, args=(id2example, features, results))
             t.start()
             features = [feature]
             results = [result]
         else:
             features.append(feature)
             results.append(result)
-        prev_example = example
     if t is not None:
         t.join()
-    add(prev_example, features, results)
+    add(id2example, features, results)
 
     f.close()
 

@@ -304,7 +304,7 @@ def main():
         if next(iter(state_dict)).startswith('bert.'):
             state_dict = {key[len('bert.'):]: val for key, val in state_dict.items()}
             state_dict = {key: val for key, val in state_dict.items() if key in model.encoder.bert_model.state_dict()}
-        model.encoder.bert_model.load_state_dict(state_dict)
+        model.encoder.bert.load_state_dict(state_dict)
     if args.fp16:
         model.half()
 
