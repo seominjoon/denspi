@@ -238,23 +238,16 @@ def write_hdf5(all_examples, all_features, all_results,
 
     features = []
     results = []
-    t = None  # for threading
     for result in tqdm(all_results, total=len(features)):
         example = id2example[result.unique_id]
         feature = id2feature[result.unique_id]
-        if len(features) > 0 and example.pid == 0:
-            # consume features
-            if t is not None:
-                t.join()
-            t = threading.Thread(target=add, args=(id2example, features, results))
-            t.start()
+        if len(features) > 0 and example.pid == 0 and feature.doc_span_index == 0:
+            add(id2example, features, results)
             features = [feature]
             results = [result]
         else:
             features.append(feature)
             results.append(result)
-    if t is not None:
-        t.join()
     add(id2example, features, results)
 
     f.close()

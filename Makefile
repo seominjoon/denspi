@@ -210,3 +210,12 @@ p090_t051:
 	--index_file 0000.hdf5 \
 	--load_dir KR18816/squad_bert_2/51 \
 	--iteration 3"
+
+p007_t051:
+	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--output_dir out/large \
+	--index_file 0000.hdf5 \
+	--load_dir KR18816/squad_bert_2/49 \
+	--iteration 3"

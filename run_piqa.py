@@ -854,6 +854,11 @@ def bind_model(processor, model, optimizer):
 def load_backward(state):
     new_state = collections.OrderedDict()
     for key, val in state.items():
+        multi = False
+        if key.startswith('module.'):
+            multi = True
+            key = key[len('module.'):]
+
         if key == 'true_help':
             continue
         if key.startswith('bert_q.'):
@@ -862,6 +867,9 @@ def load_backward(state):
             continue
         if key.startswith('bert.'):
             key = 'encoder.' + key
+
+        if multi:
+            key = 'module.' + key
         new_state[key] = val
     return new_state
 
