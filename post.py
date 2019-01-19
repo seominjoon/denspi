@@ -191,7 +191,6 @@ def get_metadata(example, features, results, max_answer_length, do_lower_case, v
             idx += 1
 
     full_text = ' '.join(example.doc_tokens)
-    offset = 0
     for feature in features:
         for idx in range(len(feature.tokens)):
             if idx not in feature.token_to_orig_map or not feature.token_is_max_context.get(idx, False):
@@ -200,9 +199,8 @@ def get_metadata(example, features, results, max_answer_length, do_lower_case, v
             else:
                 _, start_pos, end_pos = get_final_text_(example, feature, idx, idx, do_lower_case,
                                                         verbose_logging)
-                start2char.append(offset + start_pos)
-                end2char.append(offset + end_pos)
-        offset += len(feature.tokens)
+                start2char.append(start_pos)
+                end2char.append(end_pos)
 
     metadata = {'did': example.doc_idx, 'pid': example.pid,
                 'context': full_text, 'title': example.title, 'start2char': start2char, 'end2char': end2char,
