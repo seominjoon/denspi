@@ -101,9 +101,9 @@ def main():
     parser.add_argument('--do_embed_context', default=False, action='store_true')
     parser.add_argument('--do_embed_question', default=False, action='store_true')
     parser.add_argument('--do_merge_eval', default=False, action='store_true')
+    parser.add_argument('--do_index', default=False, action='store_true')
     parser.add_argument('--do_benchmark', default=False, action='store_true')
     parser.add_argument('--do_serve', default=False, action='store_true')
-    parser.add_argument('--do_index', default=False, action='store_true')
 
     # Model options
     parser.add_argument("--do_case", default=False, action='store_true',
@@ -820,7 +820,7 @@ def bind_model(processor, model, optimizer):
         if not os.path.exists(filename):
             os.makedirs(filename)
         if save_model:
-            state = {'model': model.state_dict(), 'optimizer': optimizer}
+            state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict()}
             model_path = os.path.join(filename, 'model.pt')
             dummy_path = os.path.join(filename, 'dummy')
             torch.save(state, model_path)
@@ -837,14 +837,32 @@ def bind_model(processor, model, optimizer):
             if not os.path.exists(model_path):  # for compatibility
                 model_path = filename
             state = torch.load(model_path, map_location='cpu')
-            state_dict = state['model']
-            model.load_state_dict(state_dict)
-            optimizer.load_state_dict(state['optimizer'])
+            try:
+                model.load_state_dict(state['model'])
+                optimizer.load_state_dict(state['optimizer'])
+            except KeyError:
+                # Backward compatibility
+                model.load_state_dict(load_backward(state))
             print('Model loaded from %s' % model_path)
         if loader is not None:
             loader(filename)
 
     processor.bind(save=save, load=load)
+
+
+def load_backward(state):
+    new_state = collections.OrderedDict()
+    for key, val in state.items():
+        if key == 'true_help':
+            continue
+        if key.startswith('bert_q.'):
+            continue
+        if key.startswith('linear.'):
+            continue
+        if key.startswith('bert.'):
+            key = 'encoder.' + key
+        new_state[key] = val
+    return new_state
 
 
 if __name__ == "__main__":

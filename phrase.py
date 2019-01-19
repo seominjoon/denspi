@@ -4,19 +4,19 @@ from torch import nn
 from bert import BertModel, BERTLayerNorm
 
 
-class BertModelWrapper(nn.Module):
+class BertWrapper(nn.Module):
     """
     Abides phrase model's encoder spec:
     1. (input_ids, mask) -> input_vectors
     2. input_ids[0] is a special token
     """
-    def __init__(self, bert_model):
-        super(BertModelWrapper, self).__init__()
-        self.bert_model = bert_model
+    def __init__(self, bert):
+        super(BertWrapper, self).__init__()
+        self.bert = bert
 
     def forward(self, input_ids, mask):
         segment_ids = torch.zeros_like(input_ids)
-        layers, _ = self.bert_model(input_ids, segment_ids, mask)
+        layers, _ = self.bert(input_ids, segment_ids, mask)
         return layers[-1]
 
 
@@ -104,7 +104,7 @@ class PhraseModel(nn.Module):
 
 class BertPhraseModel(PhraseModel):
     def __init__(self, config, span_vec_size):
-        encoder = BertModelWrapper(BertModel(config))
+        encoder = BertWrapper(BertModel(config))
         super(BertPhraseModel, self).__init__(encoder, span_vec_size)
 
         def init_weights(module):

@@ -179,3 +179,25 @@ dl:
 	--predict_batch_size 1 \
 	--draft \
 	--no_cuda
+
+dl_load:
+	python run_piqa.py \
+	--bert_model_option 'base_uncased' \
+	--iteration 1 \
+	--do_index \
+	--num_train_epochs 1 \
+	--draft_num_examples 1 \
+	--train_batch_size 1 \
+	--predict_batch_size 1 \
+	--draft \
+	--no_cuda
+
+p088_t051:
+	nsml run -d squad_bert_2 -g 1 -e run_piqa.py --memory 12G -a " \
+	--fs nsml \
+	--bert_model_option 'base_uncased' \
+	--do_predict \
+	--do_eval \
+	--do_index \
+	--load_dir KR18816/squad_bert_2/51 \
+	--iteration 3"
