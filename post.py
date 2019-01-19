@@ -223,7 +223,7 @@ def write_hdf5(all_examples, all_features, all_results,
         metadata = get_metadata(example_, features_, results, max_answer_length, do_lower_case, verbose_logging)
         did, pid = str(metadata['did']), str(metadata['pid'])
         dg = f[did] if did in f else f.create_group(did)
-        pd = dg.create_group(pid)
+        pd = dg[pid] if pid in dg else dg.create_group(pid)
         pd.create_dataset('start', data=metadata['start'])
         pd.create_dataset('end', data=metadata['end'])
         pd.create_dataset('span_logits', data=metadata['span_logits'])
