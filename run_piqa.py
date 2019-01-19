@@ -728,9 +728,9 @@ def main():
                         batch_start, batch_end, batch_span_logits = model(input_ids,
                                                                           input_mask)
                     for i, example_index in enumerate(example_indices):
-                        start = batch_start[i].detach().cpu().numpy()
-                        end = batch_end[i].detach().cpu().numpy()
-                        span_logits = batch_span_logits[i].detach().cpu().numpy()
+                        start = batch_start[i].detach().cpu().numpy().astype('float16')
+                        end = batch_end[i].detach().cpu().numpy().astype('float16')
+                        span_logits = batch_span_logits[i].detach().cpu().numpy().astype('float16')
                         context_feature = context_features[example_index.item()]
                         unique_id = int(context_feature.unique_id)
                         yield ContextResult(unique_id=unique_id,

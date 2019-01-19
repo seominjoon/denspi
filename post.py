@@ -234,7 +234,7 @@ def write_hdf5(all_examples, all_features, all_results,
     prev_example = None
     features = []
     results = []
-    for result in all_results:
+    for result in tqdm(all_results, total=len(features)):
         example = id2example[result.unique_id]
         feature = id2feature[result.unique_id]
         if len(features) > 0 and feature.doc_span_index == 0:
