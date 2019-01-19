@@ -180,13 +180,13 @@ def get_documents(all_examples, all_features, all_results, threshold,
 def get_metadata(id2example, features, results, max_answer_length, do_lower_case, verbose_logging):
     start2char = []
     end2char = []
-    start = np.concatenate([result.start[:len(feature.tokens)] for feature, result in zip(features, results)], axis=0)
-    end = np.concatenate([result.end[:len(feature.tokens)] for feature, result in zip(features, results)], axis=0)
+    start = np.concatenate([result.start[1:len(feature.tokens) - 1] for feature, result in zip(features, results)], axis=0)
+    end = np.concatenate([result.end[1:len(feature.tokens) - 1] for feature, result in zip(features, results)], axis=0)
     span_logits = -1e9 * np.ones([np.shape(start)[0], max_answer_length]).astype('float16')
     idx = 0
     for feature, result in zip(features, results):
-        for i in range(len(feature.tokens)):
-            for j in range(i, min(i + max_answer_length, len(feature.tokens))):
+        for i in range(1, len(feature.tokens) - 1):
+            for j in range(i, min(i + max_answer_length, len(feature.tokens) - 1)):
                 span_logits[idx, j - i] = result.span_logits[i, j]
             idx += 1
 
@@ -195,20 +195,15 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
     prev_example = None
     for feature in features:
         example = id2example[feature.unique_id]
-        if prev_example is not None and example.pid == 0:
-            new_ = ('' if full_text == "" else sep) + ' '.join(prev_example.doc_tokens)
-            full_text = full_text + new_
-        for idx in range(len(feature.tokens)):
-            if idx not in feature.token_to_orig_map or not feature.token_is_max_context.get(idx, False):
-                start2char.append(-1)
-                end2char.append(-1)
-            else:
-                _, start_pos, end_pos = get_final_text_(example, feature, idx, idx, do_lower_case,
-                                                        verbose_logging)
-                start2char.append(len(full_text) + start_pos)
-                end2char.append(len(full_text) + end_pos)
+        if prev_example is not None and feature.doc_span_index == 0:
+            full_text = full_text + ' '.join(prev_example.doc_tokens) + sep
+        for idx in range(1, len(feature.tokens) - 1):
+            _, start_pos, end_pos = get_final_text_(example, feature, idx, idx, do_lower_case,
+                                                    verbose_logging)
+            start2char.append(len(full_text) + start_pos)
+            end2char.append(len(full_text) + end_pos)
         prev_example = example
-    full_text = sep + ' '.join(prev_example.doc_tokens)
+    full_text = full_text + ' '.join(prev_example.doc_tokens)
 
     metadata = {'did': prev_example.doc_idx,
                 'context': full_text, 'title': prev_example.title, 'start2char': start2char, 'end2char': end2char,

@@ -212,7 +212,7 @@ p090_t051:
 	--iteration 3"
 
 p007_t051:
-	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 16G --nfs-output -a " \
+	nsml run -d piqa-nfs -g 2 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
 	--do_index \
 	--output_dir out/large \
