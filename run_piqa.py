@@ -66,7 +66,7 @@ def main():
                         help='local|nsml|nfs|nfs_nsml. `nfs_nsml` uses nfs as input and nsml as output')
 
     # Data paths
-    parser.add_argument('--data_dir', default='ckpt/', type=str)
+    parser.add_argument('--data_dir', default='data/', type=str)
     parser.add_argument("--train_file", default='train-v1.1.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
     parser.add_argument("--predict_file", default='dev-v1.1.json', type=str,
@@ -74,7 +74,7 @@ def main():
     parser.add_argument('--gt_file', default='dev-v1.1.json', type=str, help='ground truth file needed for evaluation.')
 
     # Metadata paths
-    parser.add_argument('--metadata_dir', default='ckpt/', type=str)
+    parser.add_argument('--metadata_dir', default='metadata/', type=str)
     parser.add_argument("--vocab_file", default='vocab.txt', type=str,
                         help="The vocabulary file that the BERT model was trained on.")
     parser.add_argument("--bert_model_option", default='large_uncased', type=str,
@@ -86,10 +86,11 @@ def main():
                         help="Initial checkpoint (usually from a pre-trained BERT model).")
 
     # Output and load paths
-    parser.add_argument("--output_dir", default='out', type=str,
+    parser.add_argument("--output_dir", default='out/', type=str,
                         help="The output directory where the model checkpoints will be written.")
+    parser.add_argument("--index_file", default='index.hdf5', type=str, help="index output file.")
 
-    parser.add_argument('--load_dir', default='out', type=str)
+    parser.add_argument('--load_dir', default='out/', type=str)
 
     # Local paths (if we want to run cmd)
     parser.add_argument('--eval_script', default='evaluate-v1.1.py', type=str)
@@ -739,7 +740,7 @@ def main():
                                             span_logits=span_logits,
                                             filter_logits=None)
 
-            hdf5_path = os.path.join(args.output_dir, 'index.hdf5')
+            hdf5_path = os.path.join(args.output_dir, args.index_file)
             write_hdf5(context_examples, context_features, get_context_results(),
                        args.max_answer_length, not args.do_case, hdf5_path, args.verbose_logging)
 

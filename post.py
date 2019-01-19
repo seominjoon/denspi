@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import shutil
+import threading
 
 import numpy as np
 import six
@@ -181,7 +182,7 @@ def get_metadata(example, features, results, max_answer_length, do_lower_case, v
     end2char = []
     start = np.concatenate([result.start[:len(feature.tokens)] for feature, result in zip(features, results)], axis=0)
     end = np.concatenate([result.end[:len(feature.tokens)] for feature, result in zip(features, results)], axis=0)
-    span_logits = -1e9 * np.ones([np.shape(start)[0], max_answer_length])
+    span_logits = -1e9 * np.ones([np.shape(start)[0], max_answer_length]).astype('float16')
     idx = 0
     for feature, result in zip(features, results):
         for i in range(len(feature.tokens)):
@@ -224,28 +225,34 @@ def write_hdf5(all_examples, all_features, all_results,
         did, pid = str(metadata['did']), str(metadata['pid'])
         dg = f[did] if did in f else f.create_group(did)
         pd = dg.create_group(pid)
-        pd.create_dataset('start', data=metadata['start'])
-        pd.create_dataset('end', data=metadata['end'])
-        pd.create_dataset('span_logits', data=metadata['span_logits'])
-        pd.create_dataset('start2char', data=metadata['start2char'])
-        pd.create_dataset('end2char', data=metadata['end2char'])
+        pd.create_dataset('start', data=metadata['start'], compression='gzip')
+        pd.create_dataset('end', data=metadata['end'], compression='gzip')
+        pd.create_dataset('span_logits', data=metadata['span_logits'], compression='gzip')
+        pd.create_dataset('start2char', data=metadata['start2char'], compression='gzip')
+        pd.create_dataset('end2char', data=metadata['end2char'], compression='gzip')
         pd.attrs['context'] = metadata['context']
 
     prev_example = None
     features = []
     results = []
+    t = None  # for threading
     for result in tqdm(all_results, total=len(features)):
         example = id2example[result.unique_id]
         feature = id2feature[result.unique_id]
         if len(features) > 0 and feature.doc_span_index == 0:
             # consume features
-            add(prev_example, features, results)
+            if t is not None:
+                t.join()
+            t = threading.Thread(target=add, args=(prev_example, features, results))
+            t.start()
             features = [feature]
             results = [result]
         else:
             features.append(feature)
             results.append(result)
         prev_example = example
+    if t is not None:
+        t.join()
     add(prev_example, features, results)
 
     f.close()

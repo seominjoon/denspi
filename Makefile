@@ -197,5 +197,16 @@ p088_t051:
 	--fs nsml \
 	--bert_model_option 'base_uncased' \
 	--do_index \
+	--index_file 0000.hdf5 \
+	--load_dir KR18816/squad_bert_2/51 \
+	--iteration 3"
+
+p090_t051:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 12G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--do_index \
+	--output_dir out/base \
+	--index_file 0000.hdf5 \
 	--load_dir KR18816/squad_bert_2/51 \
 	--iteration 3"
