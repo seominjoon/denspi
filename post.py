@@ -7,7 +7,9 @@ import threading
 
 import numpy as np
 import six
+from torch.utils.data import DataLoader, DistributedSampler, SequentialSampler, TensorDataset
 from tqdm import tqdm as tqdm_
+import torch
 
 import tokenization
 
@@ -16,9 +18,12 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+QuestionResult = collections.namedtuple("QuestionResult",
+                                        ['qas_id', 'start', 'end', 'span_logit'])
 
-def tqdm(*args, mininterval=5.0, **kwargs):
-    return tqdm_(*args, mininterval=mininterval, **kwargs)
+
+def tqdm(*args, min_interval=5.0, **kwargs):
+    return tqdm_(*args, mininterval=min_interval, **kwargs)
 
 
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
@@ -180,7 +185,8 @@ def get_documents(all_examples, all_features, all_results, threshold,
 def get_metadata(id2example, features, results, max_answer_length, do_lower_case, verbose_logging):
     start2char = []
     end2char = []
-    start = np.concatenate([result.start[1:len(feature.tokens) - 1] for feature, result in zip(features, results)], axis=0)
+    start = np.concatenate([result.start[1:len(feature.tokens) - 1] for feature, result in zip(features, results)],
+                           axis=0)
     end = np.concatenate([result.end[1:len(feature.tokens) - 1] for feature, result in zip(features, results)], axis=0)
     span_logits = -1e9 * np.ones([np.shape(start)[0], max_answer_length]).astype('float16')
     idx = 0
@@ -329,30 +335,50 @@ def write_context(all_examples, all_features, all_results, threshold,
         shutil.rmtree(embed_dir)
 
 
-def get_questions(all_examples, all_features, all_results):
-    id2feature = {feature.unique_id: feature for feature in all_features}
-    id2example = {id_: all_examples[id2feature[id_].example_index] for id_ in id2feature}
+def get_question_results(question_examples, query_eval_features, question_dataloader, device, model):
+    id2feature = {feature.unique_id: feature for feature in query_eval_features}
+    id2example = {id_: question_examples[id2feature[id_].example_index] for id_ in id2feature}
+    for (input_ids_, input_mask_, example_indices) in question_dataloader:
+        input_ids_ = input_ids_.to(device)
+        input_mask_ = input_mask_.to(device)
+        with torch.no_grad():
+            batch_start, batch_end, batch_span_logits = model(query_ids=input_ids_,
+                                                              query_mask=input_mask_)
+        for i, example_index in enumerate(example_indices):
+            start = batch_start[i].detach().cpu().numpy().astype(np.float16)
+            end = batch_end[i].detach().cpu().numpy().astype(np.float16)
+            span_logit = batch_span_logits[i].detach().cpu().numpy().astype(np.float16)
+            query_eval_feature = query_eval_features[example_index.item()]
+            unique_id = int(query_eval_feature.unique_id)
+            qas_id = id2example[unique_id].qas_id
+            yield QuestionResult(qas_id=qas_id,
+                                 start=start,
+                                 end=end,
+                                 span_logit=span_logit)
 
-    for result in all_results:
-        example = id2example[result.unique_id]
-        _1 = np.array([[1]])  # change this!
-        matrix = np.concatenate([_1, result.start, result.end], axis=1)
-        yield example, matrix
+
+def write_question_results(question_results, path):
+    import h5py
+    with h5py.File(path, 'w') as f:
+        for question_result in question_results:
+            f.create_dataset(question_result.qas_id, data=question_result.mat)
 
 
-def write_question(all_examples, all_features, all_results, zip_dir):
-    embed_dir = 'question_emb/'
-    if not os.path.exists(embed_dir):
-        os.makedirs(embed_dir)
+def convert_question_features_to_dataloader(query_eval_features, fp16, local_rank, predict_batch_size):
+    all_input_ids_ = torch.tensor([f.input_ids for f in query_eval_features], dtype=torch.long)
+    all_input_mask_ = torch.tensor([f.input_mask for f in query_eval_features], dtype=torch.long)
+    all_example_index_ = torch.arange(all_input_ids_.size(0), dtype=torch.long)
+    if fp16:
+        all_input_ids_, all_input_mask_ = tuple(t.half() for t in (all_input_ids_, all_input_mask_))
 
-    for example, matrix in tqdm(get_questions(all_examples, all_features, all_results), total=len(all_features)):
-        npz_path = os.path.join(embed_dir, '%s.npz' % example.qas_id)
-        np.savez_compressed(npz_path, matrix)
+    question_data = TensorDataset(all_input_ids_, all_input_mask_, all_example_index_)
 
-    # archiving
-    print('archiving at %s.zip' % zip_dir)
-    shutil.make_archive(zip_dir, 'zip', embed_dir)
-    shutil.rmtree(embed_dir)
+    if local_rank == -1:
+        question_sampler = SequentialSampler(question_data)
+    else:
+        question_sampler = DistributedSampler(question_data)
+    question_dataloader = DataLoader(question_data, sampler=question_sampler, batch_size=predict_batch_size)
+    return question_dataloader
 
 
 def get_final_text_(example, feature, start_index, end_index, do_lower_case, verbose_logging):

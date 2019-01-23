@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<meta charset="utf-8">
+<title>Hierarchical Index Demo</title>
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css">
+<link rel="stylesheet" href="files/style.css">
+<link rel="shortcut icon" href="files/pichu.png">
+
+<script src="static/files/all.js"></script>
+<script src="static/files/jquery-3.3.1.min.js"></script>
+<script src="static/files/popper.min.js"></script>
+<script src="static/files/bootstrap.min.js"></script>
+
+<body>
+<nav class="navbar navbar-expand-sm bg-dark navbar-dark">
+    <a class="navbar-brand" href="./">Hierarchical Index Demo</a>
+    <ul class="navbar-nav">
+        <li class="nav-item"><a class="nav-link" target="_blank" href="#">Home</a>
+        </li>
+        <li class="nav-item"><a class="nav-link" target="_blank" href="#">Paper</a>
+        </li>
+        <li class="nav-item"><a class="nav-link" target="_blank" href="#">GitHub</a>
+        </li>
+    </ul>
+</nav>
+<div class="container">
+    <div class="mt-4 text-center">
+        <img src="files/pichu.png" height="200" class="rounded" alt="pika" title="Ask me anything!"/>
+    </div>
+
+    <div class="input-group mb-1 mt-4">
+        <input id="question" type="text" class="form-control" placeholder="Write a question" aria-label="Write a question"
+               autofocus>
+        <div class="input-group-append">
+            <button id="search" class="btn btn-secondary" type="button">
+                <i class="fa fa-search"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="row">
+        <div id="ret-time" class="text-secondary small ml-2 col">Latency:</div>
+        <div class="custom-control custom-checkbox mr-3">
+            <input type="checkbox" class="custom-control-input small" id="realtime_chk">
+            <label class="custom-control-label small" for="realtime_chk">Real-time Search</label>
+        </div>
+    </div>
+    <hr/>
+
+    <div class="card">
+        <ul id="ret-results" class="list-group list-group-flush">
+            <li class="list-group-item"></li>
+        </ul>
+    </div>
+</div>
+
+<footer class="footer">
+    <div class="container">
+			<span class="text-muted">
+				<strong>Real-Time Open-Domain Question Answering through Hierarchical Document-Phrase Index</strong><br/>
+				Designed by <a target="_blank" href="https://antest1.github.io/">Gyeongbok Lee</a>
+			</span>
+    </div>
+</footer>
+
+
+<script>
+    var tout_id = 0;
+    $("#realtime_chk").prop('checked', false);
+
+    $("#question").bind("input", function () {
+        var query = $("#question").val();
+        clearTimeout(tout_id);
+        var is_real = $("#realtime_chk").is(":checked") == true;
+        if (is_real) {
+            if (query.trim().length > 0) {
+                tout_id = window.setTimeout(execute, 100, query);
+            } else {
+                init_result();
+            }
+        }
+    });
+
+    $("#question").keypress(function (e) {
+        if (e.which == 13) {
+            $("#search").click();
+        }
+    });
+
+    $("#search").click(function () {
+        var query = $("#question").val();
+        if (query.trim().length > 0) {
+            execute(query);
+        } else {
+            init_result();
+        }
+    });
+
+    function init_result() {
+        $("#ret-time").text("Latency: ");
+        $("#ret-results").html("<li class=\"list-group-item\"></li>");
+    }
+
+    function highlight(text, start, end) {
+        new_text = text.split("");
+        new_text[start] = "<strong>" + new_text[start];
+        new_text[end-1] = new_text[end-1] + "</strong>";
+        return new_text.join("");
+    }
+
+    function execute(text) {
+        $("#ret-time").text("Latency: ");
+        var start_time = +new Date();
+        $.get("/api?query=" + encodeURIComponent(text), function (result) {
+            var end_time = +new Date();
+            var total_latency = end_time - start_time;
+            $("#ret-time").text("Latency: " + total_latency + "ms");
+            $("#ret-results").empty();
+            for (var i = 0; i < result.length; i++) {
+                $("#ret-results").append("<li class=\"list-group-item\"><div class=\"row\">"
+                    + "<div class=\"col-10\">" + highlight(result[i]["context"], result[i]["start_pos"], result[i]["end_pos"]) + "</div>"
+                    + "<div class=\"col-2 text-right\">" + Number((result[i]["score"]).toFixed(1)) + "</div>"
+                    + "</div></li>")
+            }
+        });
+    }
+</script>
+
+</body>
+
+</html>

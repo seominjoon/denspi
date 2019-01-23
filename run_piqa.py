@@ -35,9 +35,11 @@ import tokenization
 from bert import BertConfig
 from optimization import BERTAdam
 from phrase import BertPhraseModel
-from post import write_predictions, write_context, write_question, get_questions, write_hdf5
+from post import write_predictions, write_context, write_hdf5, get_question_results as get_question_results_, \
+    convert_question_features_to_dataloader, write_question_results
 from pre import convert_examples_to_features, read_squad_examples, convert_documents_to_features, \
     convert_questions_to_features, SquadExample
+from serve import serve
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
@@ -47,8 +49,6 @@ logger = logging.getLogger(__name__)
 RawResult = collections.namedtuple("RawResult", ["unique_id", "all_logits"])
 ContextResult = collections.namedtuple("ContextResult",
                                        ['unique_id', 'start', 'end', 'span_logits', 'filter_logits'])
-QuestionResult = collections.namedtuple("QuestionResult",
-                                        ['unique_id', 'start', 'end'])
 
 
 def tqdm(*args, mininterval=5.0, **kwargs):
@@ -89,6 +89,7 @@ def main():
     parser.add_argument("--output_dir", default='out/', type=str,
                         help="The output directory where the model checkpoints will be written.")
     parser.add_argument("--index_file", default='index.hdf5', type=str, help="index output file.")
+    parser.add_argument("--question_emb_file", default='question.hdf5', type=str, help="question output file.")
 
     parser.add_argument('--load_dir', default='out/', type=str)
 
@@ -168,7 +169,7 @@ def main():
     parser.add_argument('--span_vec_size', default=64, type=int)
     parser.add_argument('--span_threshold', default=-1e9, type=float)
     parser.add_argument('--filter_cf', default=0.0, type=float)
-    parser.add_argument('--port', default=9003, type=int)
+    parser.add_argument('--port', default=9009, type=int)
     parser.add_argument('--parallel', default=False, action='store_true')
 
     args = parser.parse_args()
@@ -239,6 +240,7 @@ def main():
                                         "_" + args.bert_model_option + ".bin")
     args.vocab_file = os.path.join(args.metadata_dir, args.vocab_file)
 
+    # Multi-GPU stuff
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         n_gpu = torch.cuda.device_count()
@@ -255,20 +257,12 @@ def main():
 
     args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
 
+    # Seed for reproducibility
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     if n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
-
-    if args.do_train:
-        if not args.train_file:
-            raise ValueError(
-                "If `do_train` is True, then `train_file` must be specified.")
-    if args.do_predict:
-        if not args.predict_file:
-            raise ValueError(
-                "If `do_predict` is True, then `predict_file` must be specified.")
 
     bert_config = BertConfig.from_json_file(args.bert_config_file)
 
@@ -279,21 +273,11 @@ def main():
             (args.max_seq_length, bert_config.max_position_embeddings))
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir):
-        pass
-        # raise ValueError("Output directory () already exists and is not empty.")
+        raise ValueError("Output directory () already exists and is not empty.")
     else:
         os.makedirs(args.output_dir, exist_ok=True)
 
-    tokenizer = tokenization.FullTokenizer(
-        vocab_file=args.vocab_file, do_lower_case=not args.do_case)
-
-    train_examples = None
-    num_train_steps = None
-    if args.do_train:
-        train_examples = read_squad_examples(
-            input_file=args.train_file, is_training=True, draft=args.draft, draft_num_examples=args.draft_num_examples)
-        num_train_steps = int(
-            len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
+    tokenizer = tokenization.FullTokenizer(vocab_file=args.vocab_file, do_lower_case=not args.do_case)
 
     model = BertPhraseModel(bert_config,
                             span_vec_size=args.span_vec_size)
@@ -301,6 +285,7 @@ def main():
 
     if args.do_train and args.init_checkpoint is not None:
         state_dict = torch.load(args.init_checkpoint, map_location='cpu')
+        # If below: for Korean BERT compatibility
         if next(iter(state_dict)).startswith('bert.'):
             state_dict = {key[len('bert.'):]: val for key, val in state_dict.items()}
             state_dict = {key: val for key, val in state_dict.items() if key in model.encoder.bert_model.state_dict()}
@@ -310,16 +295,6 @@ def main():
 
     if not args.optimize_on_cpu:
         model.to(device)
-    no_decay = ['bias', 'gamma', 'beta']
-    optimizer_parameters = [
-        {'params': [p for n, p in model.named_parameters() if n not in no_decay], 'weight_decay_rate': 0.01},
-        {'params': [p for n, p in model.named_parameters() if n in no_decay], 'weight_decay_rate': 0.0}
-    ]
-    optimizer = BERTAdam(optimizer_parameters,
-                         lr=args.learning_rate,
-                         warmup=args.warmup_proportion,
-                         t_total=num_train_steps)
-
     model.to(device)
     if args.local_rank != -1:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
@@ -327,13 +302,25 @@ def main():
     elif args.parallel or n_gpu > 1:
         model = torch.nn.DataParallel(model)
 
-    #     bind_model(model, args)
-    #     if args.pause:
-    #         nsml.paused(scope=locals())
-    bind_model(processor, model, optimizer)
-
-    global_step = 0
     if args.do_train:
+        train_examples = read_squad_examples(
+            input_file=args.train_file, is_training=True, draft=args.draft, draft_num_examples=args.draft_num_examples)
+        num_train_steps = int(
+            len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
+
+        no_decay = ['bias', 'gamma', 'beta']
+        optimizer_parameters = [
+            {'params': [p for n, p in model.named_parameters() if n not in no_decay], 'weight_decay_rate': 0.01},
+            {'params': [p for n, p in model.named_parameters() if n in no_decay], 'weight_decay_rate': 0.0}
+        ]
+        optimizer = BERTAdam(optimizer_parameters,
+                             lr=args.learning_rate,
+                             warmup=args.warmup_proportion,
+                             t_total=num_train_steps)
+
+        bind_model(processor, model, optimizer)
+
+        global_step = 0
         train_features, train_features_ = convert_examples_to_features(
             examples=train_examples,
             tokenizer=tokenizer,
@@ -397,11 +384,11 @@ def main():
 
             processor.save(epoch + 1)
     else:
-        assert args.load_dir is not None, 'You need to provide --load_dir'
+        assert args.load_dir is not None, 'If you are not training, you need to provide --load_dir'
+        bind_model(processor, model)
         processor.load(args.iteration, session=args.load_dir)
 
     if args.do_predict:
-
         eval_examples = read_squad_examples(
             input_file=args.predict_file, is_training=False, draft=args.draft,
             draft_num_examples=args.draft_num_examples)
@@ -541,50 +528,16 @@ def main():
             examples=question_examples,
             tokenizer=tokenizer,
             max_query_length=args.max_query_length)
-
-        all_input_ids_ = torch.tensor([f.input_ids for f in query_eval_features], dtype=torch.long)
-        all_input_mask_ = torch.tensor([f.input_mask for f in query_eval_features], dtype=torch.long)
-        all_example_index_ = torch.arange(all_input_ids_.size(0), dtype=torch.long)
-        if args.fp16:
-            all_input_ids_, all_input_mask_ = tuple(t.half() for t in (all_input_ids_, all_input_mask_))
-
-        question_data = TensorDataset(all_input_ids_, all_input_mask_, all_example_index_)
-
-        if args.local_rank == -1:
-            question_sampler = SequentialSampler(question_data)
-        else:
-            question_sampler = DistributedSampler(question_data)
-        question_dataloader = DataLoader(question_data, sampler=question_sampler, batch_size=args.predict_batch_size)
+        question_dataloader = convert_question_features_to_dataloader(query_eval_features, args.fp16, args.local_rank,
+                                                                      args.predict_batch_size)
 
         model.eval()
         logger.info("Start embedding")
-
-        def get_question_results():
-            for (input_ids_, input_mask_, example_indices) in question_dataloader:
-                input_ids_ = input_ids_.to(device)
-                input_mask_ = input_mask_.to(device)
-                with torch.no_grad():
-                    batch_start, batch_end = model(query_ids=input_ids_,
-                                                   query_mask=input_mask_)
-                for i, example_index in enumerate(example_indices):
-                    start = batch_start[i].detach().cpu().numpy()
-                    end = batch_end[i].detach().cpu().numpy()
-                    query_eval_feature = query_eval_features[example_index.item()]
-                    unique_id = int(query_eval_feature.unique_id)
-                    yield QuestionResult(unique_id=unique_id,
-                                         start=start,
-                                         end=end)
-
-        def question_save(filename, **kwargs):
-            write_question(question_examples, query_eval_features, get_question_results(), filename)
-
-        iteration = epoch + 1 if args.do_train else args.iteration
-
-        if args.nfs:
-            from nsml import NSML_NFS_OUTPUT
-            question_save(os.path.join(NSML_NFS_OUTPUT, '%s_embed_%s' % (iteration, args.question_embed_dir)))
-        else:
-            processor.save('%s_embed_%s' % (iteration, args.question_embed_dir), save_fn=question_save)
+        question_results = get_question_results_(question_examples, query_eval_features, question_dataloader, device,
+                                                 model)
+        path = os.path.join(args.output_dir, args.question_emb_file)
+        print('Writing %s' % path)
+        write_question_results(question_results, path)
 
     if args.do_merge_eval:
         assert args.load_dir is not None, 'You need to provide --load_dir'
@@ -615,61 +568,6 @@ def main():
 
         iteration = epoch + 1 if args.do_train else args.iteration
         processor.load('%s_embed_%s' % (iteration, args.context_embed_dir), load_fn=merge_load)
-
-    if args.do_benchmark:
-        question_examples = read_squad_examples(
-            question_only=True,
-            input_file=args.predict_file, is_training=False, draft=args.draft,
-            draft_num_examples=args.draft_num_examples)
-        query_eval_features = convert_questions_to_features(
-            examples=question_examples,
-            tokenizer=tokenizer,
-            max_query_length=args.max_query_length)
-
-        logger.info("***** Running embedding *****")
-        logger.info("  Num orig examples = %d", len(question_examples))
-        logger.info("  Num split examples = %d", len(query_eval_features))
-        logger.info("  Batch size = %d", args.predict_batch_size)
-
-        all_input_ids_ = torch.tensor([f.input_ids for f in query_eval_features], dtype=torch.long)
-        all_input_mask_ = torch.tensor([f.input_mask for f in query_eval_features], dtype=torch.long)
-        all_example_index_ = torch.arange(all_input_ids_.size(0), dtype=torch.long)
-
-        question_data = TensorDataset(all_input_ids_, all_input_mask_, all_example_index_)
-
-        if args.local_rank == -1:
-            question_sampler = SequentialSampler(question_data)
-        else:
-            question_sampler = DistributedSampler(question_data)
-        question_dataloader = DataLoader(question_data, sampler=question_sampler, batch_size=args.predict_batch_size)
-
-        model.eval()
-        logger.info("Start benchmarking")
-
-        def get_question_results():
-            for (input_ids_, input_mask_, example_indices) in question_dataloader:
-                input_ids_ = input_ids_.to(device)
-                input_mask_ = input_mask_.to(device)
-                with torch.no_grad():
-                    batch_start, batch_end = model(query_ids=input_ids_, query_mask=input_mask_)
-                for i, example_index in enumerate(example_indices):
-                    start = batch_start[i].detach().cpu().numpy()
-                    end = batch_end[i].detach().cpu().numpy()
-                    query_eval_feature = query_eval_features[example_index.item()]
-                    unique_id = int(query_eval_feature.unique_id)
-                    yield QuestionResult(unique_id=unique_id,
-                                         start=start,
-                                         end=end)
-
-        import time
-        start = time.time()
-        count = 0
-        for _, _ in tqdm(get_questions(question_examples, query_eval_features, get_question_results()),
-                         total=len(query_eval_features)):
-            count += 1
-        end = time.time()
-
-        print('latency per query: %dms' % ((end - start) * 1000 / count))
 
     if args.do_index:
         if ':' not in args.predict_file:
@@ -745,78 +643,28 @@ def main():
                        args.max_answer_length, not args.do_case, hdf5_path, args.verbose_logging)
 
     if args.do_serve:
-        def get_vec(text):
+        def get(text):
             question_examples = [SquadExample(qas_id='serve', question_text=text)]
             query_eval_features = convert_questions_to_features(
                 examples=question_examples,
                 tokenizer=tokenizer)
-
-            all_input_ids_ = torch.tensor([f.input_ids for f in query_eval_features], dtype=torch.long)
-            all_input_mask_ = torch.tensor([f.input_mask for f in query_eval_features], dtype=torch.long)
-            all_example_index_ = torch.arange(all_input_ids_.size(0), dtype=torch.long)
-
-            question_data = TensorDataset(all_input_ids_, all_input_mask_, all_example_index_)
-
-            if args.local_rank == -1:
-                question_sampler = SequentialSampler(question_data)
-            else:
-                question_sampler = DistributedSampler(question_data)
-            question_dataloader = DataLoader(question_data, sampler=question_sampler,
-                                             batch_size=args.predict_batch_size)
+            question_dataloader = convert_question_features_to_dataloader(query_eval_features, args.fp16,
+                                                                          args.local_rank,
+                                                                          args.predict_batch_size)
 
             model.eval()
-            logger.info("Start benchmarking")
+            logger.info("Start serving")
 
-            def get_question_results():
-                for (input_ids_, input_mask_, example_indices) in question_dataloader:
-                    input_ids_ = input_ids_.to(device)
-                    input_mask_ = input_mask_.to(device)
-                    with torch.no_grad():
-                        batch_start, batch_end = model(query_ids=input_ids_,
-                                                       query_mask=input_mask_)
-                    for i, example_index in enumerate(example_indices):
-                        start = batch_start[i].detach().cpu().numpy()
-                        end = batch_end[i].detach().cpu().numpy()
-                        query_eval_feature = query_eval_features[example_index.item()]
-                        unique_id = int(query_eval_feature.unique_id)
-                        yield QuestionResult(unique_id=unique_id,
-                                             start=start,
-                                             end=end)
+            question_results = get_question_results_(question_examples, query_eval_features, question_dataloader,
+                                                     device, model)
+            question_result = next(iter(question_results))
+            out = question_result.start.tolist(), question_result.end.tolist(), question_result.span_logit.tolist()
+            return out
 
-            _, matrix = next(iter(get_questions(question_examples, query_eval_features, get_question_results())))
-            vec = matrix[0].tolist()
-            return vec
-
-        from flask import Flask, request, jsonify
-        from flask_cors import CORS
-
-        from tornado.wsgi import WSGIContainer
-        from tornado.httpserver import HTTPServer
-        from tornado.ioloop import IOLoop
-
-        from time import time
-
-        app = Flask(__name__)
-
-        app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
-        CORS(app)
-
-        @app.route('/api', methods=['GET'])
-        def api():
-            query = request.args['query']
-            start = time()
-            out = get_vec(query)
-            end = time()
-            print('latency: %dms' % int((end - start) * 1000))
-            return jsonify(out)
-
-        print('Starting server at %d' % args.port)
-        http_server = HTTPServer(WSGIContainer(app))
-        http_server.listen(args.port)
-        IOLoop.instance().start()
+        serve(get, args.port)
 
 
-def bind_model(processor, model, optimizer):
+def bind_model(processor, model, optimizer=None):
     def save(filename, save_model=True, saver=None, **kwargs):
         if not os.path.exists(filename):
             os.makedirs(filename)
@@ -840,7 +688,8 @@ def bind_model(processor, model, optimizer):
             state = torch.load(model_path, map_location='cpu')
             try:
                 model.load_state_dict(state['model'])
-                optimizer.load_state_dict(state['optimizer'])
+                if optimizer is not None:
+                    optimizer.load_state_dict(state['optimizer'])
             except KeyError:
                 # Backward compatibility
                 model.load_state_dict(load_backward(state))

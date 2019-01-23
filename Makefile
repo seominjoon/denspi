@@ -172,7 +172,9 @@ dl:
 	--do_train \
 	--do_predict \
 	--do_eval \
+	--do_embed_question \
 	--do_index \
+	--do_serve \
 	--num_train_epochs 1 \
 	--draft_num_examples 1 \
 	--train_batch_size 1 \
