@@ -203,6 +203,7 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
         example = id2example[feature.unique_id]
         if prev_example is not None and feature.doc_span_index == 0:
             full_text = full_text + ' '.join(prev_example.doc_tokens) + sep
+        print(feature.tokens)
         for idx in range(1, len(feature.tokens) - 1):
             _, start_pos, end_pos = get_final_text_(example, feature, idx, idx, do_lower_case,
                                                     verbose_logging)

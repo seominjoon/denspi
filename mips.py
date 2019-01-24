@@ -29,7 +29,7 @@ class DocumentPhraseMIPS(object):
                for doc_idx, doc_score in zip(doc_indices, doc_scores)]
         return out
 
-    def search_phrase(self, doc_idx, query, top_k=5, doc_score=0.0):
+    def search_phrase(self, doc_idx, query, top_k=5, doc_score=0.0, para_idx=None):
         t0 = time.time()
         group = self.phrase_index[str(doc_idx)]
         start, end, span_logits, start2char, end2char = [group[key][:] for key in
@@ -37,14 +37,37 @@ class DocumentPhraseMIPS(object):
         context = group.attrs['context']
         title = group.attrs['title']
         t1 = time.time()
-        print('Loading index: %dms' % int(1000 * (t1 - t0)))
+        # print('Loading index: %dms' % int(1000 * (t1 - t0)))
+
+        if para_idx is not None:
+            char2start = {char.item(): start for start, char in enumerate(start2char)}
+            char2end = {char.item(): end for end, char in enumerate(end2char)}
+            char_start = 0
+            for _ in range(para_idx):
+                char_start = context.find(' [PAR] ', char_start) + len(' [PAR] ')
+            char_end = context.find(' [PAR] ', char_start)
+            if char_end == -1:
+                char_end = len(context)
+            word_start = char2start[char_start]
+            if char_end not in char2end:
+                print('char_end not found')
+                while char_end not in char2end:
+                    char_end -= 1
+            word_end = char2end[char_end]
+            context = context[char_start:char_end]
+
+            start = start[word_start:word_end + 1]
+            end = end[word_start:word_end + 1]
+            span_logits = span_logits[word_start:word_end + 1]
+            start2char = start2char[word_start:word_end + 1] - char_start
+            end2char = end2char[word_start:word_end + 1] - char_start
 
         query_start, query_end, query_span_logit = query
         query_span_logit = float(query_span_logit[0][0])
         start_scores = np.matmul(start, np.array(query_start, dtype=np.float16).transpose()).squeeze(1)
         end_scores = np.matmul(end, np.array(query_end, dtype=np.float16).transpose()).squeeze(1)
         t2 = time.time()
-        print('Computing IP: %dms' % int(1000 * (t2 - t1)))
+        # print('Computing IP: %dms' % int(1000 * (t2 - t1)))
 
         PhraseResult = namedtuple('PhraseResult', ('score', 'start_idx', 'end_idx'))
         results = []
@@ -70,7 +93,7 @@ class DocumentPhraseMIPS(object):
                 'phrase_score': result.score - doc_score,
                 'score': result.score} for result in results]
         t3 = time.time()
-        print('Finding answer: %dms' % int(1000 * (t3 - t2)))
+        # print('Finding answer: %dms' % int(1000 * (t3 - t2)))
         out = [adjust(each) for each in out]
         return out
 
@@ -84,9 +107,10 @@ class DocumentPhraseMIPS(object):
 
 
 def adjust(each):
-    last = each['context'].rfind('[PAR] ', 0, each['start_pos'])
-    last = 0 if last == -1 else last + len('[PAR] ')
-    next = each['context'].find(' [PAR]', each['end_pos'])
+    last = each['context'].rfind(' [PAR] ', 0, each['start_pos'])
+    last = 0 if last == -1 else last + len(' [PAR] ')
+    next = each['context'].find(' [PAR] ', each['end_pos'])
+    next = len(each['context']) if next == -1 else next
     each['context'] = each['context'][last:next]
     each['start_pos'] -= last
     each['end_pos'] -= last

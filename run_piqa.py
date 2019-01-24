@@ -654,7 +654,6 @@ def main():
                                                                           args.predict_batch_size)
 
             model.eval()
-            logger.info("Start serving")
 
             question_results = get_question_results_(question_examples, query_eval_features, question_dataloader,
                                                      device, model)

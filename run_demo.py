@@ -60,7 +60,7 @@ def search(query, top_k_docs, top_k_phrases):
 def search_(query, top_k_docs, top_k_phrases):
     try:
         phrase_vec, _ = query2emb(query, args.api_port)()
-        rets = mips.search_phrase(0, phrase_vec, top_k=top_k_phrases)
+        rets = mips.search_phrase(0, phrase_vec, top_k=top_k_phrases, para_idx=1)
         return rets
     except RuntimeError:
         print('%s: error' % query)
