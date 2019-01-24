@@ -273,7 +273,8 @@ def main():
             (args.max_seq_length, bert_config.max_position_embeddings))
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir):
-        raise ValueError("Output directory () already exists and is not empty.")
+        # raise ValueError("Output directory () already exists and is not empty.")
+        pass
     else:
         os.makedirs(args.output_dir, exist_ok=True)
 

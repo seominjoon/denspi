@@ -213,11 +213,54 @@ p090_t051:
 	--load_dir KR18816/squad_bert_2/51 \
 	--iteration 3"
 
-p007_t051:
+p017_t051:
 	nsml run -d piqa-nfs -g 2 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
 	--do_index \
-	--output_dir out/large \
+	--output_dir index/squad/large \
 	--index_file 0000.hdf5 \
 	--load_dir KR18816/squad_bert_2/49 \
 	--iteration 3"
+
+p020_t051:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--output_dir index/squad/large \
+	--index_file 0001.hdf5 \
+	--load_dir KR18816/squad_bert_2/49 \
+	--iteration 3 \
+	--parallel"
+
+p021_t051:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--output_dir index/squad/large \
+	--index_file 0002.hdf5 \
+	--load_dir KR18816/squad_bert_2/49 \
+	--iteration 3 \
+	--predict_batch_size 12 \
+	--parallel"
+
+p022_t051:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--output_dir index/squad/large \
+	--index_file 0002.hdf5 \
+	--load_dir KR18816/squad_bert_2/49 \
+	--iteration 3 \
+	--predict_batch_size 20 \
+	--parallel"
+
+p023_t051:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--output_dir index/squad/large \
+	--index_file 0002.hdf5 \
+	--load_dir KR18816/squad_bert_2/49 \
+	--iteration 3 \
+	--predict_batch_size 24 \
+	--parallel"

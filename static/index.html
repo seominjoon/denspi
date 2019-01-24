@@ -119,7 +119,7 @@
             for (var i = 0; i < result.length; i++) {
                 $("#ret-results").append("<li class=\"list-group-item\"><div class=\"row\">"
                     + "<div class=\"col-10\">" + highlight(result[i]["context"], result[i]["start_pos"], result[i]["end_pos"]) + "</div>"
-                    + "<div class=\"col-2 text-right\">" + Number((result[i]["score"]).toFixed(1)) + "</div>"
+                    + "<div class=\"col-2 text-right\">" + result[i]["title"] + "</div>"
                     + "</div></li>")
             }
         });

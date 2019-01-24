@@ -1,4 +1,5 @@
 from collections import namedtuple
+import time
 
 import h5py
 import numpy as np
@@ -29,35 +30,47 @@ class DocumentPhraseMIPS(object):
         return out
 
     def search_phrase(self, doc_idx, query, top_k=5, doc_score=0.0):
+        t0 = time.time()
         group = self.phrase_index[str(doc_idx)]
         start, end, span_logits, start2char, end2char = [group[key][:] for key in
                                                          ['start', 'end', 'span_logits', 'start2char', 'end2char']]
         context = group.attrs['context']
+        title = group.attrs['title']
+        t1 = time.time()
+        print('Loading index: %dms' % int(1000 * (t1 - t0)))
 
         query_start, query_end, query_span_logit = query
         query_span_logit = float(query_span_logit[0][0])
-        start_scores = np.matmul(start, np.array(query_start, dtype=np.float16).transpose())
-        end_scores = np.matmul(end, np.array(query_end, dtype=np.float16).transpose())
+        start_scores = np.matmul(start, np.array(query_start, dtype=np.float16).transpose()).squeeze(1)
+        end_scores = np.matmul(end, np.array(query_end, dtype=np.float16).transpose()).squeeze(1)
+        t2 = time.time()
+        print('Computing IP: %dms' % int(1000 * (t2 - t1)))
+
         PhraseResult = namedtuple('PhraseResult', ('score', 'start_idx', 'end_idx'))
         results = []
-        for start_idx, start_score in enumerate(start_scores):
+        best_start_pairs = sorted(enumerate(start_scores.tolist()), key=lambda item: -item[1])[:top_k]
+        end_scores = end_scores.tolist()
+        for start_idx, start_score in best_start_pairs:
             for end_idx in range(start_idx, min(start_idx + self.max_answer_length, len(start_scores))):
-                span_logit = span_logits[start_idx, end_idx - start_idx]
+                span_logit = span_logits[start_idx, end_idx - start_idx].item()
                 if span_logit < -1e6:
                     continue
                 end_score = end_scores[end_idx]
                 span_score = query_span_logit * span_logits[start_idx, end_idx - start_idx]
-                score = self.doc_score_cf * doc_score + start_score.item() + end_score.item() + span_score.item()
+                score = self.doc_score_cf * doc_score + start_score + end_score + span_score
                 result = PhraseResult(score, start_idx, end_idx)
                 results.append(result)
         results = sorted(results, key=lambda item: -item.score)[:top_k]
         out = [{'context': context,
+                'title': title,
                 'doc_idx': doc_idx,
                 'doc_score': doc_score,
                 'start_pos': start2char[result.start_idx].item(),
                 'end_pos': end2char[result.end_idx].item(),
                 'phrase_score': result.score - doc_score,
                 'score': result.score} for result in results]
+        t3 = time.time()
+        print('Finding answer: %dms' % int(1000 * (t3 - t2)))
         out = [adjust(each) for each in out]
         return out
 

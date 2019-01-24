@@ -94,9 +94,6 @@ def static_files(path):
 def api():
     query = request.args['query']
     out = search_(query, args.top_k_docs, args.top_k_phrases)
-    context, s, e = out[0]['context'], out[0]['start_pos'], out[0]['end_pos']
-    answer = context[s:e]
-    print(answer)
     return jsonify(out)
 
 

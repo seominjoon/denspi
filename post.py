@@ -236,6 +236,7 @@ def write_hdf5(all_examples, all_features, all_results,
         dg.create_dataset('start2char', data=metadata['start2char'])
         dg.create_dataset('end2char', data=metadata['end2char'])
         dg.attrs['context'] = metadata['context']
+        dg.attrs['title'] = metadata['title']
 
     features = []
     results = []
