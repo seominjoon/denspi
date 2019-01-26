@@ -37,10 +37,10 @@ def get_args():
     parser.add_argument('pred_path')
     parser.add_argument('--tfidf_path', default=None, type=str)
     parser.add_argument('--api_port', default=9009, type=int)
-    parser.add_argument('--max_answer_length', default=15, type=int)
+    parser.add_argument('--max_answer_length', default=30, type=int)
     parser.add_argument('--doc_score_cf', default=3e-2, type=float)
     parser.add_argument('--top_k_docs', default=5, type=int)
-    parser.add_argument('--top_k_phrases', default=10, type=int)
+    parser.add_argument('--top_k_phrases', default=-1, type=int)
     args = parser.parse_args()
     return args
 
@@ -72,7 +72,6 @@ def main():
         for doc_idx, para_idx, id_, question in tqdm(pairs):
             answer = get_answer(mips, question, args.top_k_docs, args.top_k_phrases, args.api_port)
             preds[id_] = answer
-
 
     with open(args.pred_path, 'w') as fp:
         json.dump(preds, fp)

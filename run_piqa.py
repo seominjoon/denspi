@@ -24,6 +24,8 @@ import logging
 import json
 import os
 import random
+
+from torch.optim import Adam
 from tqdm import tqdm as tqdm_
 
 import numpy as np
@@ -34,7 +36,7 @@ from torch.utils.data.distributed import DistributedSampler
 import tokenization
 from bert import BertConfig
 from optimization import BERTAdam
-from phrase import BertPhraseModel
+from phrase import BertPhraseModel, BoundaryFilter
 from post import write_predictions, write_context, write_hdf5, get_question_results as get_question_results_, \
     convert_question_features_to_dataloader, write_question_results
 from pre import convert_examples_to_features, read_squad_examples, convert_documents_to_features, \
@@ -98,6 +100,7 @@ def main():
 
     # Do
     parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
+    parser.add_argument("--do_train_filter", default=False, action='store_true', help='Train filter or not.')
     parser.add_argument("--do_predict", default=False, action='store_true', help="Whether to run eval on the dev set.")
     parser.add_argument('--do_eval', default=False, action='store_true')
     parser.add_argument('--do_embed_context', default=False, action='store_true')
@@ -124,6 +127,8 @@ def main():
     parser.add_argument("--learning_rate", default=3e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--num_train_epochs", default=2.0, type=float,
                         help="Total number of training epochs to perform.")
+    parser.add_argument("--num_train_filter_epochs", default=1.0, type=float,
+                        help="Total number of training epochs for filter to perform.")
     parser.add_argument("--warmup_proportion", default=0.1, type=float,
                         help="Proportion of training to perform linear learning rate warmup for. E.g., 0.1 = 10% "
                              "of training.")
@@ -164,6 +169,7 @@ def main():
                         default=False,
                         action='store_true',
                         help="Whether to use 16-bit float precision instead of 32-bit")
+    parser.add_argument('--dtype', default='float32', type=str)
     parser.add_argument('--draft', default=False, action='store_true')
     parser.add_argument('--draft_num_examples', type=int, default=12)
     parser.add_argument('--span_vec_size', default=64, type=int)
@@ -282,7 +288,8 @@ def main():
 
     model = BertPhraseModel(bert_config,
                             span_vec_size=args.span_vec_size)
-    print('Number of parameters:', sum(p.numel() for p in model.parameters()))
+
+    print('Number of model parameters:', sum(p.numel() for p in model.parameters()))
 
     if args.do_train and args.init_checkpoint is not None:
         state_dict = torch.load(args.init_checkpoint, map_location='cpu')
@@ -291,12 +298,13 @@ def main():
             state_dict = {key[len('bert.'):]: val for key, val in state_dict.items()}
             state_dict = {key: val for key, val in state_dict.items() if key in model.encoder.bert_model.state_dict()}
         model.encoder.bert.load_state_dict(state_dict)
+
     if args.fp16:
         model.half()
 
     if not args.optimize_on_cpu:
         model.to(device)
-    model.to(device)
+
     if args.local_rank != -1:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
                                                           output_device=args.local_rank)
@@ -389,6 +397,82 @@ def main():
         bind_model(processor, model)
         processor.load(args.iteration, session=args.load_dir)
 
+    if args.do_train_filter:
+        train_examples = read_squad_examples(
+            input_file=args.train_file, is_training=True, draft=args.draft, draft_num_examples=args.draft_num_examples)
+        num_train_steps = int(
+            len(
+                train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_filter_epochs)
+
+        optimizer = Adam(model.filter.parameters())
+
+        bind_model(processor, model, optimizer)
+
+        global_step = 0
+        train_features, train_features_ = convert_examples_to_features(
+            examples=train_examples,
+            tokenizer=tokenizer,
+            max_seq_length=args.max_seq_length,
+            doc_stride=args.doc_stride,
+            max_query_length=args.max_query_length,
+            is_training=True)
+        logger.info("***** Running filter training *****")
+        logger.info("  Num orig examples = %d", len(train_examples))
+        logger.info("  Num split examples = %d", len(train_features))
+        logger.info("  Batch size = %d", args.train_batch_size)
+        logger.info("  Num steps = %d", num_train_steps)
+
+        all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
+        all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
+        all_start_positions = torch.tensor([f.start_position for f in train_features], dtype=torch.long)
+        all_end_positions = torch.tensor([f.end_position for f in train_features], dtype=torch.long)
+
+        all_input_ids_ = torch.tensor([f.input_ids for f in train_features_], dtype=torch.long)
+        all_input_mask_ = torch.tensor([f.input_mask for f in train_features_], dtype=torch.long)
+
+        if args.fp16:
+            (all_input_ids, all_input_mask,
+             all_start_positions,
+             all_end_positions) = tuple(t.half() for t in (all_input_ids, all_input_mask,
+                                                           all_start_positions, all_end_positions))
+            all_input_ids_, all_input_mask_ = tuple(t.half() for t in (all_input_ids_, all_input_mask_))
+
+        train_data = TensorDataset(all_input_ids, all_input_mask,
+                                   all_input_ids_, all_input_mask_,
+                                   all_start_positions, all_end_positions)
+        if args.local_rank == -1:
+            train_sampler = RandomSampler(train_data)
+        else:
+            train_sampler = DistributedSampler(train_data)
+        train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
+
+        model.train()
+        for epoch in range(int(args.num_train_filter_epochs)):
+            for step, batch in enumerate(tqdm(train_dataloader, desc="Epoch %d" % (epoch + 1))):
+                batch = tuple(t.to(device) for t in batch)
+                (input_ids, input_mask,
+                 input_ids_, input_mask_,
+                 start_positions, end_positions) = batch
+                loss = model(input_ids, input_mask,
+                             input_ids_, input_mask_,
+                             start_positions, end_positions,
+                             do_train_filter=True)
+                if n_gpu > 1:
+                    loss = loss.mean()  # mean() to average on multi-gpu.
+                if args.gradient_accumulation_steps > 1:
+                    loss = loss / args.gradient_accumulation_steps
+                loss.backward()
+                if (step + 1) % args.gradient_accumulation_steps == 0:
+                    if args.optimize_on_cpu:
+                        model.to('cpu')
+                    optimizer.step()  # We have accumulated enought gradients
+                    model.zero_grad()
+                    if args.optimize_on_cpu:
+                        model.to(device)
+                    global_step += 1
+
+            processor.save(epoch + 1)
+
     if args.do_predict:
         eval_examples = read_squad_examples(
             input_file=args.predict_file, is_training=False, draft=args.draft,
@@ -435,7 +519,7 @@ def main():
                 input_ids_ = input_ids_.to(device)
                 input_mask_ = input_mask_.to(device)
                 with torch.no_grad():
-                    batch_all_logits = model(input_ids, input_mask, input_ids_, input_mask_)
+                    batch_all_logits, bs, be = model(input_ids, input_mask, input_ids_, input_mask_)
                 for i, example_index in enumerate(example_indices):
                     all_logits = batch_all_logits[i].detach().cpu().numpy()
                     eval_feature = eval_features[example_index.item()]
@@ -625,12 +709,12 @@ def main():
                     input_ids = input_ids.to(device)
                     input_mask = input_mask.to(device)
                     with torch.no_grad():
-                        batch_start, batch_end, batch_span_logits = model(input_ids,
-                                                                          input_mask)
+                        batch_start, batch_end, batch_span_logits, bs, be = model(input_ids,
+                                                                                  input_mask)
                     for i, example_index in enumerate(example_indices):
-                        start = batch_start[i].detach().cpu().numpy().astype('float16')
-                        end = batch_end[i].detach().cpu().numpy().astype('float16')
-                        span_logits = batch_span_logits[i].detach().cpu().numpy().astype('float16')
+                        start = batch_start[i].detach().cpu().numpy().astype(args.dtype)
+                        end = batch_end[i].detach().cpu().numpy().astype(args.dtype)
+                        span_logits = batch_span_logits[i].detach().cpu().numpy().astype(args.dtype)
                         context_feature = context_features[example_index.item()]
                         unique_id = int(context_feature.unique_id)
                         yield ContextResult(unique_id=unique_id,

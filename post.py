@@ -363,7 +363,8 @@ def write_question_results(question_results, path):
     import h5py
     with h5py.File(path, 'w') as f:
         for question_result in question_results:
-            f.create_dataset(question_result.qas_id, data=question_result.mat)
+            data = np.concatenate([question_result.start, question_result.end, question_result.span_logit], -1)
+            f.create_dataset(question_result.qas_id, data=data)
 
 
 def convert_question_features_to_dataloader(query_eval_features, fp16, local_rank, predict_batch_size):

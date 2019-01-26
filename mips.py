@@ -50,9 +50,12 @@ class DocumentPhraseMIPS(object):
                 char_end = len(context)
             word_start = char2start[char_start]
             if char_end not in char2end:
-                print('char_end not found')
+                count = 0
                 while char_end not in char2end:
-                    char_end -= 1
+                    char_end += 1
+                    count += 1
+                print('char end not found; moved down by %d' % count)
+
             word_end = char2end[char_end]
             context = context[char_start:char_end]
 
@@ -64,14 +67,17 @@ class DocumentPhraseMIPS(object):
 
         query_start, query_end, query_span_logit = query
         query_span_logit = float(query_span_logit[0][0])
-        start_scores = np.matmul(start, np.array(query_start, dtype=np.float16).transpose()).squeeze(1)
-        end_scores = np.matmul(end, np.array(query_end, dtype=np.float16).transpose()).squeeze(1)
+        start_scores = np.matmul(start, np.array(query_start, dtype=start.dtype).transpose()).squeeze(1)
+        end_scores = np.matmul(end, np.array(query_end, dtype=end.dtype).transpose()).squeeze(1)
         t2 = time.time()
         # print('Computing IP: %dms' % int(1000 * (t2 - t1)))
 
         PhraseResult = namedtuple('PhraseResult', ('score', 'start_idx', 'end_idx'))
         results = []
-        best_start_pairs = sorted(enumerate(start_scores.tolist()), key=lambda item: -item[1])[:top_k]
+        if top_k > 0:
+            best_start_pairs = sorted(enumerate(start_scores.tolist()), key=lambda item: -item[1])[:top_k]
+        else:
+            best_start_pairs = enumerate(start_scores.tolist())
         end_scores = end_scores.tolist()
         for start_idx, start_score in best_start_pairs:
             for end_idx in range(start_idx, min(start_idx + self.max_answer_length, len(start_scores))):

@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.nn.functional import binary_cross_entropy_with_logits, embedding
 
 from bert import BertModel, BERTLayerNorm
 
@@ -10,6 +11,7 @@ class BertWrapper(nn.Module):
     1. (input_ids, mask) -> input_vectors
     2. input_ids[0] is a special token
     """
+
     def __init__(self, bert):
         super(BertWrapper, self).__init__()
         self.bert = bert
@@ -34,23 +36,32 @@ def encode_phrase(layer, span_vec_size, get_first_only=False):
 
 
 class PhraseModel(nn.Module):
-    def __init__(self, encoder, span_vec_size):
+    def __init__(self, encoder, boundary_size, span_vec_size):
         super(PhraseModel, self).__init__()
         self.encoder = encoder
+        self.boundary_size = boundary_size
         self.span_vec_size = span_vec_size
         self.default_value = nn.Parameter(torch.randn(1))
+        self.filter = BoundaryFilter(boundary_size)
 
     def forward(self,
                 context_ids=None, context_mask=None,
                 query_ids=None, query_mask=None,
-                start_positions=None, end_positions=None):
+                start_positions=None, end_positions=None, do_train_filter=False):
+        if do_train_filter:
+            context_layer = self.encoder(context_ids, context_mask)
+            start, end, span_logits = encode_phrase(context_layer, self.span_vec_size)
+            loss = self.filter(start, end, start_positions=start_positions, end_positions=end_positions)
+            return loss
+
         if context_ids is not None:
             context_layer = self.encoder(context_ids, context_mask)
             start, end, span_logits = encode_phrase(context_layer, self.span_vec_size)
+            start_filter_logits, end_filter_logits = self.filter(start, end)
 
             # embed context
             if query_ids is None:
-                return start, end, span_logits
+                return start, end, span_logits, start_filter_logits, end_filter_logits
 
         if query_ids is not None:
             question_layer = self.encoder(query_ids, query_mask)
@@ -99,13 +110,14 @@ class PhraseModel(nn.Module):
 
             return loss
         else:
-            return all_logits
+            return all_logits, start_filter_logits, end_filter_logits
 
 
 class BertPhraseModel(PhraseModel):
     def __init__(self, config, span_vec_size):
         encoder = BertWrapper(BertModel(config))
-        super(BertPhraseModel, self).__init__(encoder, span_vec_size)
+        boundary_size = int((config.hidden_size - span_vec_size) / 2)
+        super(BertPhraseModel, self).__init__(encoder, boundary_size, span_vec_size)
 
         def init_weights(module):
             if isinstance(module, (nn.Linear, nn.Embedding)):
@@ -135,4 +147,26 @@ class CrossEntropyLossWithDefault(nn.CrossEntropyLoss):
         new_target = target + 1
         assert new_target.min().item() >= 0, (new_target.min().item(), target.min().item())
         loss = super(CrossEntropyLossWithDefault, self).forward(new_input, new_target)
+        return loss
+
+
+class BoundaryFilter(nn.Module):
+    def __init__(self, boundary_size):
+        super(BoundaryFilter, self).__init__()
+        self.start_linear = nn.Linear(boundary_size, 1)
+        self.end_linear = nn.Linear(boundary_size, 1)
+
+    def forward(self, start_vec, end_vec, start_positions=None, end_positions=None):
+        start_logits = self.start_linear(start_vec).squeeze(-1)
+        end_logits = self.end_linear(end_vec).squeeze(-1)
+        if start_positions is None and end_positions is None:
+            return start_logits, end_logits
+
+        length = torch.tensor(start_logits.size(1))
+        start_1hot = embedding(start_positions + 1, torch.eye(length + 2))[:, 1:-1]
+        end_1hot = embedding(end_positions + 1, torch.eye(length + 2))[:, 1:-1]
+        pos_weight = torch.tensor([0.0, length]).float().to(start_logits.device)
+        start_loss = binary_cross_entropy_with_logits(start_logits, start_1hot, pos_weight=length)
+        end_loss = binary_cross_entropy_with_logits(start_logits, end_1hot, pos_weight=length)
+        loss = 0.5 * start_loss + 0.5 * end_loss
         return loss

@@ -170,6 +170,7 @@ dl:
 	python run_piqa.py \
 	--bert_model_option 'base_uncased' \
 	--do_train \
+	--do_train_filter \
 	--do_predict \
 	--do_eval \
 	--do_embed_question \
