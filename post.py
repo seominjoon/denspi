@@ -107,7 +107,8 @@ def write_predictions(all_examples, all_features, all_results,
     id2example = {id_: all_examples[id2feature[id_].example_index] for id_ in id2feature}
 
     word_count = 0
-    vec_count = 0
+    start_count = 0
+    end_count = 0
 
     predictions = {}
     scores = {}
@@ -118,17 +119,25 @@ def write_predictions(all_examples, all_features, all_results,
         id_ = example.qas_id
 
         word_count += len(feature.tokens)
+        for start_index in range(len(feature.tokens)):
+            if result.filter_start_logits[start_index] >= threshold:
+                start_count += 1
+        for end_index in range(len(feature.tokens)):
+            if result.filter_end_logits[end_index] >= threshold:
+                end_count += 1
 
         for start_index in range(len(feature.tokens)):
+            if result.filter_start_logits[start_index] < threshold:
+                continue
             for end_index in range(start_index, min(len(feature.tokens), start_index + max_answer_length - 1)):
+                if result.filter_end_logits[end_index] < threshold:
+                    continue
                 if start_index not in feature.token_to_orig_map:
                     continue
                 if end_index not in feature.token_to_orig_map:
                     continue
                 if not feature.token_is_max_context.get(start_index, False):
                     continue
-
-                vec_count += 1
 
                 score = result.all_logits[start_index, end_index]
                 if id_ not in scores or score > scores[id_]:
@@ -138,7 +147,8 @@ def write_predictions(all_examples, all_features, all_results,
                     predictions[id_] = phrase
                     scores[id_] = score
 
-    print('num vecs=%d, num_words=%d, nvpw=%.4f' % (vec_count, word_count, vec_count / word_count))
+    print('num_start_vecs=%d, num_words=%d, nspw=%.4f' % (start_count, word_count, start_count / word_count))
+    print('num_end_vecs=%d, num_words=%d, nepw=%.4f' % (end_count, word_count, end_count / word_count))
 
     with open(output_prediction_file, 'w') as fp:
         json.dump(predictions, fp)
@@ -188,6 +198,14 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
     start = np.concatenate([result.start[1:len(feature.tokens) - 1] for feature, result in zip(features, results)],
                            axis=0)
     end = np.concatenate([result.end[1:len(feature.tokens) - 1] for feature, result in zip(features, results)], axis=0)
+
+    fs = np.concatenate([result.filter_start_logits[1:len(feature.tokens) - 1]
+                         for feature, result in zip(features, results)],
+                        axis=0)
+    fe = np.concatenate([result.filter_end_logits[1:len(feature.tokens) - 1]
+                         for feature, result in zip(features, results)],
+                        axis=0)
+
     span_logits = -1e9 * np.ones([np.shape(start)[0], max_answer_length]).astype('float16')
     idx = 0
     for feature, result in zip(features, results):
@@ -203,7 +221,6 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
         example = id2example[feature.unique_id]
         if prev_example is not None and feature.doc_span_index == 0:
             full_text = full_text + ' '.join(prev_example.doc_tokens) + sep
-        print(feature.tokens)
         for idx in range(1, len(feature.tokens) - 1):
             _, start_pos, end_pos = get_final_text_(example, feature, idx, idx, do_lower_case,
                                                     verbose_logging)
@@ -214,12 +231,27 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
 
     metadata = {'did': prev_example.doc_idx,
                 'context': full_text, 'title': prev_example.title, 'start2char': start2char, 'end2char': end2char,
-                'start': start, 'end': end, 'span_logits': span_logits}
+                'start': start, 'end': end, 'span_logits': span_logits,
+                'filter_start_logits': fs, 'filter_end_logits': fe}
+    return metadata
+
+
+def filter_metadata(metadata, threshold):
+    start_idxs, = np.where(metadata['filter_start_logits'] > threshold)
+    end_idxs, = np.where(metadata['filter_end_logits'] > threshold)
+
+    metadata['start2char'] = [metadata['start2char'][i] for i in start_idxs]
+    metadata['end2char'] = [metadata['end2char'][i] for i in end_idxs]
+    metadata['start'] = metadata['start'][start_idxs]
+    metadata['end'] = metadata['end'][end_idxs]
+    metadata['span_logits'] = metadata['span_logits'][start_idxs, end_idxs]
+    metadata['filter_start_logits'] = metadata['filter_start_logits'][start_idxs]
+    metadata['filter_end_logits'] = metadata['filter_end_logits'][end_idxs]
     return metadata
 
 
 def write_hdf5(all_examples, all_features, all_results,
-               max_answer_length, do_lower_case, hdf5_path, verbose_logging):
+               max_answer_length, do_lower_case, hdf5_path, filter_threshold, verbose_logging):
     assert len(all_examples) > 0
 
     import h5py
@@ -228,8 +260,10 @@ def write_hdf5(all_examples, all_features, all_results,
     id2feature = {feature.unique_id: feature for feature in all_features}
     id2example = {id_: all_examples[id2feature[id_].example_index] for id_ in id2feature}
 
+    # Separating writing part for potentially multi-threaded dumping
     def add(id2example_, features_, results_):
         metadata = get_metadata(id2example_, features_, results_, max_answer_length, do_lower_case, verbose_logging)
+        metadata = filter_metadata(metadata, filter_threshold)
         dg = f.create_group(str(metadata['did']))
         dg.create_dataset('start', data=metadata['start'])
         dg.create_dataset('end', data=metadata['end'])

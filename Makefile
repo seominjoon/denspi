@@ -265,3 +265,87 @@ p023_t051:
 	--iteration 3 \
 	--predict_batch_size 24 \
 	--parallel"
+
+p050_t051:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 12G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--do_train_filter \
+	--do_predict \
+	--filter_threshold 0.0 \
+	--do_eval \
+	--load_dir KR18816/squad_bert_2/51 \
+	--iteration 3"
+
+p030_t051:
+	nsml run -d piqa-nfs -g 0 -e run_piqa.py --memory 12G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--do_train_filter \
+	--do_predict \
+	--filter_threshold 0.0 \
+	--do_eval \
+	--draft \
+	--draft_num_examples 1000 \
+	--load_dir KR18816/piqa-nfs/35 \
+	--iteration 3"
+
+p038_t035:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 12G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--do_predict \
+	--filter_threshold -3 \
+	--do_eval \
+	--load_dir KR18816/piqa-nfs/35 \
+	--iteration 1"
+
+p039_t035:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 12G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--do_predict \
+	--filter_threshold -2 \
+	--do_eval \
+	--load_dir KR18816/piqa-nfs/35 \
+	--iteration 1"
+
+p040_t035:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 12G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--do_predict \
+	--filter_threshold -1 \
+	--do_eval \
+	--load_dir KR18816/piqa-nfs/35 \
+	--iteration 1"
+
+p051_t050:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 12G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--do_predict \
+	--filter_threshold -1 \
+	--do_eval \
+	--load_dir KR18816/piqa-nfs/50 \
+	--iteration 1"
+
+p052_t050:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 12G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--do_predict \
+	--filter_threshold -2 \
+	--do_eval \
+	--load_dir KR18816/piqa-nfs/50 \
+	--iteration 1"
+
+p053_t049:
+	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_train_filter \
+	--do_predict \
+	--filter_threshold -2 \
+	--do_eval \
+	--load_dir KR18816/squad_bert_2/49 \
+	--iteration 1"

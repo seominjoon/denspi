@@ -162,11 +162,16 @@ class BoundaryFilter(nn.Module):
         if start_positions is None and end_positions is None:
             return start_logits, end_logits
 
-        length = torch.tensor(start_logits.size(1))
-        start_1hot = embedding(start_positions + 1, torch.eye(length + 2))[:, 1:-1]
-        end_1hot = embedding(end_positions + 1, torch.eye(length + 2))[:, 1:-1]
-        pos_weight = torch.tensor([0.0, length]).float().to(start_logits.device)
+        ignored_index = start_logits.size(1)
+        start_positions.clamp_(-1, ignored_index)
+        end_positions.clamp_(-1, ignored_index)
+
+        device = start_logits.device
+        length = torch.tensor(start_logits.size(1)).to(device)
+        eye = torch.eye(length + 2).to(device)
+        start_1hot = embedding(start_positions + 1, eye)[:, 1:-1]
+        end_1hot = embedding(end_positions + 1, eye)[:, 1:-1]
         start_loss = binary_cross_entropy_with_logits(start_logits, start_1hot, pos_weight=length)
-        end_loss = binary_cross_entropy_with_logits(start_logits, end_1hot, pos_weight=length)
+        end_loss = binary_cross_entropy_with_logits(end_logits, end_1hot, pos_weight=length)
         loss = 0.5 * start_loss + 0.5 * end_loss
         return loss

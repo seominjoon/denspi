@@ -48,9 +48,10 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-RawResult = collections.namedtuple("RawResult", ["unique_id", "all_logits"])
+RawResult = collections.namedtuple("RawResult", ["unique_id", "all_logits", "filter_start_logits", "filter_end_logits"])
 ContextResult = collections.namedtuple("ContextResult",
-                                       ['unique_id', 'start', 'end', 'span_logits', 'filter_logits'])
+                                       ['unique_id', 'start', 'end', 'span_logits',
+                                        'filter_start_logits', 'filter_end_logits'])
 
 
 def tqdm(*args, mininterval=5.0, **kwargs):
@@ -173,7 +174,7 @@ def main():
     parser.add_argument('--draft', default=False, action='store_true')
     parser.add_argument('--draft_num_examples', type=int, default=12)
     parser.add_argument('--span_vec_size', default=64, type=int)
-    parser.add_argument('--span_threshold', default=-1e9, type=float)
+    parser.add_argument('--filter_threshold', default=-1e9, type=float)
     parser.add_argument('--filter_cf', default=0.0, type=float)
     parser.add_argument('--port', default=9009, type=int)
     parser.add_argument('--parallel', default=False, action='store_true')
@@ -522,16 +523,20 @@ def main():
                     batch_all_logits, bs, be = model(input_ids, input_mask, input_ids_, input_mask_)
                 for i, example_index in enumerate(example_indices):
                     all_logits = batch_all_logits[i].detach().cpu().numpy()
+                    filter_start_logits = bs[i].detach().cpu().numpy()
+                    filter_end_logits = be[i].detach().cpu().numpy()
                     eval_feature = eval_features[example_index.item()]
                     unique_id = int(eval_feature.unique_id)
                     yield RawResult(unique_id=unique_id,
-                                    all_logits=all_logits)
+                                    all_logits=all_logits,
+                                    filter_start_logits=filter_start_logits,
+                                    filter_end_logits=filter_end_logits)
 
         output_prediction_file = os.path.join(args.output_dir, "predictions.json")
         write_predictions(eval_examples, eval_features, get_results(),
                           args.max_answer_length,
                           not args.do_case, output_prediction_file, args.verbose_logging,
-                          args.span_threshold)
+                          args.filter_threshold)
 
         if args.do_eval:
             command = "python %s %s %s" % (args.eval_script, args.gt_file, output_prediction_file)
@@ -593,7 +598,7 @@ def main():
 
         def context_save(filename, **kwargs):
             write_context(context_examples, context_features, get_context_results(),
-                          args.span_threshold, args.max_answer_length,
+                          args.filter_threshold, args.max_answer_length,
                           not args.do_case, filename, args.verbose_logging)
 
         iteration = epoch + 1 if args.do_train else args.iteration
@@ -715,17 +720,20 @@ def main():
                         start = batch_start[i].detach().cpu().numpy().astype(args.dtype)
                         end = batch_end[i].detach().cpu().numpy().astype(args.dtype)
                         span_logits = batch_span_logits[i].detach().cpu().numpy().astype(args.dtype)
+                        filter_start_logits = bs[i].detach().cpu().numpy().astype(args.dtype)
+                        filter_end_logits = be[i].detach().cpu().numpy().astype(args.dtype)
                         context_feature = context_features[example_index.item()]
                         unique_id = int(context_feature.unique_id)
                         yield ContextResult(unique_id=unique_id,
                                             start=start,
                                             end=end,
                                             span_logits=span_logits,
-                                            filter_logits=None)
+                                            filter_start_logits=filter_start_logits,
+                                            filter_end_logits=filter_end_logits)
 
             hdf5_path = os.path.join(args.output_dir, args.index_file)
             write_hdf5(context_examples, context_features, get_context_results(),
-                       args.max_answer_length, not args.do_case, hdf5_path, args.verbose_logging)
+                       args.max_answer_length, not args.do_case, hdf5_path, args.filter_threshold, args.verbose_logging)
 
     if args.do_serve:
         def get(text):
@@ -774,9 +782,9 @@ def bind_model(processor, model, optimizer=None):
                 model.load_state_dict(state['model'])
                 if optimizer is not None:
                     optimizer.load_state_dict(state['optimizer'])
-            except KeyError:
+            except:
                 # Backward compatibility
-                model.load_state_dict(load_backward(state))
+                model.load_state_dict(load_backward(state), strict=False)
             print('Model loaded from %s' % model_path)
         if loader is not None:
             loader(filename)
