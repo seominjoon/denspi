@@ -340,7 +340,7 @@ p052_t050:
 	--load_dir KR18816/piqa-nfs/50 \
 	--iteration 1"
 
-p053_t049:
+p058_t049:
 	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
 	--do_train_filter \

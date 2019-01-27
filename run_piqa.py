@@ -375,9 +375,9 @@ def main():
                 (input_ids, input_mask,
                  input_ids_, input_mask_,
                  start_positions, end_positions) = batch
-                loss = model(input_ids, input_mask,
-                             input_ids_, input_mask_,
-                             start_positions, end_positions)
+                loss, _ = model(input_ids, input_mask,
+                                input_ids_, input_mask_,
+                                start_positions, end_positions)
                 if n_gpu > 1:
                     loss = loss.mean()  # mean() to average on multi-gpu.
                 if args.gradient_accumulation_steps > 1:
@@ -405,7 +405,10 @@ def main():
             len(
                 train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_filter_epochs)
 
-        optimizer = Adam(model.filter.parameters())
+        if args.parallel or n_gpu > 1:
+            optimizer = Adam(model.module.filter.parameters())
+        else:
+            optimizer = Adam(model.filter.parameters())
 
         bind_model(processor, model, optimizer)
 
@@ -454,10 +457,9 @@ def main():
                 (input_ids, input_mask,
                  input_ids_, input_mask_,
                  start_positions, end_positions) = batch
-                loss = model(input_ids, input_mask,
-                             input_ids_, input_mask_,
-                             start_positions, end_positions,
-                             do_train_filter=True)
+                _, loss = model(input_ids, input_mask,
+                                input_ids_, input_mask_,
+                                start_positions, end_positions)
                 if n_gpu > 1:
                     loss = loss.mean()  # mean() to average on multi-gpu.
                 if args.gradient_accumulation_steps > 1:

@@ -17,8 +17,7 @@ class BertWrapper(nn.Module):
         self.bert = bert
 
     def forward(self, input_ids, mask):
-        segment_ids = torch.zeros_like(input_ids)
-        layers, _ = self.bert(input_ids, segment_ids, mask)
+        layers, _ = self.bert(input_ids, attention_mask=mask)
         return layers[-1]
 
 
@@ -47,13 +46,7 @@ class PhraseModel(nn.Module):
     def forward(self,
                 context_ids=None, context_mask=None,
                 query_ids=None, query_mask=None,
-                start_positions=None, end_positions=None, do_train_filter=False):
-        if do_train_filter:
-            context_layer = self.encoder(context_ids, context_mask)
-            start, end, span_logits = encode_phrase(context_layer, self.span_vec_size)
-            loss = self.filter(start, end, start_positions=start_positions, end_positions=end_positions)
-            return loss
-
+                start_positions=None, end_positions=None):
         if context_ids is not None:
             context_layer = self.encoder(context_ids, context_mask)
             start, end, span_logits = encode_phrase(context_layer, self.span_vec_size)
@@ -108,7 +101,9 @@ class PhraseModel(nn.Module):
 
             loss = true_loss + help_loss
 
-            return loss
+            filter_loss = self.filter(start, end, start_positions=start_positions, end_positions=end_positions)
+
+            return loss, filter_loss
         else:
             return all_logits, start_filter_logits, end_filter_logits
 
