@@ -261,7 +261,7 @@ p023_t051:
 	--do_index \
 	--do_embed_question \
 	--output_dir index/squad/large \
-	--index_file index2.hdf5 \
+	--index_file index3.hdf5 \
 	--load_dir KR18816/squad_bert_2/49 \
 	--iteration 3 \
 	--parallel"

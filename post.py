@@ -215,8 +215,8 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
                 span_logits[idx, j - i] = result.span_logits[i, j]
             idx += 1
 
-    word2char_start = np.zeros([start.shape[0], max_answer_length], dtype=np.int32)
-    word2char_end = np.zeros([start.shape[0], max_answer_length], dtype=np.int32)
+    word2char_start = np.zeros([start.shape[0]], dtype=np.int32)
+    word2char_end = np.zeros([start.shape[0]], dtype=np.int32)
 
     sep = ' [PAR] '
     full_text = ""
@@ -225,7 +225,7 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
     for feature in features:
         example = id2example[feature.unique_id]
         orig_doc_start = feature.token_to_orig_map[1]
-        orig_doc_end = feature.token_to_orig_map[len(feature.tokens)-2]
+        orig_doc_end = feature.token_to_orig_map[len(feature.tokens) - 2]
         orig_tokens = example.doc_tokens[orig_doc_start:(orig_doc_end + 1)]
         if prev_example is not None and feature.doc_span_index == 0:
             full_text = full_text + ' '.join(prev_example.doc_tokens) + sep
@@ -241,6 +241,14 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
         """
 
         for i in range(1, len(feature.tokens) - 1):
+            _, start_pos, _ = get_final_text_(example, feature, i, min(len(feature.tokens) - 2, i + 1), do_lower_case,
+                                              verbose_logging)
+            _, _, end_pos = get_final_text_(example, feature, max(1, i - 1), i, do_lower_case,
+                                            verbose_logging)
+            start_pos += len(full_text)
+            end_pos += len(full_text)
+            word2char_start[word_pos] = start_pos
+            word2char_end[word_pos] = end_pos
             """
             for j in range(i, min(i + max_answer_length, len(feature.tokens) - 1)):
                 _, start_pos, end_pos = get_final_text_(example, feature, i, j, do_lower_case,

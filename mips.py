@@ -42,8 +42,8 @@ class DocumentPhraseMIPS(object):
         if para_idx is not None:
             word_start = para_start[para_idx]
             word_end = para_start[para_idx + 1] - 1 if para_idx + 1 < len(para_start) else phrase.shape[1] - 1
-            char_start = word2char[0, word_start, 0]
-            char_end = word2char[1, word_end, 0]
+            char_start = word2char[0, word_start]
+            char_end = word2char[1, word_end]
             context = context[char_start:char_end]
 
             phrase = phrase[:, word_start:word_end + 1]
@@ -81,8 +81,8 @@ class DocumentPhraseMIPS(object):
                 'title': title,
                 'doc_idx': doc_idx,
                 'doc_score': doc_score,
-                'start_pos': word2char[0, result.start_idx, result.end_idx - result.start_idx].item(),
-                'end_pos': word2char[1, result.start_idx, result.end_idx - result.start_idx].item(),
+                'start_pos': word2char[0, result.start_idx].item(),
+                'end_pos': word2char[1, result.end_idx].item(),
                 'phrase_score': result.score - doc_score,
                 'score': result.score} for result in results]
         t3 = time.time()

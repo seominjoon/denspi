@@ -34,6 +34,15 @@ def encode_phrase(layer, span_vec_size, get_first_only=False):
     return start, end, span_logits
 
 
+def get_logits(a, b, metric='ip'):
+    if metric == 'ip':
+        return a.matmul(b.transpose(-1, -2)).squeeze(-1)
+    elif metric == 'l2':
+        return get_logits(a, b) - 0.5 * (get_logits(a, a) + get_logits(b, b))
+    else:
+        raise ValueError(metric)
+
+
 class PhraseModel(nn.Module):
     def __init__(self, encoder, boundary_size, span_vec_size):
         super(PhraseModel, self).__init__()
@@ -68,6 +77,8 @@ class PhraseModel(nn.Module):
         # pass this line only if train or eval
 
         start_logits = start.matmul(query_start.transpose(1, 2)).squeeze(-1)
+        start_logits = get_logits(start, query_start)
+        end_logits = get_logits(end, query_end)
         end_logits = end.matmul(query_end.transpose(1, 2)).squeeze(-1)
         all_logits = start_logits.unsqueeze(2) + end_logits.unsqueeze(1) + span_logits * q_span_logits
 
