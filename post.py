@@ -193,11 +193,11 @@ def get_documents(all_examples, all_features, all_results, threshold,
 
 
 def get_metadata(id2example, features, results, max_answer_length, do_lower_case, verbose_logging):
-    start2char = []
-    end2char = []
+    para_start = [0]
     start = np.concatenate([result.start[1:len(feature.tokens) - 1] for feature, result in zip(features, results)],
                            axis=0)
     end = np.concatenate([result.end[1:len(feature.tokens) - 1] for feature, result in zip(features, results)], axis=0)
+    phrase = np.stack([start, end], 0)
 
     fs = np.concatenate([result.filter_start_logits[1:len(feature.tokens) - 1]
                          for feature, result in zip(features, results)],
@@ -205,8 +205,9 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
     fe = np.concatenate([result.filter_end_logits[1:len(feature.tokens) - 1]
                          for feature, result in zip(features, results)],
                         axis=0)
+    filter_ = np.stack([fs, fe], 0)
 
-    span_logits = -1e9 * np.ones([np.shape(start)[0], max_answer_length]).astype('float16')
+    span_logits = -1e9 * np.ones([np.shape(start)[0], max_answer_length]).astype(start.dtype)
     idx = 0
     for feature, result in zip(features, results):
         for i in range(1, len(feature.tokens) - 1):
@@ -214,25 +215,52 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
                 span_logits[idx, j - i] = result.span_logits[i, j]
             idx += 1
 
+    word2char_start = np.zeros([start.shape[0], max_answer_length], dtype=np.int32)
+    word2char_end = np.zeros([start.shape[0], max_answer_length], dtype=np.int32)
+
     sep = ' [PAR] '
     full_text = ""
     prev_example = None
+    word_pos = 0
     for feature in features:
         example = id2example[feature.unique_id]
+        orig_doc_start = feature.token_to_orig_map[1]
+        orig_doc_end = feature.token_to_orig_map[len(feature.tokens)-2]
+        orig_tokens = example.doc_tokens[orig_doc_start:(orig_doc_end + 1)]
         if prev_example is not None and feature.doc_span_index == 0:
             full_text = full_text + ' '.join(prev_example.doc_tokens) + sep
-        for idx in range(1, len(feature.tokens) - 1):
-            _, start_pos, end_pos = get_final_text_(example, feature, idx, idx, do_lower_case,
-                                                    verbose_logging)
-            start2char.append(len(full_text) + start_pos)
-            end2char.append(len(full_text) + end_pos)
+            para_start.append(word_pos)
+        """
+        text = ' '.join(orig_tokens)
+        word2char = get_word2char(text, [tok.replace('##', '') for tok in feature.tokens[1:-1]], do_lower_case=do_lower_case)
+        for word, (s, e) in word2char.items():
+            s += len(full_text)
+            e += len(full_text)
+            start2char.append(s)
+            end2char.append(e)
+        """
+
+        for i in range(1, len(feature.tokens) - 1):
+            """
+            for j in range(i, min(i + max_answer_length, len(feature.tokens) - 1)):
+                _, start_pos, end_pos = get_final_text_(example, feature, i, j, do_lower_case,
+                                                        verbose_logging)
+                start_pos += len(full_text)
+                end_pos += len(full_text)
+                word2char_start[word_pos, j - i] = start_pos
+                word2char_end[word_pos, j - i] = end_pos
+            """
+            word_pos += 1
+
         prev_example = example
     full_text = full_text + ' '.join(prev_example.doc_tokens)
 
+    word2char = np.stack([word2char_start, word2char_end], 0)
+
     metadata = {'did': prev_example.doc_idx,
-                'context': full_text, 'title': prev_example.title, 'start2char': start2char, 'end2char': end2char,
-                'start': start, 'end': end, 'span_logits': span_logits,
-                'filter_start_logits': fs, 'filter_end_logits': fe}
+                'context': full_text, 'title': prev_example.title, 'word2char': word2char,
+                'phrase': phrase, 'span_logits': span_logits, 'para_start': para_start,
+                'filter': filter_}
     return metadata
 
 
@@ -263,15 +291,14 @@ def write_hdf5(all_examples, all_features, all_results,
     # Separating writing part for potentially multi-threaded dumping
     def add(id2example_, features_, results_):
         metadata = get_metadata(id2example_, features_, results_, max_answer_length, do_lower_case, verbose_logging)
-        metadata = filter_metadata(metadata, filter_threshold)
+        # metadata = filter_metadata(metadata, filter_threshold)
         dg = f.create_group(str(metadata['did']))
-        dg.create_dataset('start', data=metadata['start'])
-        dg.create_dataset('end', data=metadata['end'])
-        dg.create_dataset('span_logits', data=metadata['span_logits'])
-        dg.create_dataset('start2char', data=metadata['start2char'])
-        dg.create_dataset('end2char', data=metadata['end2char'])
         dg.attrs['context'] = metadata['context']
         dg.attrs['title'] = metadata['title']
+        dg.create_dataset('phrase', data=metadata['phrase'])
+        dg.create_dataset('span_logits', data=metadata['span_logits'])
+        dg.create_dataset('word2char', data=metadata['word2char'])
+        dg.create_dataset('para_start', data=metadata['para_start'])
 
     features = []
     results = []
@@ -536,3 +563,14 @@ def get_final_text(pred_text, orig_text, do_lower_case, verbose_logging=False):
 
     # output_text = orig_text[orig_start_position:(orig_end_position + 1)]
     return orig_start_position, orig_end_position + 1
+
+
+def get_word2char(text, words, do_lower_case=False):
+    tokenizer = tokenization.BasicTokenizer(do_lower_case=do_lower_case)
+    lower_text = tokenizer.all_but_split(text)
+    start = 0
+    word2char = collections.OrderedDict()
+    for word_idx, word in enumerate(words):
+        start = lower_text.index(word, start)
+        word2char[word_idx] = (start, start + len(word))
+    return word2char

@@ -85,7 +85,8 @@ def convert_tokens_to_ids(vocab, tokens):
     """Converts a sequence of tokens into ids using the vocab."""
     ids = []
     for token in tokens:
-        ids.append(vocab[token])
+        id_ = vocab[token] if token in vocab else vocab['[UNK]']
+        ids.append(id_)
     return ids
 
 
@@ -106,10 +107,10 @@ class FullTokenizer(object):
         self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case)
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab)
 
-    def tokenize(self, text):
+    def tokenize(self, text, unk=False):
         split_tokens = []
         for token in self.basic_tokenizer.tokenize(text):
-            for sub_token in self.wordpiece_tokenizer.tokenize(token):
+            for sub_token in self.wordpiece_tokenizer.tokenize(token, unk=unk):
                 split_tokens.append(sub_token)
 
         return split_tokens
@@ -150,6 +151,14 @@ class BasicTokenizer(object):
 
         output_tokens = whitespace_tokenize(" ".join(split_tokens))
         return output_tokens
+
+    def all_but_split(self, text):
+        text = convert_to_unicode(text)
+        text = self._clean_text(text)
+        if self.do_lower_case:
+            text = text.lower()
+        text = self._run_strip_accents(text)
+        return text
 
     def _run_strip_accents(self, text):
         """Strips accents from a piece of text."""
@@ -239,7 +248,7 @@ class WordpieceTokenizer(object):
         self.unk_token = unk_token
         self.max_input_chars_per_word = max_input_chars_per_word
 
-    def tokenize(self, text):
+    def tokenize(self, text, unk=False):
         """Tokenizes a piece of text into its word pieces.
 
         This uses a greedy longest-match-first algorithm to perform tokenization
@@ -261,9 +270,10 @@ class WordpieceTokenizer(object):
 
         output_tokens = []
         for token in whitespace_tokenize(text):
+            unk_token = self.unk_token if unk else token
             chars = list(token)
             if len(chars) > self.max_input_chars_per_word:
-                output_tokens.append(self.unk_token)
+                output_tokens.append(unk_token)
                 continue
 
             is_bad = False
@@ -287,7 +297,7 @@ class WordpieceTokenizer(object):
                 start = end
 
             if is_bad:
-                output_tokens.append(self.unk_token)
+                output_tokens.append(unk_token)
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens

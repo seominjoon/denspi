@@ -23,9 +23,8 @@ def query2emb(query, api_port):
     return map_
 
 
-def get_answer_from_para(mips, query, doc_idx, para_idx, top_k_phrases, api_port):
-    phrase_vec, _ = query2emb(query, api_port)()
-    ret = mips.search_phrase(doc_idx, phrase_vec, top_k=top_k_phrases, para_idx=para_idx)[0]
+def get_answer_from_para(mips, query, doc_idx, para_idx, top_k_phrases):
+    ret = mips.search_phrase(doc_idx, query, top_k=top_k_phrases, para_idx=para_idx)[0]
     answer = ret['context'][ret['start_pos']:ret['end_pos']]
     return answer
 
@@ -33,6 +32,7 @@ def get_answer_from_para(mips, query, doc_idx, para_idx, top_k_phrases, api_port
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('phrase_index_path')
+    parser.add_argument('query_index_path')
     parser.add_argument('test_path')
     parser.add_argument('pred_path')
     parser.add_argument('--tfidf_path', default=None, type=str)
@@ -48,6 +48,7 @@ def get_args():
 def main():
     args = get_args()
     phrase_index = h5py.File(args.phrase_index_path)
+    query_index = h5py.File(args.query_index_path)
 
     with open(args.test_path, 'r') as fp:
         test_data = json.load(fp)
@@ -59,11 +60,15 @@ def main():
                 id_ = qa['id']
                 question = qa['question']
                 pairs.append([doc_idx, para_idx, id_, question])
+    # pairs = pairs[2112:]
 
     if args.tfidf_path is None:
         mips = DocumentPhraseMIPS(None, phrase_index, args.max_answer_length, args.doc_score_cf)
         for doc_idx, para_idx, id_, question in tqdm(pairs):
-            answer = get_answer_from_para(mips, question, doc_idx, para_idx, args.top_k_phrases, args.api_port)
+            vec = query_index[id_][:]
+            boundary_size = int((vec.shape[1] - 1) / 2)
+            query = (vec[:, :boundary_size], vec[:, boundary_size:2*boundary_size], vec[:, -1:])
+            answer = get_answer_from_para(mips, query, doc_idx, para_idx, args.top_k_phrases)
             preds[id_] = answer
     else:
         doc_ranker = TfidfDocRanker(args.tfidf_path)

@@ -259,11 +259,11 @@ p023_t051:
 	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
 	--do_index \
+	--do_embed_question \
 	--output_dir index/squad/large \
-	--index_file 0002.hdf5 \
+	--index_file index2.hdf5 \
 	--load_dir KR18816/squad_bert_2/49 \
 	--iteration 3 \
-	--predict_batch_size 24 \
 	--parallel"
 
 p050_t051:
@@ -340,7 +340,7 @@ p052_t050:
 	--load_dir KR18816/piqa-nfs/50 \
 	--iteration 1"
 
-p058_t049:
+p059_t049:
 	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
 	--do_train_filter \
@@ -348,4 +348,32 @@ p058_t049:
 	--filter_threshold -2 \
 	--do_eval \
 	--load_dir KR18816/squad_bert_2/49 \
+	--iteration 3"
+
+debug:
+	python run_piqa.py \
+	--bert_model_option 'base_uncased' \
+	--predict_file /Users/user/data/squad/debug.json \
+	--do_train \
+	--do_train_filter \
+	--do_predict \
+	--do_eval \
+	--do_embed_question \
+	--do_index \
+	--do_serve \
+	--num_train_epochs 1 \
+	--draft_num_examples 1 \
+	--train_batch_size 1 \
+	--predict_batch_size 1 \
+	--draft \
+	--no_cuda
+
+p076_t059:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_predict \
+	--filter_threshold -2 \
+	--do_eval \
+	--load_dir KR18816/piqa-nfs/59 \
+	--parallel \
 	--iteration 1"
