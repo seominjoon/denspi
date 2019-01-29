@@ -377,3 +377,15 @@ p076_t059:
 	--load_dir KR18816/piqa-nfs/59 \
 	--parallel \
 	--iteration 1"
+
+p085_t059:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--do_embed_question \
+	--output_dir index/squad/large \
+	--index_file index.hdf5 \
+	--load_dir KR18816/piqa-nfs/59 \
+	--filter_threshold -2 \
+	--iteration 1 \
+	--parallel"

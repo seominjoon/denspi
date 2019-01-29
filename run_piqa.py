@@ -178,6 +178,7 @@ def main():
     parser.add_argument('--filter_cf', default=0.0, type=float)
     parser.add_argument('--port', default=9009, type=int)
     parser.add_argument('--parallel', default=False, action='store_true')
+    parser.add_argument('--scaleoffset', default=None, type=int)
 
     args = parser.parse_args()
 
@@ -735,7 +736,8 @@ def main():
 
             hdf5_path = os.path.join(args.output_dir, args.index_file)
             write_hdf5(context_examples, context_features, get_context_results(),
-                       args.max_answer_length, not args.do_case, hdf5_path, args.filter_threshold, args.verbose_logging)
+                       args.max_answer_length, not args.do_case, hdf5_path, args.filter_threshold, args.verbose_logging,
+                       scaleoffset=args.scaleoffset)
 
     if args.do_serve:
         def get(text):

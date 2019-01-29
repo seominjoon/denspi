@@ -5,6 +5,11 @@ import h5py
 import numpy as np
 
 
+
+def int8_to_float(num, offset, factor):
+    return num.astype(np.float16) / factor + offset
+
+
 class DocumentPhraseMIPS(object):
     def __init__(self, document_index, phrase_index, max_answer_length, doc_score_cf):
         super(DocumentPhraseMIPS, self).__init__()
@@ -32,8 +37,11 @@ class DocumentPhraseMIPS(object):
     def search_phrase(self, doc_idx, query, top_k=5, doc_score=0.0, para_idx=None):
         t0 = time.time()
         group = self.phrase_index[str(doc_idx)]
-        phrase, span_logits, word2char, para_start = [group[key][:] for key in
-                                                      ['phrase', 'span_logits', 'word2char', 'para_start']]
+        start, end, span_logits, start2end, word2char_start, word2char_end, para_start = [
+            group[key][:] for key in
+            ['start', 'end', 'span_logits', 'start2end', 'word2char_start', 'word2char_end', 'para_start']]
+        # print(phrase.mean(), phrase.std())
+
         context = group.attrs['context']
         title = group.attrs['title']
         t1 = time.time()
@@ -41,20 +49,23 @@ class DocumentPhraseMIPS(object):
 
         if para_idx is not None:
             word_start = para_start[para_idx]
-            word_end = para_start[para_idx + 1] - 1 if para_idx + 1 < len(para_start) else phrase.shape[1] - 1
-            char_start = word2char[0, word_start]
-            char_end = word2char[1, word_end]
+            word_end = para_start[para_idx + 1] - 1 if para_idx + 1 < len(para_start) else start.shape[0] - 1
+            char_start = word2char_start[word_start]
+            char_end = word2char_end[word_end]
             context = context[char_start:char_end]
 
-            phrase = phrase[:, word_start:word_end + 1]
+            start = start[word_start:word_end + 1]
+            end = end[word_start:word_end + 1]
+            start = int8_to_float(float_to_int8(start, 0, 20), 0, 20)
+            end = int8_to_float(float_to_int8(end, 0, 20), 0, 20)
             span_logits = span_logits[word_start:word_end + 1]
-            word2char = word2char[:, word_start:word_end + 1] - char_start
+            word2char_start = word2char_start[word_start:word_end + 1] - char_start
+            word2char_end = word2char_end[word_start:word_end + 1] - char_start
+            start2end = start2end[word_start:word_end + 1] - word_start
 
         query_start, query_end, query_span_logit = query
-        query_vec = np.stack([np.array(query_start).transpose(), np.array(query_end).transpose()], 0)
-        scores = np.matmul(phrase, query_vec).squeeze(2)
-        start_scores = scores[0, :]
-        end_scores = scores[1, :]
+        start_scores = np.matmul(start, np.array(query_start).transpose()).squeeze(1)
+        end_scores = np.matmul(end, np.array(query_end).transpose()).squeeze(1)
         query_span_logit = float(query_span_logit[0][0])
         t2 = time.time()
         # print('Computing IP: %dms' % int(1000 * (t2 - t1)))
@@ -67,10 +78,10 @@ class DocumentPhraseMIPS(object):
             best_start_pairs = enumerate(start_scores.tolist())
         end_scores = end_scores.tolist()
         for start_idx, start_score in best_start_pairs:
-            for end_idx in range(start_idx, min(start_idx + self.max_answer_length, len(end_scores))):
-                span_logit = span_logits[start_idx, end_idx - start_idx].item()
-                if span_logit < -1e6:
-                    continue
+            for i, end_idx in enumerate(start2end[start_idx]):
+                if end_idx < 0:
+                    break
+                span_logit = span_logits[start_idx, i].item()
                 end_score = end_scores[end_idx]
                 span_score = query_span_logit * span_logit
                 score = self.doc_score_cf * doc_score + start_score + end_score + span_score
@@ -81,8 +92,8 @@ class DocumentPhraseMIPS(object):
                 'title': title,
                 'doc_idx': doc_idx,
                 'doc_score': doc_score,
-                'start_pos': word2char[0, result.start_idx].item(),
-                'end_pos': word2char[1, result.end_idx].item(),
+                'start_pos': word2char_start[result.start_idx].item(),
+                'end_pos': word2char_end[result.end_idx].item(),
                 'phrase_score': result.score - doc_score,
                 'score': result.score} for result in results]
         t3 = time.time()
