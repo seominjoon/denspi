@@ -174,11 +174,13 @@ def main():
     parser.add_argument('--draft', default=False, action='store_true')
     parser.add_argument('--draft_num_examples', type=int, default=12)
     parser.add_argument('--span_vec_size', default=64, type=int)
-    parser.add_argument('--filter_threshold', default=-1e9, type=float)
+    parser.add_argument('--filter_threshold', default=-2, type=float)
     parser.add_argument('--filter_cf', default=0.0, type=float)
     parser.add_argument('--port', default=9009, type=int)
     parser.add_argument('--parallel', default=False, action='store_true')
-    parser.add_argument('--scaleoffset', default=None, type=int)
+    parser.add_argument('--compression_offset', default=2, type=float)
+    parser.add_argument('--compression_scale', default=20, type=float)
+    parser.add_argument('--split_by_para', default=False, action='store_true')
 
     args = parser.parse_args()
 
@@ -737,7 +739,7 @@ def main():
             hdf5_path = os.path.join(args.output_dir, args.index_file)
             write_hdf5(context_examples, context_features, get_context_results(),
                        args.max_answer_length, not args.do_case, hdf5_path, args.filter_threshold, args.verbose_logging,
-                       scaleoffset=args.scaleoffset)
+                       offset=args.compression_offset, scale=args.compression_scale, split_by_para=args.split_by_para)
 
     if args.do_serve:
         def get(text):

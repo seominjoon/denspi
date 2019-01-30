@@ -192,8 +192,9 @@ def get_documents(all_examples, all_features, all_results, threshold,
         yield metadata, vectors, phrases
 
 
-def get_metadata(id2example, features, results, max_answer_length, do_lower_case, verbose_logging):
-    para_start = [0]
+def get_metadata(id2example, features, results, max_answer_length, do_lower_case, verbose_logging, split_by_para):
+    para2word_start = [0]
+    para2word_end = []
     start = np.concatenate([result.start[1:len(feature.tokens) - 1] for feature, result in zip(features, results)],
                            axis=0)
     end = np.concatenate([result.end[1:len(feature.tokens) - 1] for feature, result in zip(features, results)], axis=0)
@@ -226,7 +227,8 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
         example = id2example[feature.unique_id]
         if prev_example is not None and feature.doc_span_index == 0:
             full_text = full_text + ' '.join(prev_example.doc_tokens) + sep
-            para_start.append(word_pos)
+            para2word_start.append(word_pos)
+            para2word_end.append(word_pos)
 
         for i in range(1, len(feature.tokens) - 1):
             _, start_pos, _ = get_final_text_(example, feature, i, min(len(feature.tokens) - 2, i + 1), do_lower_case,
@@ -238,29 +240,35 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
             word2char_start[word_pos] = start_pos
             word2char_end[word_pos] = end_pos
             word_pos += 1
-
         prev_example = example
+    para2word_end.append(word_pos - 1)
     full_text = full_text + ' '.join(prev_example.doc_tokens)
+    para2word_start = np.array(para2word_start, dtype=np.int32)
+    para2word_end = np.array(para2word_end, dtype=np.int32)
 
     metadata = {'did': prev_example.doc_idx, 'context': full_text, 'title': prev_example.title,
-                'para_start': para_start,
+                'para2word_start': para2word_start, 'para2word_end': para2word_end,
                 'start': start, 'end': end, 'span_logits': span_logits,
                 'start2end': start2end,
                 'word2char_start': word2char_start, 'word2char_end': word2char_end,
                 'filter_start': fs, 'filter_end': fe}
+    if split_by_para:
+        metadata['pid'] = prev_example.pid
+
     return metadata
 
 
 def filter_metadata(metadata, threshold):
     start_idxs, = np.where(metadata['filter_start'] > threshold)
     end_idxs, = np.where(metadata['filter_end'] > threshold)
+    start_long2short = {long: short for short, long in enumerate(start_idxs)}
     end_long2short = {long: short for short, long in enumerate(end_idxs)}
 
     metadata['word2char_start'] = metadata['word2char_start'][start_idxs]
     metadata['word2char_end'] = metadata['word2char_end'][end_idxs]
     metadata['start'] = metadata['start'][start_idxs]
     metadata['end'] = metadata['end'][end_idxs]
-    # metadata['span_logits'] = metadata['span_logits'][start_idxs, end_idxs]
+    metadata['span_logits'] = metadata['span_logits'][start_idxs]
     metadata['start2end'] = metadata['start2end'][start_idxs]
     for i, each in enumerate(metadata['start2end']):
         for j, long in enumerate(each.tolist()):
@@ -269,8 +277,15 @@ def filter_metadata(metadata, threshold):
     return metadata
 
 
+def compress_metadata(metadata, offset, scale):
+    for key in ['start', 'end']:
+        metadata[key] = float_to_int8(metadata[key], offset, scale)
+    return metadata
+
+
 def write_hdf5(all_examples, all_features, all_results,
-               max_answer_length, do_lower_case, hdf5_path, filter_threshold, verbose_logging, scaleoffset=None):
+               max_answer_length, do_lower_case, hdf5_path, filter_threshold, verbose_logging, offset=None, scale=None,
+               split_by_para=False):
     assert len(all_examples) > 0
 
     import h5py
@@ -280,33 +295,48 @@ def write_hdf5(all_examples, all_features, all_results,
     id2example = {id_: all_examples[id2feature[id_].example_index] for id_ in id2feature}
 
     # Separating writing part for potentially multi-threaded dumping
-    def add(id2example_, features_, results_):
-        metadata = get_metadata(id2example_, features_, results_, max_answer_length, do_lower_case, verbose_logging)
+    def add(id2example_, features_, results_, split_by_para):
+        metadata = get_metadata(id2example_, features_, results_, max_answer_length, do_lower_case, verbose_logging,
+                                split_by_para)
         metadata = filter_metadata(metadata, filter_threshold)
-        dg = f.create_group(str(metadata['did']))
+        did = str(metadata['did'])
+        dg = f[did] if did in f else f.create_group(did)
+        if split_by_para:
+            dg = dg.create_group(str(metadata['pid']))
+
         dg.attrs['context'] = metadata['context']
         dg.attrs['title'] = metadata['title']
-        dg.create_dataset('para_start', data=metadata['para_start'], scaleoffset=scaleoffset)
-        dg.create_dataset('start', data=metadata['start'], scaleoffset=scaleoffset)
-        dg.create_dataset('end', data=metadata['end'], scaleoffset=scaleoffset)
-        dg.create_dataset('span_logits', data=metadata['span_logits'], scaleoffset=scaleoffset)
-        dg.create_dataset('start2end', data=metadata['start2end'], scaleoffset=scaleoffset)
-        dg.create_dataset('word2char_start', data=metadata['word2char_start'], scaleoffset=scaleoffset)
-        dg.create_dataset('word2char_end', data=metadata['word2char_end'], scaleoffset=scaleoffset)
+        if offset is not None:
+            metadata = compress_metadata(metadata, offset, scale)
+            dg.attrs['offset'] = offset
+            dg.attrs['scale'] = scale
+        dg.create_dataset('para2word_start', data=metadata['para2word_start'])
+        dg.create_dataset('para2word_end', data=metadata['para2word_end'])
+        dg.create_dataset('start', data=metadata['start'])
+        dg.create_dataset('end', data=metadata['end'])
+        dg.create_dataset('span_logits', data=metadata['span_logits'])
+        dg.create_dataset('start2end', data=metadata['start2end'])
+        dg.create_dataset('word2char_start', data=metadata['word2char_start'])
+        dg.create_dataset('word2char_end', data=metadata['word2char_end'])
 
     features = []
     results = []
     for result in tqdm(all_results, total=len(features)):
         example = id2example[result.unique_id]
         feature = id2feature[result.unique_id]
-        if len(features) > 0 and example.pid == 0 and feature.doc_span_index == 0:
-            add(id2example, features, results)
+        if split_by_para:
+            condition = len(features) > 0 and feature.doc_span_index == 0
+        else:
+            condition = len(features) > 0 and example.pid == 0 and feature.doc_span_index == 0
+
+        if condition:
+            add(id2example, features, results, split_by_para)
             features = [feature]
             results = [result]
         else:
             features.append(feature)
             results.append(result)
-    add(id2example, features, results)
+    add(id2example, features, results, split_by_para)
 
     f.close()
 

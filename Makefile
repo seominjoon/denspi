@@ -181,6 +181,9 @@ dl:
 	--train_batch_size 1 \
 	--predict_batch_size 1 \
 	--draft \
+	--compression_offset 0.0 \
+	--compression_scale 20.0 \
+	--split_by_para \
 	--no_cuda
 
 dl_load:
@@ -378,7 +381,7 @@ p076_t059:
 	--parallel \
 	--iteration 1"
 
-p085_t059:
+p086_t059:
 	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
 	--do_index \
@@ -387,5 +390,113 @@ p085_t059:
 	--index_file index.hdf5 \
 	--load_dir KR18816/piqa-nfs/59 \
 	--filter_threshold -2 \
+	--compression_offset 0.0 \
+	--compression_scale 20.0 \
 	--iteration 1 \
+	--parallel"
+
+p091_t059:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--do_embed_question \
+	--output_dir index/squad/large \
+	--index_file index.hdf5 \
+	--load_dir KR18816/piqa-nfs/59 \
+	--compression_offset 0.0 \
+	--compression_scale 20.0 \
+	--iteration 1 \
+	--parallel"
+
+
+p092_t059:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--do_embed_question \
+	--output_dir index/squad/large \
+	--index_file index_2_20.hdf5 \
+	--load_dir KR18816/piqa-nfs/59 \
+	--compression_offset 2.0 \
+	--compression_scale 20.0 \
+	--iteration 1 \
+	--parallel"
+
+p093_t059:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--do_embed_question \
+	--output_dir index/squad/large \
+	--index_file index_2_20_s.hdf5 \
+	--load_dir KR18816/piqa-nfs/59 \
+	--compression_offset 2.0 \
+	--compression_scale 20.0 \
+	--iteration 1 \
+	--split_by_para \
+	--parallel"
+
+p097_t059:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--do_embed_question \
+	--output_dir index/squad/large \
+	--index_file index_s.hdf5 \
+	--load_dir KR18816/piqa-nfs/59 \
+	--iteration 1 \
+	--split_by_para \
+	--parallel"
+
+p098_t059:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--do_embed_question \
+	--output_dir index/squad/large \
+	--index_file index_2_20_s_.hdf5 \
+	--compression_offset 2.0 \
+	--compression_scale 20.0 \
+	--load_dir KR18816/piqa-nfs/59 \
+	--iteration 1 \
+	--split_by_para \
+	--parallel"
+
+p112_t059:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--output_dir index/squad/large \
+	--index_file index_f-2.hdf5 \
+	--load_dir KR18816/piqa-nfs/59 \
+	--filter_threshold -2 \
+	--iteration 1 \
+	--split_by_para \
+	--parallel"
+
+p113_t059:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--output_dir index/squad/large \
+	--index_file index_o2_s20_f-2.hdf5 \
+	--load_dir KR18816/piqa-nfs/59 \
+	--compression_offset 2.0 \
+	--compression_scale 20.0 \
+	--filter_threshold -2 \
+	--iteration 1 \
+	--split_by_para \
+	--parallel"
+
+p114_t059:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--output_dir index/squad/large \
+	--index_file index_o2_s20.hdf5 \
+	--load_dir KR18816/piqa-nfs/59 \
+	--compression_offset 2.0 \
+	--compression_scale 20.0 \
+	--iteration 1 \
+	--split_by_para \
 	--parallel"

@@ -5,7 +5,6 @@ import h5py
 import numpy as np
 
 
-
 def int8_to_float(num, offset, factor):
     return num.astype(np.float16) / factor + offset
 
@@ -37,31 +36,41 @@ class DocumentPhraseMIPS(object):
     def search_phrase(self, doc_idx, query, top_k=5, doc_score=0.0, para_idx=None):
         t0 = time.time()
         group = self.phrase_index[str(doc_idx)]
-        start, end, span_logits, start2end, word2char_start, word2char_end, para_start = [
+        if para_idx is not None:
+            group = group[str(para_idx)]
+
+        start, end, span_logits, start2end, word2char_start, word2char_end = [
             group[key][:] for key in
-            ['start', 'end', 'span_logits', 'start2end', 'word2char_start', 'word2char_end', 'para_start']]
-        # print(phrase.mean(), phrase.std())
+            ['start', 'end', 'span_logits', 'start2end', 'word2char_start', 'word2char_end']]
 
         context = group.attrs['context']
         title = group.attrs['title']
         t1 = time.time()
         # print('Loading index: %dms' % int(1000 * (t1 - t0)))
 
+        """
         if para_idx is not None:
-            word_start = para_start[para_idx]
-            word_end = para_start[para_idx + 1] - 1 if para_idx + 1 < len(para_start) else start.shape[0] - 1
-            char_start = word2char_start[word_start]
-            char_end = word2char_end[word_end]
+            start_start = para2word_start[para_idx]
+            start_end = para2word_start[para_idx + 1] - 1 if para_idx + 1 < len(para2word_start) else start.shape[0] - 1
+            end_start = para2word_end[para_idx - 1] + 1 if para_idx > 0 else 0
+            end_end = para2word_end[para_idx]
+            char_start = word2char_start[start_start]
+            char_end = word2char_end[end_end]
             context = context[char_start:char_end]
 
-            start = start[word_start:word_end + 1]
-            end = end[word_start:word_end + 1]
-            start = int8_to_float(float_to_int8(start, 0, 20), 0, 20)
-            end = int8_to_float(float_to_int8(end, 0, 20), 0, 20)
-            span_logits = span_logits[word_start:word_end + 1]
-            word2char_start = word2char_start[word_start:word_end + 1] - char_start
-            word2char_end = word2char_end[word_start:word_end + 1] - char_start
-            start2end = start2end[word_start:word_end + 1] - word_start
+            start = start[start_start:start_end + 1]
+            end = end[end_start:end_end + 1]
+            span_logits = span_logits[start_start:start_end + 1]
+            word2char_start = word2char_start[start_start:start_end + 1] - char_start
+            word2char_end = word2char_end[end_start:end_end + 1] - char_start
+            start2end = start2end[start_start:start_end + 1] - end_start
+
+            # print(start2end.max(), len(end))
+        """
+
+        if 'offset' in group.attrs:
+            start = int8_to_float(start, group.attrs['offset'], group.attrs['scale'])
+            end = int8_to_float(end, group.attrs['offset'], group.attrs['scale'])
 
         query_start, query_end, query_span_logit = query
         start_scores = np.matmul(start, np.array(query_start).transpose()).squeeze(1)
@@ -80,7 +89,7 @@ class DocumentPhraseMIPS(object):
         for start_idx, start_score in best_start_pairs:
             for i, end_idx in enumerate(start2end[start_idx]):
                 if end_idx < 0:
-                    break
+                    continue
                 span_logit = span_logits[start_idx, i].item()
                 end_score = end_scores[end_idx]
                 span_score = query_span_logit * span_logit
