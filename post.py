@@ -1,6 +1,7 @@
 import collections
 import json
 import logging
+from multiprocessing import Queue
 
 import numpy as np
 import six
@@ -239,38 +240,54 @@ def write_hdf5(all_examples, all_features, all_results,
     assert len(all_examples) > 0
 
     import h5py
-    f = h5py.File(hdf5_path, 'w')
+    from multiprocessing import Process
 
     id2feature = {feature.unique_id: feature for feature in all_features}
     id2example = {id_: all_examples[id2feature[id_].example_index] for id_ in id2feature}
 
-    # Separating writing part for potentially multi-threaded dumping
-    def add(id2example_, features_, results_, split_by_para):
-        metadata = get_metadata(id2example_, features_, results_, max_answer_length, do_lower_case, verbose_logging,
-                                split_by_para)
-        metadata = filter_metadata(metadata, filter_threshold)
-        did = str(metadata['did'])
-        dg = f[did] if did in f else f.create_group(did)
-        if split_by_para:
-            dg = dg.create_group(str(metadata['pid']))
+    # Separating writing part for potentially multi-processed dumping
+    def add(inqueue_, outqueue_):
+        for id2example_, features_, results_, split_by_para in iter(inqueue_.get, None):
+            metadata = get_metadata(id2example_, features_, results_, max_answer_length, do_lower_case, verbose_logging,
+                                    split_by_para)
+            metadata = filter_metadata(metadata, filter_threshold)
+            outqueue_.put(metadata)
 
-        dg.attrs['context'] = metadata['context']
-        dg.attrs['title'] = metadata['title']
-        if offset is not None:
-            metadata = compress_metadata(metadata, offset, scale)
-            dg.attrs['offset'] = offset
-            dg.attrs['scale'] = scale
-        dg.create_dataset('para2word_start', data=metadata['para2word_start'])
-        dg.create_dataset('para2word_end', data=metadata['para2word_end'])
-        dg.create_dataset('start', data=metadata['start'])
-        dg.create_dataset('end', data=metadata['end'])
-        dg.create_dataset('span_logits', data=metadata['span_logits'])
-        dg.create_dataset('start2end', data=metadata['start2end'])
-        dg.create_dataset('word2char_start', data=metadata['word2char_start'])
-        dg.create_dataset('word2char_end', data=metadata['word2char_end'])
+    def write(outqueue_):
+        f = h5py.File(hdf5_path, 'w')
+        while True:
+            metadata = outqueue_.get()
+            if metadata:
+                did = str(metadata['did'])
+                dg = f[did] if did in f else f.create_group(did)
+                if split_by_para:
+                    dg = dg.create_group(str(metadata['pid']))
+
+                dg.attrs['context'] = metadata['context']
+                dg.attrs['title'] = metadata['title']
+                if offset is not None:
+                    metadata = compress_metadata(metadata, offset, scale)
+                    dg.attrs['offset'] = offset
+                    dg.attrs['scale'] = scale
+                dg.create_dataset('start', data=metadata['start'])
+                dg.create_dataset('end', data=metadata['end'])
+                dg.create_dataset('span_logits', data=metadata['span_logits'])
+                dg.create_dataset('start2end', data=metadata['start2end'])
+                dg.create_dataset('word2char_start', data=metadata['word2char_start'])
+                dg.create_dataset('word2char_end', data=metadata['word2char_end'])
+            else:
+                break
+        f.close()
 
     features = []
     results = []
+    inqueue = Queue()
+    outqueue = Queue()
+    write_p = Process(target=write, args=(outqueue, ))
+    p = Process(target=add, args=(inqueue, outqueue))
+    write_p.start()
+    p.start()
+
     for result in tqdm(all_results, total=len(features)):
         example = id2example[result.unique_id]
         feature = id2feature[result.unique_id]
@@ -280,15 +297,20 @@ def write_hdf5(all_examples, all_features, all_results,
             condition = len(features) > 0 and example.pid == 0 and feature.doc_span_index == 0
 
         if condition:
-            add(id2example, features, results, split_by_para)
+            in_ = (id2example, features, results, split_by_para)
+            inqueue.put(in_)
+            # add(id2example, features, results, split_by_para)
             features = [feature]
             results = [result]
         else:
             features.append(feature)
             results.append(result)
-    add(id2example, features, results, split_by_para)
-
-    f.close()
+    in_ = (id2example, features, results, split_by_para)
+    inqueue.put(in_)
+    inqueue.put(None)
+    p.join()
+    outqueue.put(None)
+    write_p.join()
 
 
 def get_question_results(question_examples, query_eval_features, question_dataloader, device, model):
