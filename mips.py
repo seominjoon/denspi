@@ -48,26 +48,6 @@ class DocumentPhraseMIPS(object):
         t1 = time.time()
         # print('Loading index: %dms' % int(1000 * (t1 - t0)))
 
-        """
-        if para_idx is not None:
-            start_start = para2word_start[para_idx]
-            start_end = para2word_start[para_idx + 1] - 1 if para_idx + 1 < len(para2word_start) else start.shape[0] - 1
-            end_start = para2word_end[para_idx - 1] + 1 if para_idx > 0 else 0
-            end_end = para2word_end[para_idx]
-            char_start = word2char_start[start_start]
-            char_end = word2char_end[end_end]
-            context = context[char_start:char_end]
-
-            start = start[start_start:start_end + 1]
-            end = end[end_start:end_end + 1]
-            span_logits = span_logits[start_start:start_end + 1]
-            word2char_start = word2char_start[start_start:start_end + 1] - char_start
-            word2char_end = word2char_end[end_start:end_end + 1] - char_start
-            start2end = start2end[start_start:start_end + 1] - end_start
-
-            # print(start2end.max(), len(end))
-        """
-
         if 'offset' in group.attrs:
             start = int8_to_float(start, group.attrs['offset'], group.attrs['scale'])
             end = int8_to_float(end, group.attrs['offset'], group.attrs['scale'])

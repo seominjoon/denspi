@@ -152,8 +152,6 @@ def write_predictions(all_examples, all_features, all_results,
 
 
 def get_metadata(id2example, features, results, max_answer_length, do_lower_case, verbose_logging, split_by_para):
-    para2word_start = [0]
-    para2word_end = []
     start = np.concatenate([result.start[1:len(feature.tokens) - 1] for feature, result in zip(features, results)],
                            axis=0)
     end = np.concatenate([result.end[1:len(feature.tokens) - 1] for feature, result in zip(features, results)], axis=0)
@@ -186,8 +184,6 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
         example = id2example[feature.unique_id]
         if prev_example is not None and feature.doc_span_index == 0:
             full_text = full_text + ' '.join(prev_example.doc_tokens) + sep
-            para2word_start.append(word_pos)
-            para2word_end.append(word_pos)
 
         for i in range(1, len(feature.tokens) - 1):
             _, start_pos, _ = get_final_text_(example, feature, i, min(len(feature.tokens) - 2, i + 1), do_lower_case,
@@ -200,13 +196,9 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
             word2char_end[word_pos] = end_pos
             word_pos += 1
         prev_example = example
-    para2word_end.append(word_pos - 1)
     full_text = full_text + ' '.join(prev_example.doc_tokens)
-    para2word_start = np.array(para2word_start, dtype=np.int32)
-    para2word_end = np.array(para2word_end, dtype=np.int32)
 
     metadata = {'did': prev_example.doc_idx, 'context': full_text, 'title': prev_example.title,
-                'para2word_start': para2word_start, 'para2word_end': para2word_end,
                 'start': start, 'end': end, 'span_logits': span_logits,
                 'start2end': start2end,
                 'word2char_start': word2char_start, 'word2char_end': word2char_end,
@@ -220,7 +212,6 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
 def filter_metadata(metadata, threshold):
     start_idxs, = np.where(metadata['filter_start'] > threshold)
     end_idxs, = np.where(metadata['filter_end'] > threshold)
-    start_long2short = {long: short for short, long in enumerate(start_idxs)}
     end_long2short = {long: short for short, long in enumerate(end_idxs)}
 
     metadata['word2char_start'] = metadata['word2char_start'][start_idxs]
