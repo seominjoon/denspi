@@ -1,9 +1,6 @@
 import collections
 import json
 import logging
-import os
-import shutil
-import threading
 
 import numpy as np
 import six
@@ -154,44 +151,6 @@ def write_predictions(all_examples, all_features, all_results,
         json.dump(predictions, fp)
 
 
-def get_documents(all_examples, all_features, all_results, threshold,
-                  max_answer_length, do_lower_case, verbose_logging):
-    id2feature = {feature.unique_id: feature for feature in all_features}
-    id2example = {id_: all_examples[id2feature[id_].example_index] for id_ in id2feature}
-
-    for result in all_results:
-        feature = id2feature[result.unique_id]
-        example = id2example[result.unique_id]
-
-        vectors = []
-        phrases = []
-        spans = []
-        for start_index in range(len(feature.tokens)):
-            for end_index in range(start_index, min(len(feature.tokens), start_index + max_answer_length - 1)):
-                if start_index not in feature.token_to_orig_map:
-                    continue
-                if end_index not in feature.token_to_orig_map:
-                    continue
-                if not feature.token_is_max_context.get(start_index, False):
-                    continue
-                span_logit = result.span_logits[start_index, end_index]
-                filter_logit = result.filter_logits[start_index, end_index]
-                if filter_logit < threshold:
-                    continue
-
-                vector = np.concatenate([np.array([span_logit]), result.start[start_index], result.end[end_index]])
-                orig_text, start_pos, end_pos = get_final_text_(example, feature, start_index, end_index, do_lower_case,
-                                                                verbose_logging)
-                phrase = orig_text[start_pos:end_pos]
-                span = [start_pos, end_pos]
-                vectors.append(vector)
-                phrases.append(phrase)
-                spans.append(span)
-        metadata = {'title': example.title, 'pid': example.pid, 'sid': feature.doc_span_index,
-                    'context': orig_text, 'answer_spans': spans, 'doc_idx': example.doc_idx}
-        yield metadata, vectors, phrases
-
-
 def get_metadata(id2example, features, results, max_answer_length, do_lower_case, verbose_logging, split_by_para):
     para2word_start = [0]
     para2word_end = []
@@ -339,87 +298,6 @@ def write_hdf5(all_examples, all_features, all_results,
     add(id2example, features, results, split_by_para)
 
     f.close()
-
-
-def write_context(all_examples, all_features, all_results, threshold,
-                  max_answer_length, do_lower_case, zip_dir, verbose_logging,
-                  one_file_per_doc=False):
-    if one_file_per_doc:
-        embed_dir = zip_dir
-    else:
-        embed_dir = 'context_emb/'
-        os.makedirs(embed_dir)
-    word_count = sum(len(feature.tokens) for feature in all_features)
-    vec_count = 0
-
-    # track doc stride index for each question. if not visited, set flag
-    doc_tracker = set()
-
-    # Used for storing vecs from previous runs.
-    # For docs from the same para or for one_file_per_doc
-    vectors_to_store = []
-    phrases_to_store = []
-    paras_to_store = []
-    spans_to_store = []
-
-    for i, (metadata, vectors, phrases) in tqdm(enumerate(get_documents(all_examples, all_features, all_results,
-                                                                        threshold, max_answer_length, do_lower_case,
-                                                                        verbose_logging)),
-                                                total=len(all_features),
-                                                desc=zip_dir):
-        feature = all_features[i]
-        title = metadata['title']
-        doc_idx = metadata['doc_idx']
-        context = metadata['context']
-        pid = metadata['pid']
-        spans = metadata['answer_spans']
-        if one_file_per_doc:
-            spans = [(pid, span) for span in spans]
-        name = str(doc_idx).zfill(4) if one_file_per_doc else '%s_%d' % (title, pid)
-        name = name.replace('/', '_')  # some titles have slashes
-        npz_path = os.path.join(embed_dir, '%s.npz' % name)
-        json_path = os.path.join(embed_dir, '%s.json' % name)
-        metadata_path = os.path.join(embed_dir, '%s.metadata' % name)
-
-        is_last = i == len(all_features) - 1
-        is_last_stride = is_last or all_features[i + 1].example_index != feature.example_index
-        is_last_para = is_last or (all_examples[all_features[i + 1].example_index].title !=
-                                   all_examples[feature.example_index].title)
-
-        vec_count += len(vectors)
-
-        vectors_to_store.extend(vectors)
-        phrases_to_store.extend(phrases)
-        paras_to_store.append(context)
-        spans_to_store.extend(spans)
-
-        metadata_to_store = {'title': title, 'context': paras_to_store, 'answer_spans': spans_to_store}
-        if one_file_per_doc:
-            store = is_last_para
-        else:
-            store = is_last_stride
-            metadata_to_store['pid'] = pid
-
-        if store:
-            matrix = np.stack(vectors_to_store, 0) if len(vectors_to_store) > 0 else np.array([])
-            np.savez_compressed(npz_path, matrix)
-            if not one_file_per_doc:
-                with open(json_path, 'w') as fp:
-                    json.dump(phrases_to_store, fp)
-            with open(metadata_path, 'w') as fp:
-                json.dump(metadata_to_store, fp)
-            vectors_to_store = []
-            phrases_to_store = []
-            paras_to_store = []
-            spans_to_store = []
-
-    print('num vecs=%d, num_words=%d, nvpw=%.4f' % (vec_count, word_count, vec_count / word_count))
-
-    if not one_file_per_doc:
-        # archiving
-        print('archiving at %s.zip' % zip_dir)
-        shutil.make_archive(zip_dir, 'zip', embed_dir)
-        shutil.rmtree(embed_dir)
 
 
 def get_question_results(question_examples, query_eval_features, question_dataloader, device, model):

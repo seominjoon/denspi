@@ -36,11 +36,11 @@ from torch.utils.data.distributed import DistributedSampler
 import tokenization
 from bert import BertConfig
 from optimization import BERTAdam
-from phrase import BertPhraseModel, BoundaryFilter
-from post import write_predictions, write_context, write_hdf5, get_question_results as get_question_results_, \
-    convert_question_features_to_dataloader, write_question_results
+from phrase import BertPhraseModel
 from pre import convert_examples_to_features, read_squad_examples, convert_documents_to_features, \
     convert_questions_to_features, SquadExample
+from post import write_predictions, write_hdf5, get_question_results as get_question_results_, \
+    convert_question_features_to_dataloader, write_question_results
 from serve import serve
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -99,22 +99,22 @@ def main():
     # Local paths (if we want to run cmd)
     parser.add_argument('--eval_script', default='evaluate-v1.1.py', type=str)
 
-    # Do
+    # Do's
     parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
     parser.add_argument("--do_train_filter", default=False, action='store_true', help='Train filter or not.')
     parser.add_argument("--do_predict", default=False, action='store_true', help="Whether to run eval on the dev set.")
     parser.add_argument('--do_eval', default=False, action='store_true')
-    parser.add_argument('--do_embed_context', default=False, action='store_true')
     parser.add_argument('--do_embed_question', default=False, action='store_true')
-    parser.add_argument('--do_merge_eval', default=False, action='store_true')
     parser.add_argument('--do_index', default=False, action='store_true')
-    parser.add_argument('--do_benchmark', default=False, action='store_true')
     parser.add_argument('--do_serve', default=False, action='store_true')
 
-    # Model options
+    # Model options: if you change these, you need to train again
     parser.add_argument("--do_case", default=False, action='store_true',
                         help="Whether to lower case the input text. Should be True for uncased "
                              "models and False for cased models.")
+    parser.add_argument('--span_vec_size', default=64, type=int)
+
+    # GPU and memory related options
     parser.add_argument("--max_seq_length", default=384, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences "
                              "longer than this will be truncated, and sequences shorter than this will be padded.")
@@ -125,6 +125,28 @@ def main():
                              "be truncated to this length.")
     parser.add_argument("--train_batch_size", default=12, type=int, help="Total batch size for training.")
     parser.add_argument("--predict_batch_size", default=16, type=int, help="Total batch size for predictions.")
+    parser.add_argument('--gradient_accumulation_steps',
+                        type=int,
+                        default=1,
+                        help="Number of updates steps to accumulate before performing a backward/update pass.")
+    parser.add_argument('--optimize_on_cpu',
+                        default=False,
+                        action='store_true',
+                        help="Whether to perform optimization and keep the optimizer averages on CPU")
+    parser.add_argument("--no_cuda",
+                        default=False,
+                        action='store_true',
+                        help="Whether not to use CUDA when available")
+    parser.add_argument("--local_rank",
+                        type=int,
+                        default=-1,
+                        help="local_rank for distributed training on gpus")
+    parser.add_argument('--fp16',
+                        default=False,
+                        action='store_true',
+                        help="Whether to use 16-bit float precision instead of 32-bit")
+
+    # Training options: only effective during training
     parser.add_argument("--learning_rate", default=3e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--num_train_epochs", default=2.0, type=float,
                         help="Total number of training epochs to perform.")
@@ -137,50 +159,36 @@ def main():
                         help="How often to save the model checkpoint.")
     parser.add_argument("--iterations_per_loop", default=1000, type=int,
                         help="How many steps to make in each estimator call.")
+
+    # Prediction options: only effective during prediction
     parser.add_argument("--n_best_size", default=20, type=int,
                         help="The total number of n-best predictions to generate in the nbest_predictions.json "
                              "output file.")
     parser.add_argument("--max_answer_length", default=30, type=int,
                         help="The maximum length of an answer that can be generated. This is needed because the start "
                              "and end predictions are not conditioned on one another.")
+
+    # Index Options
+    parser.add_argument('--dtype', default='float32', type=str)
+    parser.add_argument('--filter_threshold', default=-2, type=float)
+    parser.add_argument('--compression_offset', default=2, type=float)
+    parser.add_argument('--compression_scale', default=20, type=float)
+    parser.add_argument('--split_by_para', default=False, action='store_true')
+
+    # Serve Options
+    parser.add_argument('--port', default=9009, type=int)
+
+    # Others
+    parser.add_argument('--parallel', default=False, action='store_true')
     parser.add_argument("--verbose_logging", default=False, action='store_true',
                         help="If true, all of the warnings related to data processing will be printed. "
                              "A number of warnings are expected for a normal SQuAD evaluation.")
-    parser.add_argument("--no_cuda",
-                        default=False,
-                        action='store_true',
-                        help="Whether not to use CUDA when available")
     parser.add_argument('--seed',
                         type=int,
                         default=42,
                         help="random seed for initialization")
-    parser.add_argument('--gradient_accumulation_steps',
-                        type=int,
-                        default=1,
-                        help="Number of updates steps to accumulate before performing a backward/update pass.")
-    parser.add_argument("--local_rank",
-                        type=int,
-                        default=-1,
-                        help="local_rank for distributed training on gpus")
-    parser.add_argument('--optimize_on_cpu',
-                        default=False,
-                        action='store_true',
-                        help="Whether to perform optimization and keep the optimizer averages on CPU")
-    parser.add_argument('--fp16',
-                        default=False,
-                        action='store_true',
-                        help="Whether to use 16-bit float precision instead of 32-bit")
-    parser.add_argument('--dtype', default='float32', type=str)
     parser.add_argument('--draft', default=False, action='store_true')
     parser.add_argument('--draft_num_examples', type=int, default=12)
-    parser.add_argument('--span_vec_size', default=64, type=int)
-    parser.add_argument('--filter_threshold', default=-2, type=float)
-    parser.add_argument('--filter_cf', default=0.0, type=float)
-    parser.add_argument('--port', default=9009, type=int)
-    parser.add_argument('--parallel', default=False, action='store_true')
-    parser.add_argument('--compression_offset', default=2, type=float)
-    parser.add_argument('--compression_scale', default=20, type=float)
-    parser.add_argument('--split_by_para', default=False, action='store_true')
 
     args = parser.parse_args()
 
@@ -550,70 +558,6 @@ def main():
             output, error = process.communicate()
             print(output)
 
-    if args.do_embed_context:
-        context_examples = read_squad_examples(
-            context_only=True,
-            input_file=args.predict_file, is_training=False, draft=args.draft,
-            draft_num_examples=args.draft_num_examples)
-        context_features = convert_documents_to_features(
-            examples=context_examples,
-            tokenizer=tokenizer,
-            max_seq_length=args.max_seq_length,
-            doc_stride=args.doc_stride)
-
-        logger.info("***** Running embedding *****")
-        logger.info("  Num orig examples = %d", len(context_examples))
-        logger.info("  Num split examples = %d", len(context_features))
-        logger.info("  Batch size = %d", args.predict_batch_size)
-
-        all_input_ids = torch.tensor([f.input_ids for f in context_features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in context_features], dtype=torch.long)
-        all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
-        if args.fp16:
-            (all_input_ids, all_input_mask, all_example_index) = tuple(t.half() for t in (all_input_ids, all_input_mask,
-                                                                                          all_example_index))
-        context_data = TensorDataset(all_input_ids, all_input_mask, all_example_index)
-        if args.local_rank == -1:
-            context_sampler = SequentialSampler(context_data)
-        else:
-            context_sampler = DistributedSampler(context_data)
-        context_dataloader = DataLoader(context_data, sampler=context_sampler, batch_size=args.predict_batch_size)
-
-        model.eval()
-        logger.info("Start embedding")
-
-        def get_context_results():
-            for (input_ids, input_mask, example_indices) in context_dataloader:
-                input_ids = input_ids.to(device)
-                input_mask = input_mask.to(device)
-                with torch.no_grad():
-                    batch_start, batch_end, batch_span_logits, batch_filter_logits = model(input_ids, input_mask)
-                for i, example_index in enumerate(example_indices):
-                    start = batch_start[i].detach().cpu().numpy()
-                    end = batch_end[i].detach().cpu().numpy()
-                    span_logits = batch_span_logits[i].detach().cpu().numpy()
-                    filter_logits = batch_filter_logits[i].detach().cpu().numpy()
-                    context_feature = context_features[example_index.item()]
-                    unique_id = int(context_feature.unique_id)
-                    yield ContextResult(unique_id=unique_id,
-                                        start=start,
-                                        end=end,
-                                        span_logits=span_logits,
-                                        filter_logits=filter_logits)
-
-        def context_save(filename, **kwargs):
-            write_context(context_examples, context_features, get_context_results(),
-                          args.filter_threshold, args.max_answer_length,
-                          not args.do_case, filename, args.verbose_logging)
-
-        iteration = epoch + 1 if args.do_train else args.iteration
-
-        if args.nfs:
-            from nsml import NSML_NFS_OUTPUT
-            context_save(os.path.join(NSML_NFS_OUTPUT, '%s_embed_%s' % (iteration, args.context_embed_dir)))
-        else:
-            processor.save('%s_embed_%s' % (iteration, args.context_embed_dir), save_fn=context_save)
-
     if args.do_embed_question:
         question_examples = read_squad_examples(
             question_only=True,
@@ -633,36 +577,6 @@ def main():
         path = os.path.join(args.output_dir, args.question_emb_file)
         print('Writing %s' % path)
         write_question_results(question_results, path)
-
-    if args.do_merge_eval:
-        assert args.load_dir is not None, 'You need to provide --load_dir'
-
-        local_question_embed_dir = 'local_question_embed_dir'
-
-        def copy(filename, **kwargs):
-            import shutil
-            shutil.copytree(filename, local_question_embed_dir)
-
-        processor.load('%s_embed_%s' % (iteration, args.question_embed_dir), load_fn=copy)
-
-        def merge_load(filename, **kwargs):
-            output_prediction_file = os.path.join(args.output_dir, "merge_predictions.json")
-            merge_command = "python merge.py %s %s %s %s --progress --q_mat" % (args.gt_file, filename,
-                                                                                local_question_embed_dir,
-                                                                                output_prediction_file)
-            eval_command = "python evaluate-v1.1.py %s %s" % (args.gt_file, output_prediction_file)
-            import subprocess
-            process = subprocess.Popen(merge_command.split(), stdout=subprocess.PIPE)
-            output, error = process.communicate()
-            print(output)
-            print(error)
-            process = subprocess.Popen(eval_command.split(), stdout=subprocess.PIPE)
-            output, error = process.communicate()
-            print(output)
-            print(error)
-
-        iteration = epoch + 1 if args.do_train else args.iteration
-        processor.load('%s_embed_%s' % (iteration, args.context_embed_dir), load_fn=merge_load)
 
     if args.do_index:
         if ':' not in args.predict_file:
