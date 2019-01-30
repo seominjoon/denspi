@@ -10,7 +10,7 @@ parser.add_argument('tfidf_path')
 parser.add_argument('phrase_index_path')
 parser.add_argument('--port', default=10001, type=int)
 parser.add_argument('--api_port', default=9009, type=int)
-parser.add_argument('--max_answer_length', default=15, type=int)
+parser.add_argument('--max_answer_length', default=20, type=int)
 parser.add_argument('--doc_score_cf', default=3e-2, type=float)
 parser.add_argument('--top_k_docs', default=5, type=int)
 parser.add_argument('--top_k_phrases', default=10, type=int)
@@ -60,7 +60,7 @@ def search(query, top_k_docs, top_k_phrases):
 def search_(query, top_k_docs, top_k_phrases):
     try:
         phrase_vec, _ = query2emb(query, args.api_port)()
-        rets = mips.search_phrase(0, phrase_vec, top_k=top_k_phrases)
+        rets = mips.search_phrase(2000203, phrase_vec, top_k=top_k_phrases)
         return rets
     except RuntimeError:
         print('%s: error' % query)

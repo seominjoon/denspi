@@ -510,3 +510,28 @@ p124_t059:
 	--load_dir KR18816/piqa-nfs/59 \
 	--iteration 1 \
 	--parallel"
+
+
+p128_t059:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--data_dir data/docs \
+	--predict_file 0:10 \
+	--output_dir index/squad/large \
+	--index_file demo_0-10.hdf5 \
+	--load_dir KR18816/piqa-nfs/59 \
+	--iteration 1 \
+	--parallel"
+
+p130_t059:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--data_dir data/docs \
+	--predict_file 2000:2002 \
+	--output_dir index/wiki/large \
+	--index_file demo_2000-2002.hdf5 \
+	--load_dir KR18816/piqa-nfs/59 \
+	--iteration 1 \
+	--parallel"

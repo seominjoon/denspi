@@ -241,6 +241,7 @@ def write_hdf5(all_examples, all_features, all_results,
 
     import h5py
     from multiprocessing import Process
+    from time import time
 
     id2feature = {feature.unique_id: feature for feature in all_features}
     id2example = {id_: all_examples[id2feature[id_].example_index] for id_ in id2feature}
@@ -254,7 +255,7 @@ def write_hdf5(all_examples, all_features, all_results,
             outqueue_.put(metadata)
 
     def write(outqueue_):
-        f = h5py.File(hdf5_path, 'w')
+        f = h5py.File(hdf5_path)
         while True:
             metadata = outqueue_.get()
             if metadata:
@@ -288,7 +289,8 @@ def write_hdf5(all_examples, all_features, all_results,
     write_p.start()
     p.start()
 
-    for result in tqdm(all_results, total=len(features)):
+    start_time = time()
+    for count, result in enumerate(tqdm(all_results, total=len(all_features))):
         example = id2example[result.unique_id]
         feature = id2feature[result.unique_id]
         if split_by_para:
@@ -305,6 +307,8 @@ def write_hdf5(all_examples, all_features, all_results,
         else:
             features.append(feature)
             results.append(result)
+        if count % 500 == 0:
+            print('%d/%d at %.1f' % (count + 1, len(all_features), time() - start_time))
     in_ = (id2example, features, results, split_by_para)
     inqueue.put(in_)
     inqueue.put(None)

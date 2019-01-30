@@ -6,7 +6,7 @@ import numpy as np
 
 
 def int8_to_float(num, offset, factor):
-    return num.astype(np.float16) / factor + offset
+    return num.astype(np.float32) / factor + offset
 
 
 class DocumentPhraseMIPS(object):
@@ -43,6 +43,8 @@ class DocumentPhraseMIPS(object):
             group[key][:] for key in
             ['start', 'end', 'span_logits', 'start2end', 'word2char_start', 'word2char_end']]
 
+        # print(start.min(), start.max(), end.min(), end.max())
+
         context = group.attrs['context']
         title = group.attrs['title']
         t1 = time.time()
@@ -59,7 +61,8 @@ class DocumentPhraseMIPS(object):
         t2 = time.time()
         # print('Computing IP: %dms' % int(1000 * (t2 - t1)))
 
-        PhraseResult = namedtuple('PhraseResult', ('score', 'start_idx', 'end_idx'))
+        PhraseResult = namedtuple('PhraseResult', ('score', 'start_score', 'end_score', 'span_score',
+                                                   'start_idx', 'end_idx'))
         results = []
         if top_k > 0:
             best_start_pairs = sorted(enumerate(start_scores.tolist()), key=lambda item: -item[1])[:top_k]
@@ -67,22 +70,44 @@ class DocumentPhraseMIPS(object):
             best_start_pairs = enumerate(start_scores.tolist())
         end_scores = end_scores.tolist()
         for start_idx, start_score in best_start_pairs:
+            max_result = None
+            max_score = -1e9
             for i, end_idx in enumerate(start2end[start_idx]):
+                if i >= self.max_answer_length:
+                    break
                 if end_idx < 0:
                     continue
                 span_logit = span_logits[start_idx, i].item()
                 end_score = end_scores[end_idx]
                 span_score = query_span_logit * span_logit
                 score = self.doc_score_cf * doc_score + start_score + end_score + span_score
-                result = PhraseResult(score, start_idx, end_idx)
-                results.append(result)
-        results = sorted(results, key=lambda item: -item.score)[:top_k]
+                if score > max_score:
+                    max_result = PhraseResult(score, start_score, end_score, span_score, start_idx, end_idx)
+                    max_score = score
+            results.append(max_result)
+        results = sorted(results, key=lambda item: -item.score)
+
+        # Non-maximal suppression (might not be needed)
+        new_results = []
+        for result in results:
+            include = True
+            for new_result in new_results:
+                if overlap(word2char_start, word2char_end,
+                           result.start_idx, result.end_idx, new_result.start_idx, new_result.end_idx):
+                    include = False
+                    break
+            if include:
+                new_results.append(result)
+        results = new_results[:top_k]
         out = [{'context': context,
                 'title': title,
                 'doc_idx': doc_idx,
                 'doc_score': doc_score,
                 'start_pos': word2char_start[result.start_idx].item(),
                 'end_pos': word2char_end[result.end_idx].item(),
+                'start_score': result.start_score,
+                'end_score': result.end_score,
+                'span_score': result.span_score,
                 'phrase_score': result.score - doc_score,
                 'score': result.score} for result in results]
         t3 = time.time()
@@ -108,3 +133,9 @@ def adjust(each):
     each['start_pos'] -= last
     each['end_pos'] -= last
     return each
+
+
+def overlap(t1, t2, a1, a2, b1, b2):
+    if t1[b1] > t2[a2] or t1[a1] > t2[b2]:
+        return False
+    return True

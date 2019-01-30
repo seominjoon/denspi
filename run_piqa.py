@@ -586,74 +586,80 @@ def main():
             dirname = os.path.dirname(args.predict_file)
             basename = os.path.basename(args.predict_file)
             start, end = list(map(int, basename.split(':')))
-            predict_files = [os.path.join(dirname, str(i).zfill(4)) for i in range(start, end)]
-            offsets = [int(each) * 1000 for each in predict_files]
+            names = [str(i).zfill(4) for i in range(start, end)]
+            predict_files = [os.path.join(dirname, name) for name in names]
+            offsets = [int(each) * 1000 for each in names]
 
         for offset, predict_file in zip(offsets, predict_files):
-            context_examples = read_squad_examples(
-                context_only=True,
-                input_file=predict_file, is_training=False, draft=args.draft,
-                draft_num_examples=args.draft_num_examples)
+            try:
+                context_examples = read_squad_examples(
+                    context_only=True,
+                    input_file=predict_file, is_training=False, draft=args.draft,
+                    draft_num_examples=args.draft_num_examples)
 
-            for example in context_examples:
-                example.doc_idx += offset
+                for example in context_examples:
+                    example.doc_idx += offset
 
-            context_features = convert_documents_to_features(
-                examples=context_examples,
-                tokenizer=tokenizer,
-                max_seq_length=args.max_seq_length,
-                doc_stride=args.doc_stride)
+                context_features = convert_documents_to_features(
+                    examples=context_examples,
+                    tokenizer=tokenizer,
+                    max_seq_length=args.max_seq_length,
+                    doc_stride=args.doc_stride)
 
-            logger.info("***** Running indexing on %s *****" % predict_file)
-            logger.info("  Num orig examples = %d", len(context_examples))
-            logger.info("  Num split examples = %d", len(context_features))
-            logger.info("  Batch size = %d", args.predict_batch_size)
+                logger.info("***** Running indexing on %s *****" % predict_file)
+                logger.info("  Num orig examples = %d", len(context_examples))
+                logger.info("  Num split examples = %d", len(context_features))
+                logger.info("  Batch size = %d", args.predict_batch_size)
 
-            all_input_ids = torch.tensor([f.input_ids for f in context_features], dtype=torch.long)
-            all_input_mask = torch.tensor([f.input_mask for f in context_features], dtype=torch.long)
-            all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
-            if args.fp16:
-                all_input_ids, all_input_mask, all_example_index = tuple(
-                    t.half() for t in (all_input_ids, all_input_mask, all_example_index))
+                all_input_ids = torch.tensor([f.input_ids for f in context_features], dtype=torch.long)
+                all_input_mask = torch.tensor([f.input_mask for f in context_features], dtype=torch.long)
+                all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
+                if args.fp16:
+                    all_input_ids, all_input_mask, all_example_index = tuple(
+                        t.half() for t in (all_input_ids, all_input_mask, all_example_index))
 
-            context_data = TensorDataset(all_input_ids, all_input_mask, all_example_index)
+                context_data = TensorDataset(all_input_ids, all_input_mask, all_example_index)
 
-            if args.local_rank == -1:
-                context_sampler = SequentialSampler(context_data)
-            else:
-                context_sampler = DistributedSampler(context_data)
-            context_dataloader = DataLoader(context_data, sampler=context_sampler,
-                                            batch_size=args.predict_batch_size)
+                if args.local_rank == -1:
+                    context_sampler = SequentialSampler(context_data)
+                else:
+                    context_sampler = DistributedSampler(context_data)
+                context_dataloader = DataLoader(context_data, sampler=context_sampler,
+                                                batch_size=args.predict_batch_size)
 
-            model.eval()
-            logger.info("Start indexing")
+                model.eval()
+                logger.info("Start indexing")
 
-            def get_context_results():
-                for (input_ids, input_mask, example_indices) in context_dataloader:
-                    input_ids = input_ids.to(device)
-                    input_mask = input_mask.to(device)
-                    with torch.no_grad():
-                        batch_start, batch_end, batch_span_logits, bs, be = model(input_ids,
-                                                                                  input_mask)
-                    for i, example_index in enumerate(example_indices):
-                        start = batch_start[i].detach().cpu().numpy().astype(args.dtype)
-                        end = batch_end[i].detach().cpu().numpy().astype(args.dtype)
-                        span_logits = batch_span_logits[i].detach().cpu().numpy().astype(args.dtype)
-                        filter_start_logits = bs[i].detach().cpu().numpy().astype(args.dtype)
-                        filter_end_logits = be[i].detach().cpu().numpy().astype(args.dtype)
-                        context_feature = context_features[example_index.item()]
-                        unique_id = int(context_feature.unique_id)
-                        yield ContextResult(unique_id=unique_id,
-                                            start=start,
-                                            end=end,
-                                            span_logits=span_logits,
-                                            filter_start_logits=filter_start_logits,
-                                            filter_end_logits=filter_end_logits)
+                def get_context_results():
+                    for (input_ids, input_mask, example_indices) in context_dataloader:
+                        input_ids = input_ids.to(device)
+                        input_mask = input_mask.to(device)
+                        with torch.no_grad():
+                            batch_start, batch_end, batch_span_logits, bs, be = model(input_ids,
+                                                                                      input_mask)
+                        for i, example_index in enumerate(example_indices):
+                            start = batch_start[i].detach().cpu().numpy().astype(args.dtype)
+                            end = batch_end[i].detach().cpu().numpy().astype(args.dtype)
+                            span_logits = batch_span_logits[i].detach().cpu().numpy().astype(args.dtype)
+                            filter_start_logits = bs[i].detach().cpu().numpy().astype(args.dtype)
+                            filter_end_logits = be[i].detach().cpu().numpy().astype(args.dtype)
+                            context_feature = context_features[example_index.item()]
+                            unique_id = int(context_feature.unique_id)
+                            yield ContextResult(unique_id=unique_id,
+                                                start=start,
+                                                end=end,
+                                                span_logits=span_logits,
+                                                filter_start_logits=filter_start_logits,
+                                                filter_end_logits=filter_end_logits)
 
-            hdf5_path = os.path.join(args.output_dir, args.index_file)
-            write_hdf5(context_examples, context_features, get_context_results(),
-                       args.max_answer_length, not args.do_case, hdf5_path, args.filter_threshold, args.verbose_logging,
-                       offset=args.compression_offset, scale=args.compression_scale, split_by_para=args.split_by_para)
+                hdf5_path = os.path.join(args.output_dir, args.index_file)
+                write_hdf5(context_examples, context_features, get_context_results(),
+                           args.max_answer_length, not args.do_case, hdf5_path, args.filter_threshold, args.verbose_logging,
+                           offset=args.compression_offset, scale=args.compression_scale, split_by_para=args.split_by_para)
+            except:
+                with open(os.path.join(args.output_dir, 'error_files.txt'), 'a') as fp:
+                    fp.write('%s\n' % predict_file)
+
 
     if args.do_serve:
         def get(text):
