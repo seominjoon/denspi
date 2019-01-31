@@ -34,23 +34,24 @@ def encode_phrase(layer, span_vec_size, get_first_only=False):
     return start, end, span_logits
 
 
-def get_logits(a, b, metric='ip'):
+def get_logits(a, b, metric):
     if metric == 'ip':
-        return a.matmul(b.transpose(-1, -2)).squeeze(-1)
+        return (a * b).sum(-1)
     elif metric == 'l2':
-        return get_logits(a, b) - 0.5 * (get_logits(a, a) + get_logits(b, b))
+        return get_logits(a, b, 'ip') - 0.5 * (get_logits(a, a, 'ip') + get_logits(b, b, 'ip'))
     else:
         raise ValueError(metric)
 
 
 class PhraseModel(nn.Module):
-    def __init__(self, encoder, boundary_size, span_vec_size):
+    def __init__(self, encoder, boundary_size, span_vec_size, metric):
         super(PhraseModel, self).__init__()
         self.encoder = encoder
         self.boundary_size = boundary_size
         self.span_vec_size = span_vec_size
         self.default_value = nn.Parameter(torch.randn(1))
         self.filter = BoundaryFilter(boundary_size)
+        self.metric = metric
 
     def forward(self,
                 context_ids=None, context_mask=None,
@@ -76,11 +77,10 @@ class PhraseModel(nn.Module):
 
         # pass this line only if train or eval
 
-        start_logits = start.matmul(query_start.transpose(1, 2)).squeeze(-1)
-        start_logits = get_logits(start, query_start)
-        end_logits = get_logits(end, query_end)
-        end_logits = end.matmul(query_end.transpose(1, 2)).squeeze(-1)
-        all_logits = start_logits.unsqueeze(2) + end_logits.unsqueeze(1) + span_logits * q_span_logits
+        start_logits = get_logits(start, query_start, self.metric)
+        end_logits = get_logits(end, query_end, self.metric)
+        cross_logits = get_logits(span_logits.unsqueeze(-1), q_span_logits.unsqueeze(-1), self.metric)
+        all_logits = start_logits.unsqueeze(2) + end_logits.unsqueeze(1) + cross_logits
 
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
@@ -120,10 +120,10 @@ class PhraseModel(nn.Module):
 
 
 class BertPhraseModel(PhraseModel):
-    def __init__(self, config, span_vec_size):
+    def __init__(self, config, span_vec_size, metric):
         encoder = BertWrapper(BertModel(config))
         boundary_size = int((config.hidden_size - span_vec_size) / 2)
-        super(BertPhraseModel, self).__init__(encoder, boundary_size, span_vec_size)
+        super(BertPhraseModel, self).__init__(encoder, boundary_size, span_vec_size, metric)
 
         def init_weights(module):
             if isinstance(module, (nn.Linear, nn.Embedding)):

@@ -183,6 +183,7 @@ dl:
 	--draft \
 	--compression_offset 0.0 \
 	--compression_scale 20.0 \
+	--metric l2 \
 	--split_by_para \
 	--no_cuda
 
@@ -535,3 +536,36 @@ p130_t059:
 	--load_dir KR18816/piqa-nfs/59 \
 	--iteration 1 \
 	--parallel"
+
+t132_t056:
+	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--train_file train-v1.1-na-1-1.json \
+	--do_train_filter \
+	--do_predict \
+	--filter_threshold -2 \
+	--do_eval \
+	--num_train_epochs 1 \
+	--load_dir KR18816/squad_bert_2/56 \
+	--iteration 3"
+
+t133:
+	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--train_file train-v1.1-na-1-1.json \
+	--do_train \
+	--do_predict \
+	--do_eval \
+	--metric l2 \
+	--train_batch_size 18 \
+	--num_train_epochs 3"
+
+t134:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--bert_model_option 'base_uncased' \
+	--fs nfs \
+	--do_train \
+	--do_predict \
+	--do_eval \
+	--metric l2 \
+	--num_train_epochs 1"

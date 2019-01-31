@@ -113,6 +113,7 @@ def main():
                         help="Whether to lower case the input text. Should be True for uncased "
                              "models and False for cased models.")
     parser.add_argument('--span_vec_size', default=64, type=int)
+    parser.add_argument('--metric', default='ip', type=str, help='ip | l2')
 
     # GPU and memory related options
     parser.add_argument("--max_seq_length", default=384, type=int,
@@ -299,7 +300,8 @@ def main():
     tokenizer = tokenization.FullTokenizer(vocab_file=args.vocab_file, do_lower_case=not args.do_case)
 
     model = BertPhraseModel(bert_config,
-                            span_vec_size=args.span_vec_size)
+                            span_vec_size=args.span_vec_size,
+                            metric=args.metric)
 
     print('Number of model parameters:', sum(p.numel() for p in model.parameters()))
 
