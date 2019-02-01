@@ -658,9 +658,10 @@ def main():
                 write_hdf5(context_examples, context_features, get_context_results(),
                            args.max_answer_length, not args.do_case, hdf5_path, args.filter_threshold, args.verbose_logging,
                            offset=args.compression_offset, scale=args.compression_scale, split_by_para=args.split_by_para)
-            except:
+            except Exception as e:
                 with open(os.path.join(args.output_dir, 'error_files.txt'), 'a') as fp:
-                    fp.write('%s\n' % predict_file)
+                    fp.write('error file: %s\n' % predict_file)
+                    fp.write('error message: %s\n' % str(e))
 
 
     if args.do_serve:

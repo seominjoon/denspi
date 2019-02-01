@@ -569,3 +569,23 @@ t134:
 	--do_eval \
 	--metric l2 \
 	--num_train_epochs 1"
+
+t153:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--bert_model_option 'base_uncased' \
+	--fs nfs \
+	--do_train \
+	--do_predict \
+	--do_eval \
+	--metric l2 \
+	--seed 90 \
+	--num_train_epochs 1"
+
+t154:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--bert_model_option 'base_uncased' \
+	--fs nfs \
+	--do_train \
+	--do_predict \
+	--do_eval \
+	--num_train_epochs 1"
