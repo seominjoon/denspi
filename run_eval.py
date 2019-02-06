@@ -72,9 +72,19 @@ def main():
             preds[id_] = answer
     else:
         doc_ranker = TfidfDocRanker(args.tfidf_path)
+        print('tfidf doc ranker loaded from %s' % args.tfidf_path)
         doc_mat = doc_ranker.doc_mat
         mips = DocumentPhraseMIPS(doc_mat, phrase_index, args.max_answer_length, args.doc_score_cf)
+
+        q2d = {}
+        for _, _, id_, question in tqdm(pairs):
+            doc_results = mips.search_document(doc_ranker.text2spvec(question), args.top_k_docs)
+            q2d[id_] = [result['doc_idx'] for result in doc_results]
+        with open('q2d.json', 'w') as fp:
+            json.dump(q2d, fp)
+
         for doc_idx, para_idx, id_, question in tqdm(pairs):
+            break
             answer = get_answer(mips, question, args.top_k_docs, args.top_k_phrases, args.api_port)
             preds[id_] = answer
 

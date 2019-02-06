@@ -1,4 +1,6 @@
 import argparse
+import os
+import re
 
 import h5py
 from drqa.retriever import TfidfDocRanker
@@ -7,7 +9,7 @@ from mips import DocumentPhraseMIPS
 
 parser = argparse.ArgumentParser()
 parser.add_argument('tfidf_path')
-parser.add_argument('phrase_index_path')
+parser.add_argument('phrase_index_dir')
 parser.add_argument('--port', default=10001, type=int)
 parser.add_argument('--api_port', default=9009, type=int)
 parser.add_argument('--max_answer_length', default=20, type=int)
@@ -18,10 +20,50 @@ parser.add_argument('-m', '--memory', default=False, action='store_true')
 parser.add_argument('--multithread', default=False, action='store_true')
 args = parser.parse_args()
 
-# doc_ranker = TfidfDocRanker(args.tfidf_path)
-# doc_mat = doc_ranker.doc_mat
-doc_mat = None
-phrase_index = h5py.File(args.phrase_index_path)
+rc = re.compile('demo_(\d+)-(\d+).hdf5')
+
+
+class PhraseIndex(object):
+    def __init__(self, dir_):
+        self.dir = dir_
+        self.files = os.listdir(dir_)
+
+    def __contains__(self, item):
+        item = int(item)
+        file = None
+        for file_ in self.files:
+            result = rc.match(file_)
+            if result is None:
+                continue
+            start, end = map(int, result.groups())
+            if start * 1000 <= item < end * 1000:
+                file = file_
+                break
+
+        fp = h5py.File(os.path.join(self.dir, file), 'r')
+        return str(item) in fp
+
+    def __getitem__(self, item):
+        item = int(item)
+        file = None
+        for file_ in self.files:
+            result = rc.match(file_)
+            if result is None:
+                continue
+            start, end = map(int, result.groups())
+            if start * 1000 <= item < end * 1000:
+                file = file_
+                break
+
+        fp = h5py.File(os.path.join(self.dir, file), 'r')
+        return fp[str(item)]
+
+
+doc_ranker = TfidfDocRanker(args.tfidf_path)
+doc_mat = doc_ranker.doc_mat
+print(doc_mat.shape)
+raise Exception()
+phrase_index = PhraseIndex(args.phrase_index_dir)
 mips = DocumentPhraseMIPS(doc_mat, phrase_index, args.max_answer_length, args.doc_score_cf)
 
 from flask import Flask, request, jsonify
@@ -46,15 +88,10 @@ GROUP_LENGTH = 0
 
 
 def search(query, top_k_docs, top_k_phrases):
-    try:
-        doc_vec = doc_ranker.text2spvec(query)
-        phrase_vec, _ = query2emb(query, args.api_port)()
-        rets = mips.search(doc_vec, phrase_vec, top_k_docs=top_k_docs, top_k_phrases=top_k_phrases)
-        return rets
-
-    except RuntimeError:
-        print('%s: error' % query)
-        return []
+    doc_vec = doc_ranker.text2spvec(query)
+    phrase_vec, _ = query2emb(query, args.api_port)()
+    rets = mips.search(doc_vec, phrase_vec, top_k_docs=top_k_docs, top_k_phrases=top_k_phrases)
+    return rets
 
 
 def search_(query, top_k_docs, top_k_phrases):
@@ -62,6 +99,17 @@ def search_(query, top_k_docs, top_k_phrases):
         phrase_vec, _ = query2emb(query, args.api_port)()
         rets = mips.search_phrase(2000203, phrase_vec, top_k=top_k_phrases)
         return rets
+    except RuntimeError:
+        print('%s: error' % query)
+        return []
+
+def search__(query, top_k_docs, top_k_phrases):
+    try:
+        doc_vec = doc_ranker.text2spvec(query)
+        phrase_vec, _ = query2emb(query, args.api_port)()
+        rets = mips.search(doc_vec, phrase_vec, top_k_docs=top_k_docs, top_k_phrases=top_k_phrases)
+        return rets
+
     except RuntimeError:
         print('%s: error' % query)
         return []
@@ -93,7 +141,7 @@ def static_files(path):
 @app.route('/api', methods=['GET'])
 def api():
     query = request.args['query']
-    out = search_(query, args.top_k_docs, args.top_k_phrases)
+    out = search(query, args.top_k_docs, args.top_k_phrases)
     return jsonify(out)
 
 

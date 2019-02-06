@@ -77,6 +77,9 @@ class PhraseModel(nn.Module):
 
         # pass this line only if train or eval
 
+        print(start.min(), start.max())
+        print(end.min(), end.max())
+
         start_logits = get_logits(start, query_start, self.metric)
         end_logits = get_logits(end, query_end, self.metric)
         cross_logits = get_logits(span_logits.unsqueeze(-1), q_span_logits.unsqueeze(-1), self.metric)

@@ -12,7 +12,6 @@ def int8_to_float(num, offset, factor):
 class DocumentPhraseMIPS(object):
     def __init__(self, document_index, phrase_index, max_answer_length, doc_score_cf):
         super(DocumentPhraseMIPS, self).__init__()
-        assert isinstance(phrase_index, h5py.File)
         self.document_index = document_index
         self.phrase_index = phrase_index
         self.max_answer_length = max_answer_length
@@ -30,11 +29,15 @@ class DocumentPhraseMIPS(object):
         doc_indices = res.indices[o_sort]
         doc_scores = res.data[o_sort]
         out = [{'doc_idx': doc_idx, 'doc_score': doc_score}
-               for doc_idx, doc_score in zip(doc_indices, doc_scores)]
+               for doc_idx, doc_score in zip(doc_indices.tolist(), doc_scores.tolist())]
         return out
 
     def search_phrase(self, doc_idx, query, top_k=5, doc_score=0.0, para_idx=None):
         t0 = time.time()
+
+        if str(doc_idx) not in self.phrase_index:
+            return []
+
         group = self.phrase_index[str(doc_idx)]
         if para_idx is not None:
             group = group[str(para_idx)]
@@ -84,7 +87,8 @@ class DocumentPhraseMIPS(object):
                 if score > max_score:
                     max_result = PhraseResult(score, start_score, end_score, span_score, start_idx, end_idx)
                     max_score = score
-            results.append(max_result)
+            if max_result is not None:
+                results.append(max_result)
         results = sorted(results, key=lambda item: -item.score)
 
         # Non-maximal suppression (might not be needed)
@@ -113,6 +117,14 @@ class DocumentPhraseMIPS(object):
         t3 = time.time()
         # print('Finding answer: %dms' % int(1000 * (t3 - t2)))
         out = [adjust(each) for each in out]
+        out = [each for each in out if len(each['context']) > 100 and each['score'] >= 30]
+
+        for each in out:
+            print(each['title'])
+            print(each['context'][each['start_pos']:each['end_pos']])
+            print(each['score'], each['start_score'], each['end_score'], each['span_score'], each['doc_score'])
+            print()
+
         return out
 
     def search(self, doc_query, phrase_query, top_k_docs=5, top_k_phrases=5):

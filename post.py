@@ -255,30 +255,32 @@ def write_hdf5(all_examples, all_features, all_results,
             outqueue_.put(metadata)
 
     def write(outqueue_):
-        f = h5py.File(hdf5_path)
-        while True:
-            metadata = outqueue_.get()
-            if metadata:
-                did = str(metadata['did'])
-                dg = f[did] if did in f else f.create_group(did)
-                if split_by_para:
-                    dg = dg.create_group(str(metadata['pid']))
+        with h5py.File(hdf5_path) as f:
+            while True:
+                metadata = outqueue_.get()
+                if metadata:
+                    did = str(metadata['did'])
+                    if did in f:
+                        print('%s exists; skipping' % did)
+                        continue
+                    dg = f.create_group(did)
+                    if split_by_para:
+                        dg = dg.create_group(str(metadata['pid']))
 
-                dg.attrs['context'] = metadata['context']
-                dg.attrs['title'] = metadata['title']
-                if offset is not None:
-                    metadata = compress_metadata(metadata, offset, scale)
-                    dg.attrs['offset'] = offset
-                    dg.attrs['scale'] = scale
-                dg.create_dataset('start', data=metadata['start'])
-                dg.create_dataset('end', data=metadata['end'])
-                dg.create_dataset('span_logits', data=metadata['span_logits'])
-                dg.create_dataset('start2end', data=metadata['start2end'])
-                dg.create_dataset('word2char_start', data=metadata['word2char_start'])
-                dg.create_dataset('word2char_end', data=metadata['word2char_end'])
-            else:
-                break
-        f.close()
+                    dg.attrs['context'] = metadata['context']
+                    dg.attrs['title'] = metadata['title']
+                    if offset is not None:
+                        metadata = compress_metadata(metadata, offset, scale)
+                        dg.attrs['offset'] = offset
+                        dg.attrs['scale'] = scale
+                    dg.create_dataset('start', data=metadata['start'])
+                    dg.create_dataset('end', data=metadata['end'])
+                    dg.create_dataset('span_logits', data=metadata['span_logits'])
+                    dg.create_dataset('start2end', data=metadata['start2end'])
+                    dg.create_dataset('word2char_start', data=metadata['word2char_start'])
+                    dg.create_dataset('word2char_end', data=metadata['word2char_end'])
+                else:
+                    break
 
     features = []
     results = []

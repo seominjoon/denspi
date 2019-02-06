@@ -589,3 +589,23 @@ t154:
 	--do_predict \
 	--do_eval \
 	--num_train_epochs 1"
+
+p155_t132:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_predict \
+	--do_eval \
+	--load_dir KR18816/piqa-nfs/132 \
+	--iteration 1 \
+	--parallel"
+
+
+p181:
+	nsml run -d piqa-nfs -g 1 -e run_squad.py --memory 32G --nfs-output -a " \
+	--fs nfs \
+	--data_dir data \
+	--do_predict \
+	--predict_file dev-v1.1.json \
+	--output_dir tmp \
+	--load_path pytorch_model_squad_finetuned.bin \
+	--parallel"
