@@ -506,6 +506,7 @@ p124_t059:
 	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
 	--do_index \
+	--do_embed_question \
 	--output_dir index/squad/large \
 	--index_file demo.hdf5 \
 	--load_dir KR18816/piqa-nfs/59 \
@@ -608,4 +609,48 @@ p181:
 	--predict_file dev-v1.1.json \
 	--output_dir tmp \
 	--load_path pytorch_model_squad_finetuned.bin \
+	--parallel"
+
+
+t133:
+	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--train_file train-v1.1-na-1-1.json \
+	--do_train \
+	--do_predict \
+	--do_eval \
+	--metric l2 \
+	--train_batch_size 18 \
+	--num_train_epochs 3"
+
+t134:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--bert_model_option 'base_uncased' \
+	--fs nfs \
+	--do_train \
+	--do_predict \
+	--do_eval \
+	--metric l2 \
+	--num_train_epochs 1"
+
+t153:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--bert_model_option 'base_uncased' \
+	--fs nfs \
+	--do_train \
+	--do_predict \
+	--do_eval \
+	--metric l2 \
+	--seed 90 \
+	--num_train_epochs 1"
+
+p224_t132:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--do_embed_question \
+	--output_dir index/squad/large \
+	--index_file demo.hdf5 \
+	--load_dir KR18816/piqa-nfs/132 \
+	--iteration 1 \
 	--parallel"

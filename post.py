@@ -5,7 +5,8 @@ from multiprocessing import Queue
 
 import numpy as np
 import six
-from torch.utils.data import DataLoader, DistributedSampler, SequentialSampler, TensorDataset
+from torch.utils.data import DataLoader, SequentialSampler, TensorDataset
+from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm as tqdm_
 import torch
 
