@@ -1,27 +1,11 @@
 import argparse
 import json
-from collections import defaultdict
 
 import h5py
-from drqa.retriever import TfidfDocRanker
-from requests_futures.sessions import FuturesSession
-from flask import request, jsonify
 from tqdm import tqdm
 import numpy as np
 
 from mips import MIPS
-
-
-def get_answer_from_para(mips, query, doc_idx, para_idx, top_k_phrases):
-    ret = mips.search_phrase(doc_idx, query, top_k=top_k_phrases, para_idx=para_idx)[0]
-    answer = ret['context'][ret['start_pos']:ret['end_pos']]
-    return answer
-
-
-def get_answers(mips, query, top_k, ):
-    rets = mips.search_phrase_global(query, top_k=top_k)
-    answers = [ret['context'][ret['start_pos']:ret['end_pos']] for ret in rets]
-    return answers
 
 
 def get_args():
@@ -36,6 +20,7 @@ def get_args():
     parser.add_argument('--top_k', default=5, type=int)
     parser.add_argument('--para', default=False, action='store_true')
     parser.add_argument('--draft', default=False, action='store_true')
+    parser.add_argument('--index_factory', default="IVF4096,Flat")
     args = parser.parse_args()
     return args
 
@@ -55,7 +40,8 @@ def main():
 
     query_index = h5py.File(args.query_index_path)
 
-    mips = MIPS(args.phrase_index_path, args.faiss_path, args.max_answer_length, load_to_memory=True, para=args.para)
+    mips = MIPS(args.phrase_index_path, args.faiss_path, args.max_answer_length, load_to_memory=True, para=args.para,
+                index_factory=args.index_factory)
 
     vecs = []
     for doc_idx, para_idx, id_, question in tqdm(pairs):
@@ -64,8 +50,6 @@ def main():
     query = np.stack(vecs, 0)
     if args.draft:
         query = query[:100]
-
-    # SQuAD evaluation
 
     # recall at k
     cd_results = []

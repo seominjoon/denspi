@@ -107,7 +107,10 @@ class MIPS(object):
             query_start = np.concatenate([np.zeros([query_start.shape[0], 1]).astype(np.float32), query_start], axis=1)
             self.start_index.nprobe = nprobe
             start_scores, I = self.start_index.search(query_start, top_k)
-            doc_idxs, para_idxs, start_idxs = id2idxs(I, para=self.para)  # [Q, K]
+            if self.para:
+                doc_idxs, para_idxs, start_idxs = id2idxs(I, para=self.para)  # [Q, K]
+            else:
+                doc_idxs, start_idxs = id2idxs(I, para=self.para)
         else:
             groups = [self.phrase_index[str(doc_idx)][str(para_idx)] for doc_idx, para_idx in zip(doc_idxs, para_idxs)]
             starts = [group['start'][:, :] for group in groups]

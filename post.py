@@ -1,7 +1,9 @@
 import collections
+import io
 import json
 import logging
 from multiprocessing import Queue
+from tempfile import TemporaryFile
 
 import numpy as np
 import six
@@ -287,6 +289,7 @@ def write_hdf5(all_examples, all_features, all_results,
                     dg.create_dataset('start2end', data=metadata['start2end'])
                     dg.create_dataset('word2char_start', data=metadata['word2char_start'])
                     dg.create_dataset('word2char_end', data=metadata['word2char_end'])
+
                 else:
                     break
 

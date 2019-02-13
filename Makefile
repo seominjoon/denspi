@@ -650,7 +650,7 @@ p224_t132:
 	--do_index \
 	--do_embed_question \
 	--output_dir index/squad/large \
-	--index_file od.hdf5 \
+	--index_file od_fast.hdf5 \
 	--load_dir KR18816/piqa-nfs/132 \
 	--iteration 1 \
 	--parallel"
@@ -660,7 +660,7 @@ p225_t132:
 	--fs nfs \
 	--do_index \
 	--output_dir index/squad/large \
-	--index_file cd.hdf5 \
+	--index_file cd_fast.hdf5 \
 	--load_dir KR18816/piqa-nfs/132 \
 	--iteration 1 \
 	--split_by_para \
