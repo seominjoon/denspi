@@ -262,11 +262,18 @@ def write_hdf5(all_examples, all_features, all_results,
                 if metadata:
                     did = str(metadata['did'])
                     if did in f:
-                        print('%s exists; skipping' % did)
-                        continue
-                    dg = f.create_group(did)
+                        if not split_by_para:
+                            print('%s exists; skipping' % did)
+                            continue
+                        dg = f[did]
+                    else:
+                        dg = f.create_group(did)
                     if split_by_para:
-                        dg = dg.create_group(str(metadata['pid']))
+                        pid = str(metadata['pid'])
+                        if pid in dg:
+                            print('%s %s exists; skipping' % (did, pid))
+                            continue
+                        dg = dg.create_group(pid)
 
                     dg.attrs['context'] = metadata['context']
                     dg.attrs['title'] = metadata['title']

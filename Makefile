@@ -650,7 +650,18 @@ p224_t132:
 	--do_index \
 	--do_embed_question \
 	--output_dir index/squad/large \
-	--index_file demo.hdf5 \
+	--index_file od.hdf5 \
 	--load_dir KR18816/piqa-nfs/132 \
 	--iteration 1 \
+	--parallel"
+
+p225_t132:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--output_dir index/squad/large \
+	--index_file cd.hdf5 \
+	--load_dir KR18816/piqa-nfs/132 \
+	--iteration 1 \
+	--split_by_para \
 	--parallel"
