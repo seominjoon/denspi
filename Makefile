@@ -676,10 +676,37 @@ p241_t132:
 	--iteration 1 \
 	--parallel"
 
-train_and_eval:
-	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 16G --nfs-output -a " \
-	--train_file train-v1.1-na-1-1.json \
+train_base:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--train_file train-v1.1-qna-1-1.json \
+	--train_batch_size 18 \
+	--phrase_size 127 \
+	--do_train \
+	--do_predict \
+	--do_eval"
+
+train_filter_base:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--train_file train-v1.1-qna-1-1.json \
+	--train_batch_size 18 \
+	--phrase_size 127 \
+	--do_train_filter \
+	--do_predict \
+	--do_eval \
+	--num_train_epochs 1 \
+	--load_dir KR18816/piqa-nfs/56 \
+	--iteration 3"
+
+train:
+	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--train_file train-v1.1-qna-1-1.json \
+	--train_batch_size 18 \
+	--phrase_size 511 \
 	--do_train \
 	--do_predict \
 	--do_eval"
@@ -687,7 +714,8 @@ train_and_eval:
 train_filter:
 	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
-	--train_file train-v1.1-na-1-1.json \
+	--train_file train-v1.1-qna-1-1.json \
+	--train_batch_size 18 \
 	--do_train_filter \
 	--do_predict \
 	--do_eval \

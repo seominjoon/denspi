@@ -66,7 +66,7 @@ def main():
     parser.add_argument('--pause', type=int, default=0)
     parser.add_argument('--iteration', type=str, default='0')
     parser.add_argument('--fs', type=str, default='local',
-                        help='local|nsml|nfs|nfs_nsml. `nfs_nsml` uses nfs as input and nsml as output')
+                        help='File system: local|nsml|nfs|nfs_nsml. `nfs_nsml` uses nfs as input and nsml as output')
 
     # Data paths
     parser.add_argument('--data_dir', default='data/', type=str)
@@ -112,7 +112,7 @@ def main():
     parser.add_argument("--do_case", default=False, action='store_true',
                         help="Whether to lower case the input text. Should be True for uncased "
                              "models and False for cased models.")
-    parser.add_argument('--span_vec_size', default=64, type=int)
+    parser.add_argument('--phrase_size', default=961, type=int)
     parser.add_argument('--metric', default='ip', type=str, help='ip | l2')
 
     # GPU and memory related options
@@ -299,9 +299,7 @@ def main():
 
     tokenizer = tokenization.FullTokenizer(vocab_file=args.vocab_file, do_lower_case=not args.do_case)
 
-    model = BertPhraseModel(bert_config,
-                            span_vec_size=args.span_vec_size,
-                            metric=args.metric)
+    model = BertPhraseModel(bert_config, phrase_size=args.phrase_size, metric=args.metric)
 
     print('Number of model parameters:', sum(p.numel() for p in model.parameters()))
 
