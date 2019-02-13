@@ -12,15 +12,15 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('phrase_index_path')
     parser.add_argument('faiss_path')
-    parser.add_argument('query_index_path')
+    parser.add_argument('question_index_path')
     parser.add_argument('data_path')
-    parser.add_argument('cd_path')
-    parser.add_argument('od_path')
+    parser.add_argument('od_out_path')
+    parser.add_argument('--cd_out_path', default="pred.json")
     parser.add_argument('--max_answer_length', default=30, type=int)
     parser.add_argument('--top_k', default=5, type=int)
     parser.add_argument('--para', default=False, action='store_true')
     parser.add_argument('--draft', default=False, action='store_true')
-    parser.add_argument('--index_factory', default="IVF4096,Flat")
+    parser.add_argument('--index_factory', default="IVF4096,SQ8")
     args = parser.parse_args()
     return args
 
@@ -38,14 +38,14 @@ def main():
                 question = qa['question']
                 pairs.append([doc_idx, para_idx, id_, question])
 
-    query_index = h5py.File(args.query_index_path)
+    question_index = h5py.File(args.question_index_path)
 
     mips = MIPS(args.phrase_index_path, args.faiss_path, args.max_answer_length, load_to_memory=True, para=args.para,
                 index_factory=args.index_factory)
 
     vecs = []
     for doc_idx, para_idx, id_, question in tqdm(pairs):
-        vec = query_index[id_][0, :]
+        vec = question_index[id_][0, :]
         vecs.append(vec)
     query = np.stack(vecs, 0)
     if args.draft:
@@ -70,10 +70,11 @@ def main():
     answers = {query_id: each_results[0]['answer']
                for (_, _, query_id, _), each_results in zip(pairs, cd_results)}
 
-    with open(args.cd_path, 'w') as fp:
-        json.dump(answers, fp)
+    if args.para:
+        with open(args.cd_out_path, 'w') as fp:
+            json.dump(answers, fp)
 
-    with open(args.od_path, 'w') as fp:
+    with open(args.od_out_path, 'w') as fp:
         json.dump(top_k_answers, fp)
 
 

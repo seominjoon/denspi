@@ -47,7 +47,7 @@ def idxs2id(doc_idx, first_idx, second_idx=None):
 
 class MIPS(object):
     def __init__(self, phrase_index_path, start_index_path, max_answer_length,
-                 para=False, index_factory='IVF4096,Flat', load_to_memory=False):
+                 para=False, index_factory='IVF4096,SQ8', load_to_memory=False):
         if load_to_memory:
             self.phrase_index = h5py.File(phrase_index_path, 'r', driver="core")
         else:
@@ -98,7 +98,6 @@ class MIPS(object):
             faiss.write_index(self.start_index, start_index_path)
 
     def search_start(self, query_start, doc_idxs=None, para_idxs=None, top_k=5, nprobe=16):
-        # TODO : use doc_idxs for SQuAD eval
         # doc_idxs = [Q], para_idxs = [Q]
         assert self.start_index is not None
         query_start = query_start.astype(np.float32)
@@ -169,8 +168,8 @@ class MIPS(object):
                 'start_pos': group['word2char_start'][start_idx].item(),
                 'end_pos': group['word2char_end'][end_idx].item(),
                 'score': score}
-               for doc_idx, group, start_idx, end_idx, score in zip(doc_idxs, groups, start_idxs,
-                                                                    pred_end_idxs, max_scores)]
+               for doc_idx, group, start_idx, end_idx, score in zip(doc_idxs.tolist(), groups, start_idxs.tolist(),
+                                                                    pred_end_idxs.tolist(), max_scores.tolist())]
 
         for each in out:
             each['answer'] = each['context'][each['start_pos']:each['end_pos']]
