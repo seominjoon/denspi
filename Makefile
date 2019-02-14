@@ -18,6 +18,54 @@ dl:
 	--split_by_para \
 	--no_cuda
 
+train_base_d:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--phrase_size 705 \
+	--do_train \
+	--do_predict \
+	--num_train_epochs 1 \
+	--draft \
+	--draft_num_examples 20000 \
+	--do_eval"
+
+train_base_d2:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--phrase_size 127 \
+	--do_train \
+	--do_predict \
+	--num_train_epochs 1 \
+	--draft \
+	--draft_num_examples 20000 \
+	--do_eval"
+
+train_base_d3:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--phrase_size 127 \
+	--do_train \
+	--do_predict \
+	--num_train_epochs 3 \
+	--do_eval"
+
+train_base_d4:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--train_file train-v1.1-qna-1-1.json \
+	--train_batch_size 18 \
+	--phrase_size 127 \
+	--do_train \
+	--do_predict \
+	--draft \
+	--draft_num_examples 10000 \
+	--num_train_epochs 1 \
+	--do_eval"
+
 train_base:
 	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
@@ -73,6 +121,16 @@ train_filter:
 	--do_predict \
 	--do_eval \
 	--num_train_epochs 1 \
+	--load_dir KR18816/squad_bert_2/56 \
+	--iteration 3"
+
+eval_old:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--parallel \
+	--fs nfs \
+	--phrase_size 961 \
+	--do_predict \
+	--do_eval \
 	--load_dir KR18816/squad_bert_2/56 \
 	--iteration 3"
 

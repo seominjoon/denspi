@@ -21,9 +21,10 @@ class BertWrapper(nn.Module):
         return layers[-1]
 
 
-def encode_phrase(layer, phrase_size, get_first_only=False):
+def encode_phrase(layer, phrase_size, span_kq_size=64, get_first_only=False):
+    assert phrase_size - 1 <= layer.size(2) - span_kq_size, "phrase size too big"
     boundary_layer = layer[:, :, :phrase_size - 1]
-    span_layer = layer[:, :, phrase_size - 1:]
+    span_layer = layer[:, :, -span_kq_size:]
     start, end = boundary_layer.chunk(2, dim=2)
     span_start, span_end = span_layer.chunk(2, dim=2)
     span_logits = span_start.matmul(span_end.transpose(1, 2))
@@ -82,8 +83,8 @@ class PhraseModel(nn.Module):
         # print(start.min(), start.max(), end.min(), end.max())
         cross_logits = get_logits(span_logits.unsqueeze(-1), q_span_logits.unsqueeze(-1), self.metric)
         all_logits = start_logits.unsqueeze(2) + end_logits.unsqueeze(1) + cross_logits  # [B, L, L]
-        exp_mask = -1e9 * (1.0 - (context_mask.unsqueeze(1) & context_mask.unsqueeze(-1)).float())
-        all_logits = all_logits + exp_mask
+        # exp_mask = -1e9 * (1.0 - (context_mask.unsqueeze(1) & context_mask.unsqueeze(-1)).float())
+        # all_logits = all_logits + exp_mask
 
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
@@ -125,7 +126,6 @@ class PhraseModel(nn.Module):
 class BertPhraseModel(PhraseModel):
     def __init__(self, config, phrase_size, metric):
         encoder = BertWrapper(BertModel(config))
-        boundary_size = int((phrase_size - 1) / 2)
         super(BertPhraseModel, self).__init__(encoder, phrase_size, metric)
 
         def init_weights(module):
