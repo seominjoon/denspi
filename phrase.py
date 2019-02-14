@@ -21,9 +21,9 @@ class BertWrapper(nn.Module):
         return layers[-1]
 
 
-def encode_phrase(layer, span_vec_size, get_first_only=False):
-    boundary_layer = layer[:, :, :-span_vec_size]
-    span_layer = layer[:, :, -span_vec_size:]
+def encode_phrase(layer, phrase_size, get_first_only=False):
+    boundary_layer = layer[:, :, :phrase_size - 1]
+    span_layer = layer[:, :, phrase_size - 1:]
     start, end = boundary_layer.chunk(2, dim=2)
     span_start, span_end = span_layer.chunk(2, dim=2)
     span_logits = span_start.matmul(span_end.transpose(1, 2))
@@ -44,13 +44,13 @@ def get_logits(a, b, metric):
 
 
 class PhraseModel(nn.Module):
-    def __init__(self, encoder, boundary_size, span_vec_size, metric):
+    def __init__(self, encoder, phrase_size, metric):
         super(PhraseModel, self).__init__()
         self.encoder = encoder
-        self.boundary_size = boundary_size
-        self.span_vec_size = span_vec_size
+        self.boundary_size = int((phrase_size - 1) / 2)
+        self.phrase_size = phrase_size
         self.default_value = nn.Parameter(torch.randn(1))
-        self.filter = BoundaryFilter(boundary_size)
+        self.filter = BoundaryFilter(self.boundary_size)
         self.metric = metric
 
     def forward(self,
@@ -59,7 +59,7 @@ class PhraseModel(nn.Module):
                 start_positions=None, end_positions=None):
         if context_ids is not None:
             context_layer = self.encoder(context_ids, context_mask)
-            start, end, span_logits = encode_phrase(context_layer, self.span_vec_size)
+            start, end, span_logits = encode_phrase(context_layer, self.phrase_size)
             start_filter_logits, end_filter_logits = self.filter(start, end)
 
             # embed context
@@ -68,7 +68,7 @@ class PhraseModel(nn.Module):
 
         if query_ids is not None:
             question_layer = self.encoder(query_ids, query_mask)
-            query_start, query_end, q_span_logits = encode_phrase(question_layer, self.span_vec_size,
+            query_start, query_end, q_span_logits = encode_phrase(question_layer, self.phrase_size,
                                                                   get_first_only=True)
 
             # embed question
@@ -122,10 +122,10 @@ class PhraseModel(nn.Module):
 
 
 class BertPhraseModel(PhraseModel):
-    def __init__(self, config, span_vec_size, metric):
+    def __init__(self, config, phrase_size, metric):
         encoder = BertWrapper(BertModel(config))
-        boundary_size = int((config.hidden_size - span_vec_size) / 2)
-        super(BertPhraseModel, self).__init__(encoder, boundary_size, span_vec_size, metric)
+        boundary_size = int((phrase_size - 1) / 2)
+        super(BertPhraseModel, self).__init__(encoder, phrase_size, metric)
 
         def init_weights(module):
             if isinstance(module, (nn.Linear, nn.Embedding)):
