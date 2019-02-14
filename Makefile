@@ -58,6 +58,7 @@ train_filter:
 	--fs nfs \
 	--train_file train-v1.1-qna-1-1.json \
 	--train_batch_size 18 \
+	--phrase_size 511 \
 	--do_train_filter \
 	--do_predict \
 	--do_eval \
