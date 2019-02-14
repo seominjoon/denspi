@@ -114,6 +114,7 @@ def main():
                              "models and False for cased models.")
     parser.add_argument('--phrase_size', default=511, type=int)
     parser.add_argument('--metric', default='ip', type=str, help='ip | l2')
+    parser.add_argument("--train_sparse", default=False, action='store_true')
 
     # GPU and memory related options
     parser.add_argument("--max_seq_length", default=384, type=int,
@@ -299,7 +300,12 @@ def main():
 
     tokenizer = tokenization.FullTokenizer(vocab_file=args.vocab_file, do_lower_case=not args.do_case)
 
-    model = BertPhraseModel(bert_config, phrase_size=args.phrase_size, metric=args.metric)
+    model = BertPhraseModel(
+        bert_config,
+        phrase_size=args.phrase_size,
+        metric=args.metric,
+        train_sparse=args.train_sparse
+    )
 
     print('Number of model parameters:', sum(p.numel() for p in model.parameters()))
 
@@ -635,7 +641,7 @@ def main():
                         input_ids = input_ids.to(device)
                         input_mask = input_mask.to(device)
                         with torch.no_grad():
-                            batch_start, batch_end, batch_span_logits, bs, be = model(input_ids,
+                            batch_start, batch_end, batch_span_logits, bs, be, bsp = model(input_ids,
                                                                                       input_mask)
                         for i, example_index in enumerate(example_indices):
                             start = batch_start[i].detach().cpu().numpy().astype(args.dtype)

@@ -337,7 +337,7 @@ def get_question_results(question_examples, query_eval_features, question_datalo
         input_ids_ = input_ids_.to(device)
         input_mask_ = input_mask_.to(device)
         with torch.no_grad():
-            batch_start, batch_end, batch_span_logits = model(query_ids=input_ids_,
+            batch_start, batch_end, batch_span_logits, batch_sparse = model(query_ids=input_ids_,
                                                               query_mask=input_mask_)
         for i, example_index in enumerate(example_indices):
             start = batch_start[i].detach().cpu().numpy().astype(np.float16)

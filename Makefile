@@ -15,8 +15,9 @@ dl:
 	--draft \
 	--compression_offset 0.0 \
 	--compression_scale 20.0 \
+	--phrase_size 127 \
 	--split_by_para \
-	--no_cuda
+	--train_sparse
 
 train_base_d:
 	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
@@ -153,3 +154,15 @@ dump_questions:
 	--load_dir KR18816/piqa-nfs/132 \
 	--iteration 1 \
 	--parallel"
+
+train_and_eval_base:
+	nsml run -d piqa-nfs -g 2 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--bert_model_option 'base_uncased' \
+	--train_file train-v1.1-na-1-1.json \
+	--train_batch_size 18 \
+	--phrase_size 127 \
+	--fs nfs \
+	--do_train \
+	--do_predict \
+	--do_eval \
+	--num_train_epochs 3"

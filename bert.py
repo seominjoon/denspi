@@ -255,7 +255,7 @@ class SparseAttention(nn.Module):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))  # [B, h, T, T]
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-        attention_scores = attention_scores + attention_mask
+        attention_scores = attention_scores + attention_mask.unsqueeze(1).unsqueeze(1)
 
         # Normalize the attention scores to probabilities.
         attention_probs = gelu(attention_scores)
