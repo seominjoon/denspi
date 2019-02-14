@@ -112,7 +112,7 @@ def main():
     parser.add_argument("--do_case", default=False, action='store_true',
                         help="Whether to lower case the input text. Should be True for uncased "
                              "models and False for cased models.")
-    parser.add_argument('--phrase_size', default=961, type=int)
+    parser.add_argument('--phrase_size', default=511, type=int)
     parser.add_argument('--metric', default='ip', type=str, help='ip | l2')
 
     # GPU and memory related options
@@ -149,7 +149,7 @@ def main():
 
     # Training options: only effective during training
     parser.add_argument("--learning_rate", default=3e-5, type=float, help="The initial learning rate for Adam.")
-    parser.add_argument("--num_train_epochs", default=2.0, type=float,
+    parser.add_argument("--num_train_epochs", default=3.0, type=float,
                         help="Total number of training epochs to perform.")
     parser.add_argument("--num_train_filter_epochs", default=1.0, type=float,
                         help="Total number of training epochs for filter to perform.")
@@ -171,7 +171,7 @@ def main():
 
     # Index Options
     parser.add_argument('--dtype', default='float32', type=str)
-    parser.add_argument('--filter_threshold', default=-2, type=float)
+    parser.add_argument('--filter_threshold', default=-1e9, type=float)
     parser.add_argument('--compression_offset', default=2, type=float)
     parser.add_argument('--compression_scale', default=20, type=float)
     parser.add_argument('--split_by_para', default=False, action='store_true')
