@@ -710,3 +710,14 @@ dump_questions:
 	--load_dir KR18816/piqa-nfs/132 \
 	--iteration 1 \
 	--parallel"
+
+train_and_eval_base:
+	nsml run -d piqa-nfs -g 2 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--bert_model_option 'base_uncased' \
+	--train_file train-v1.1-na-1-1.json \
+	--train_batch_size 18 \
+	--fs nfs \
+	--do_train \
+	--do_predict \
+	--do_eval \
+	--num_train_epochs 1"
