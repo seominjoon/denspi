@@ -22,10 +22,20 @@ train_base:
 	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
 	--bert_model_option 'base_uncased' \
-	--train_file train-v1.1-na-1-1.json \
+	--train_file train-v1.1-qna-1-1.json \
 	--train_batch_size 18 \
 	--phrase_size 127 \
 	--do_train \
+	--do_predict \
+	--do_eval"
+
+eval_base:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--load_dir KR18816/piqa-nfs/249 \
+	--iteration 2 \
+	--phrase_size 127 \
 	--do_predict \
 	--do_eval"
 
@@ -33,7 +43,7 @@ train_filter_base:
 	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
 	--bert_model_option 'base_uncased' \
-	--train_file train-v1.1-na-1-1.json \
+	--train_file train-v1.1-qna-1-1.json \
 	--train_batch_size 18 \
 	--phrase_size 127 \
 	--do_train_filter \

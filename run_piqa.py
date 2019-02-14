@@ -97,7 +97,7 @@ def main():
     parser.add_argument('--load_dir', default='out/', type=str)
 
     # Local paths (if we want to run cmd)
-    parser.add_argument('--eval_script', default='evaluate-v1.1.py', type=str)
+    parser.add_argument('--eval_script', default='eval/evaluate-v1.1.py', type=str)
 
     # Do's
     parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
