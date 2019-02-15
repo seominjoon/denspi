@@ -161,8 +161,8 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
                            axis=0)
     end = np.concatenate([result.end[1:len(feature.tokens) - 1] for feature, result in zip(features, results)], axis=0)
 
-    input_ids = [None]
-    sparse = [None]
+    input_ids = None
+    sparse_map = None
     if split_by_para and results[0].sparse is not None:
         input_ids = np.concatenate([f.input_ids[1:len(f.tokens)-1] for f in features], axis=0)
         sparse_features = [result.sparse[1:len(feature.tokens)-1,1:len(feature.tokens)-1]
