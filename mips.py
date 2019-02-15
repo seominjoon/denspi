@@ -91,7 +91,7 @@ class MIPS(object):
             ids = np.array(ids)
 
             train_data = np.concatenate(starts, axis=0)
-            self.start_index = faiss.index_factory(481, index_factory)
+            self.start_index = faiss.index_factory(train_data.shape[1], index_factory)
             print('training start index')
             self.start_index.train(train_data)
             self.start_index.add_with_ids(train_data, ids)
@@ -128,7 +128,8 @@ class MIPS(object):
         # doc_idxs = [Q]
         # start_idxs = [Q]
         # para_idxs = [Q]
-        query_start, query_end, query_span_logit = query[:, :480], query[:, 480:960], query[:, 960:961]
+        bs = int((query.shape[1] - 1) / 2)
+        query_start, query_end, query_span_logit = query[:, :bs], query[:, bs:2*bs], query[:, -1:]
 
         groups = [self.phrase_index[str(doc_idx)] for doc_idx in doc_idxs]
         if self.para:
@@ -181,7 +182,8 @@ class MIPS(object):
 
     def search(self, query, top_k=5, nprobe=64, doc_idxs=None, para_idxs=None):
         num_queries = query.shape[0]
-        query_start = query[:, :480]
+        bs = int((query.shape[1] - 1) / 2)
+        query_start = query[:, :bs]
         start_scores, doc_idxs, para_idxs, start_idxs = self.search_start(query_start, top_k=top_k, nprobe=nprobe,
                                                                           doc_idxs=doc_idxs, para_idxs=para_idxs)
 
