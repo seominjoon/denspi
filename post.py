@@ -164,10 +164,16 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
     input_ids = [None]
     sparse = [None]
     if split_by_para and results[0].sparse is not None:
-        input_ids = [f.input_ids[1:len(f.tokens)-1] for f in features]
-        assert len(input_ids) == 1
-        sparse = [result.sparse[1:len(feature.tokens)-1,1:len(feature.tokens)-1] for feature, result in zip(features, results)]
-        assert len(sparse) == 1
+        input_ids = np.concatenate([f.input_ids[1:len(f.tokens)-1] for f in features], axis=0)
+        sparse_features = [result.sparse[1:len(feature.tokens)-1,1:len(feature.tokens)-1]
+            for feature, result in zip(features, results)]
+        map_size = sum([k.shape[0] for k in sparse_features])
+        sparse_map = np.zeros((map_size, map_size))
+        curr_size = 0
+        for sparse_feature in sparse_features:
+            sparse_map[curr_size:curr_size+sparse_feature.shape[0],
+                       curr_size:curr_size+sparse_feature.shape[0]] = sparse_feature
+            curr_size += sparse_feature.shape[0]
 
     fs = np.concatenate([result.filter_start_logits[1:len(feature.tokens) - 1]
                          for feature, result in zip(features, results)],
@@ -215,8 +221,8 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
                 'start': start, 'end': end, 'span_logits': span_logits,
                 'start2end': start2end,
                 'word2char_start': word2char_start, 'word2char_end': word2char_end,
-                'filter_start': fs, 'filter_end': fe, 'input_ids': input_ids[0],
-                'sparse': sparse[0]}
+                'filter_start': fs, 'filter_end': fe, 'input_ids': input_ids,
+                'sparse': sparse_map}
     if split_by_para:
         metadata['pid'] = prev_example.pid
 
