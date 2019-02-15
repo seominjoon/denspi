@@ -44,7 +44,7 @@ def get_logits(a, b, metric):
         raise ValueError(metric)
 
 
-def get_sparse_logits(a, b, a_id, b_id, a_mask, ngrams=['1', '2', '3']):
+def get_sparse_logits(a, b, a_id, b_id, a_mask, ngrams=['1']):
     logits = 0.0
     if '1' in ngrams:
         mxq = (a_id.unsqueeze(2) == b_id.unsqueeze(1)) & (a_id.unsqueeze(2) > 0)
@@ -75,10 +75,10 @@ def get_sparse_logits(a, b, a_id, b_id, a_mask, ngrams=['1', '2', '3']):
     return logits
 
 class PhraseModel(nn.Module):
-    def __init__(self, encoder, sparse_encoder, phrase_size, metric):
+    def __init__(self, encoder, sparse_layer, phrase_size, metric):
         super(PhraseModel, self).__init__()
         self.encoder = encoder
-        self.sparse_encoder = sparse_encoder
+        self.sparse_layer = sparse_layer
         self.boundary_size = int((phrase_size - 1) / 2)
         self.phrase_size = phrase_size
         self.default_value = nn.Parameter(torch.randn(1))
@@ -94,8 +94,8 @@ class PhraseModel(nn.Module):
             start, end, span_logits = encode_phrase(context_layer, self.phrase_size)
             start_filter_logits, end_filter_logits = self.filter(start, end)
             sparse = None
-            if self.sparse_encoder is not None:
-                sparse = self.sparse_encoder(
+            if self.sparse_layer is not None:
+                sparse = self.sparse_layer(
                     context_layer,
                     (1-context_mask).float() * -1e9
                 )[:,:,0,:]
@@ -109,8 +109,8 @@ class PhraseModel(nn.Module):
             query_start, query_end, q_span_logits = encode_phrase(question_layer, self.phrase_size,
                                                                   get_first_only=True)
             query_sparse = None
-            if self.sparse_encoder is not None:
-                query_sparse = self.sparse_encoder(
+            if self.sparse_layer is not None:
+                query_sparse = self.sparse_layer(
                     question_layer,
                     (1-query_mask).float() * -1e9
                 )[:,0,0,:]
@@ -127,7 +127,7 @@ class PhraseModel(nn.Module):
         cross_logits = get_logits(span_logits.unsqueeze(-1), q_span_logits.unsqueeze(-1), self.metric)
         all_logits = start_logits.unsqueeze(2) + end_logits.unsqueeze(1) + cross_logits # [B, L, L]
         # exp_mask = -1e9 * (1.0 - (context_mask.unsqueeze(1) & context_mask.unsqueeze(-1)).float())
-        if self.sparse_encoder is not None:
+        if self.sparse_layer is not None:
             sparse_logits = get_sparse_logits(sparse, query_sparse, context_mask, query_mask, context_ids)
             all_logits += sparse_logits.unsqueeze(2)
         # all_logits = all_logits + exp_mask
@@ -172,10 +172,10 @@ class PhraseModel(nn.Module):
 class BertPhraseModel(PhraseModel):
     def __init__(self, config, phrase_size, metric, use_sparse):
         encoder = BertWrapper(BertModel(config))
-        sparse_encoder = None
+        sparse_layer = None
         if use_sparse:
-            sparse_encoder = SparseAttention(config, num_sparse_heads=1)
-        super(BertPhraseModel, self).__init__(encoder, sparse_encoder, phrase_size, metric)
+            sparse_layer = SparseAttention(config, num_sparse_heads=1)
+        super(BertPhraseModel, self).__init__(encoder, sparse_layer, phrase_size, metric)
 
         def init_weights(module):
             if isinstance(module, (nn.Linear, nn.Embedding)):
