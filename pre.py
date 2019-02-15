@@ -84,11 +84,13 @@ class QuestionFeatures(object):
                  unique_id,
                  example_index,
                  input_ids,
-                 input_mask):
+                 input_mask,
+                 tokens):
         self.unique_id = unique_id
         self.example_index = example_index
         self.input_ids = input_ids
         self.input_mask = input_mask
+        self.tokens = tokens
 
 
 def read_squad_examples(input_file, is_training, context_only=False, question_only=False,
@@ -328,7 +330,8 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     unique_id=unique_id,
                     example_index=example_index,
                     input_ids=input_ids_,
-                    input_mask=input_mask_))
+                    input_mask=input_mask_,
+                    tokens=tokens_))
             unique_id += 1
 
     return features, question_features
@@ -385,7 +388,8 @@ def convert_questions_to_features(examples, tokenizer, max_query_length=None):
                     unique_id=unique_id,
                     example_index=example_index,
                     input_ids=input_ids_,
-                    input_mask=input_mask_))
+                    input_mask=input_mask_,
+                    tokens=tokens_))
             unique_id += 1
 
     return question_features

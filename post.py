@@ -20,7 +20,8 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message
 logger = logging.getLogger(__name__)
 
 QuestionResult = collections.namedtuple("QuestionResult",
-                                        ['qas_id', 'start', 'end', 'span_logit'])
+                                        ['qas_id', 'start', 'end', 'span_logit',
+                                         'sparse'])
 
 
 def tqdm(*args, min_interval=5.0, **kwargs):
@@ -160,7 +161,13 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
                            axis=0)
     end = np.concatenate([result.end[1:len(feature.tokens) - 1] for feature, result in zip(features, results)], axis=0)
 
-    # sparse = np.concatenate([result.sparse[1:len(feature.tokens)-1,1:len(feature.tokens)-1] for feature, result in zip(features, results)], axis=0)
+    input_ids = [None]
+    sparse = [None]
+    if split_by_para and results[0].sparse is not None:
+        input_ids = [f.input_ids[1:len(f.tokens)-1] for f in features]
+        assert len(input_ids) == 1
+        sparse = [result.sparse[1:len(feature.tokens)-1,1:len(feature.tokens)-1] for feature, result in zip(features, results)]
+        assert len(sparse) == 1
 
     fs = np.concatenate([result.filter_start_logits[1:len(feature.tokens) - 1]
                          for feature, result in zip(features, results)],
@@ -208,7 +215,8 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
                 'start': start, 'end': end, 'span_logits': span_logits,
                 'start2end': start2end,
                 'word2char_start': word2char_start, 'word2char_end': word2char_end,
-                'filter_start': fs, 'filter_end': fe}
+                'filter_start': fs, 'filter_end': fe, 'input_ids': input_ids[0],
+                'sparse': sparse[0]}
     if split_by_para:
         metadata['pid'] = prev_example.pid
 
@@ -287,7 +295,9 @@ def write_hdf5(all_examples, all_features, all_results,
                         dg.attrs['scale'] = scale
                     dg.create_dataset('start', data=metadata['start'])
                     dg.create_dataset('end', data=metadata['end'])
-                    # dg.create_dataset('sparse', data=metadata['sparse'])
+                    if metadata['sparse'] is not None:
+                        dg.create_dataset('sparse', data=metadata['sparse'])
+                        dg.create_dataset('input_ids', data=metadata['input_ids'])
                     dg.create_dataset('span_logits', data=metadata['span_logits'])
                     dg.create_dataset('start2end', data=metadata['start2end'])
                     dg.create_dataset('word2char_start', data=metadata['word2char_start'])
@@ -345,6 +355,9 @@ def get_question_results(question_examples, query_eval_features, question_datalo
         for i, example_index in enumerate(example_indices):
             start = batch_start[i].detach().cpu().numpy().astype(np.float16)
             end = batch_end[i].detach().cpu().numpy().astype(np.float16)
+            sparse = None
+            if batch_sparse is not None:
+                sparse = batch_sparse[i].detach().cpu().numpy().astype(np.float16)
             span_logit = batch_span_logits[i].detach().cpu().numpy().astype(np.float16)
             query_eval_feature = query_eval_features[example_index.item()]
             unique_id = int(query_eval_feature.unique_id)
@@ -352,15 +365,26 @@ def get_question_results(question_examples, query_eval_features, question_datalo
             yield QuestionResult(qas_id=qas_id,
                                  start=start,
                                  end=end,
-                                 span_logit=span_logit)
+                                 span_logit=span_logit,
+                                 sparse=sparse)
 
 
-def write_question_results(question_results, path):
+def write_question_results(question_results, question_features, path):
     import h5py
     with h5py.File(path, 'w') as f:
-        for question_result in question_results:
+        for question_result, question_feature in zip(question_results, question_features):
+            sparse = None
+            input_ids = None
+            if question_result.sparse is not None:
+                sparse = question_result.sparse[1:len(question_feature.tokens)-1]
+                input_ids = question_feature.input_ids[1:len(question_feature.tokens)-1]
+
             data = np.concatenate([question_result.start, question_result.end, question_result.span_logit], -1)
             f.create_dataset(question_result.qas_id, data=data)
+
+            if sparse is not None:
+                f.create_dataset(question_result.qas_id + '_sparse', data=sparse)
+                f.create_dataset(question_result.qas_id + '_input_ids', data=input_ids)
 
 
 def convert_question_features_to_dataloader(query_eval_features, fp16, local_rank, predict_batch_size):

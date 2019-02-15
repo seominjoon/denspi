@@ -51,7 +51,8 @@ logger = logging.getLogger(__name__)
 RawResult = collections.namedtuple("RawResult", ["unique_id", "all_logits", "filter_start_logits", "filter_end_logits"])
 ContextResult = collections.namedtuple("ContextResult",
                                        ['unique_id', 'start', 'end', 'span_logits',
-                                        'filter_start_logits', 'filter_end_logits'])
+                                        'filter_start_logits', 'filter_end_logits', 
+                                        'sparse'])
 
 
 def tqdm(*args, mininterval=5.0, **kwargs):
@@ -582,7 +583,7 @@ def main():
                                                  model)
         path = os.path.join(args.output_dir, args.question_emb_file)
         print('Writing %s' % path)
-        write_question_results(question_results, path)
+        write_question_results(question_results, query_eval_features, path)
 
     if args.do_index:
         if ':' not in args.predict_file:
@@ -646,7 +647,9 @@ def main():
                         for i, example_index in enumerate(example_indices):
                             start = batch_start[i].detach().cpu().numpy().astype(args.dtype)
                             end = batch_end[i].detach().cpu().numpy().astype(args.dtype)
-                            # sparse = batch_sparse[i].detach().cpu().numpy().astype(args.dtype)
+                            sparse = None
+                            if batch_sparse is not None:
+                                sparse = batch_sparse[i].detach().cpu().numpy().astype(args.dtype)
                             span_logits = batch_span_logits[i].detach().cpu().numpy().astype(args.dtype)
                             filter_start_logits = bs[i].detach().cpu().numpy().astype(args.dtype)
                             filter_end_logits = be[i].detach().cpu().numpy().astype(args.dtype)
@@ -657,8 +660,8 @@ def main():
                                                 end=end,
                                                 span_logits=span_logits,
                                                 filter_start_logits=filter_start_logits,
-                                                filter_end_logits=filter_end_logits)
-                                                # sparse=sparse)
+                                                filter_end_logits=filter_end_logits,
+                                                sparse=sparse)
 
                 hdf5_path = os.path.join(args.output_dir, args.index_file)
                 write_hdf5(context_examples, context_features, get_context_results(),
