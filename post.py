@@ -160,6 +160,8 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
                            axis=0)
     end = np.concatenate([result.end[1:len(feature.tokens) - 1] for feature, result in zip(features, results)], axis=0)
 
+    # sparse = np.concatenate([result.sparse[1:len(feature.tokens)-1,1:len(feature.tokens)-1] for feature, result in zip(features, results)], axis=0)
+
     fs = np.concatenate([result.filter_start_logits[1:len(feature.tokens) - 1]
                          for feature, result in zip(features, results)],
                         axis=0)
@@ -239,7 +241,7 @@ def compress_metadata(metadata, offset, scale):
 
 def write_hdf5(all_examples, all_features, all_results,
                max_answer_length, do_lower_case, hdf5_path, filter_threshold, verbose_logging, offset=None, scale=None,
-               split_by_para=False):
+               split_by_para=False, use_sparse=False):
     assert len(all_examples) > 0
 
     import h5py
@@ -285,6 +287,7 @@ def write_hdf5(all_examples, all_features, all_results,
                         dg.attrs['scale'] = scale
                     dg.create_dataset('start', data=metadata['start'])
                     dg.create_dataset('end', data=metadata['end'])
+                    # dg.create_dataset('sparse', data=metadata['sparse'])
                     dg.create_dataset('span_logits', data=metadata['span_logits'])
                     dg.create_dataset('start2end', data=metadata['start2end'])
                     dg.create_dataset('word2char_start', data=metadata['word2char_start'])

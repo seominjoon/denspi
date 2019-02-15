@@ -114,7 +114,7 @@ def main():
                              "models and False for cased models.")
     parser.add_argument('--phrase_size', default=511, type=int)
     parser.add_argument('--metric', default='ip', type=str, help='ip | l2')
-    parser.add_argument("--train_sparse", default=False, action='store_true')
+    parser.add_argument("--use_sparse", default=False, action='store_true')
 
     # GPU and memory related options
     parser.add_argument("--max_seq_length", default=384, type=int,
@@ -304,7 +304,7 @@ def main():
         bert_config,
         phrase_size=args.phrase_size,
         metric=args.metric,
-        train_sparse=args.train_sparse
+        use_sparse=args.use_sparse
     )
 
     print('Number of model parameters:', sum(p.numel() for p in model.parameters()))
@@ -641,11 +641,12 @@ def main():
                         input_ids = input_ids.to(device)
                         input_mask = input_mask.to(device)
                         with torch.no_grad():
-                            batch_start, batch_end, batch_span_logits, bs, be, bsp = model(input_ids,
+                            batch_start, batch_end, batch_span_logits, bs, be, batch_sparse = model(input_ids,
                                                                                       input_mask)
                         for i, example_index in enumerate(example_indices):
                             start = batch_start[i].detach().cpu().numpy().astype(args.dtype)
                             end = batch_end[i].detach().cpu().numpy().astype(args.dtype)
+                            # sparse = batch_sparse[i].detach().cpu().numpy().astype(args.dtype)
                             span_logits = batch_span_logits[i].detach().cpu().numpy().astype(args.dtype)
                             filter_start_logits = bs[i].detach().cpu().numpy().astype(args.dtype)
                             filter_end_logits = be[i].detach().cpu().numpy().astype(args.dtype)
@@ -657,13 +658,15 @@ def main():
                                                 span_logits=span_logits,
                                                 filter_start_logits=filter_start_logits,
                                                 filter_end_logits=filter_end_logits)
+                                                # sparse=sparse)
 
                 hdf5_path = os.path.join(args.output_dir, args.index_file)
                 write_hdf5(context_examples, context_features, get_context_results(),
                            args.max_answer_length, not args.do_case, hdf5_path, args.filter_threshold,
                            args.verbose_logging,
                            offset=args.compression_offset, scale=args.compression_scale,
-                           split_by_para=args.split_by_para)
+                           split_by_para=args.split_by_para,
+                           use_sparse=args.use_sparse)
             except Exception as e:
                 with open(os.path.join(args.output_dir, 'error_files.txt'), 'a') as fp:
                     fp.write('error file: %s\n' % predict_file)

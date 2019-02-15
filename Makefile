@@ -17,7 +17,7 @@ dl:
 	--compression_scale 20.0 \
 	--phrase_size 127 \
 	--split_by_para \
-	--train_sparse
+	--use_sparse
 
 train_base:
 	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
@@ -28,6 +28,7 @@ train_base:
 	--phrase_size 127 \
 	--do_train \
 	--do_predict \
+	--use_sparse \
 	--do_eval"
 
 eval_base:

@@ -169,10 +169,10 @@ class PhraseModel(nn.Module):
 
 
 class BertPhraseModel(PhraseModel):
-    def __init__(self, config, phrase_size, metric, train_sparse):
+    def __init__(self, config, phrase_size, metric, use_sparse):
         encoder = BertWrapper(BertModel(config))
         sparse_encoder = None
-        if train_sparse:
+        if use_sparse:
             sparse_encoder = SparseAttention(config, num_sparse_heads=1)
         boundary_size = int((phrase_size - 1) / 2)
         super(BertPhraseModel, self).__init__(encoder, sparse_encoder, phrase_size, metric)
