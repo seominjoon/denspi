@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 
 import h5py
 from tqdm import tqdm
@@ -10,12 +11,13 @@ from mips import MIPS
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('phrase_index_path')
-    parser.add_argument('faiss_path')
-    parser.add_argument('question_index_path')
     parser.add_argument('data_path')
-    parser.add_argument('od_out_path')
-    parser.add_argument('--cd_out_path', default="pred.json")
+    parser.add_argument('dir')
+    parser.add_argument('--phrase_index_path', default='phrase.hdf5')
+    parser.add_argument('--faiss_path', default='index.faiss')
+    parser.add_argument('--question_index_path', default='question.hdf5')
+    parser.add_argument('--od_out_path', default='pred_od.json')
+    parser.add_argument('--cd_out_path', default="pred_cd.json")
     parser.add_argument('--max_answer_length', default=30, type=int)
     parser.add_argument('--top_k', default=5, type=int)
     parser.add_argument('--para', default=False, action='store_true')
@@ -27,6 +29,11 @@ def get_args():
 
 def main():
     args = get_args()
+    args.phrase_index_path = os.path.join(args.dir, args.phrase_index_path)
+    args.faiss_path = os.path.join(args.dir, args.faiss_path)
+    args.question_index_path = os.path.join(args.dir, args.question_index_path)
+    args.od_out_path = os.path.join(args.dir, args.od_out_path)
+    args.cd_out_path = os.path.join(args.dir, args.cd_out_path)
 
     with open(args.data_path, 'r') as fp:
         test_data = json.load(fp)
