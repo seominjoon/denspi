@@ -24,9 +24,9 @@ def run_dump(args):
                 "32G",
                 "--nfs-output",
                 "-a",
-                "--fs nfs --do_index --data_dir data/docs --predict_file %d:%d  "
+                "--fs nfs --do_index --data_dir %s --predict_file %d:%d  --filter_threshold %.2f "
                 "--output_dir %s --index_file %d-%d.hdf5 --phrase_size %s "
-                "--load_dir %s --iteration 1 %s" % (start_doc, end_doc,
+                "--load_dir %s --iteration 1 %s" % (args.data_dir, start_doc, end_doc, args.filter_threshold,
                                                     args.output_dir, start_doc, end_doc, args.phrase_size,
                                                     args.load_dir, model_option)]
 
@@ -45,10 +45,12 @@ def run_dump(args):
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--output_dir', default='index/wiki/large')
-    parser.add_argument('--phrase_size', default=511, type=int)
-    parser.add_argument('--load_dir', default='piqa-nfs/132')
+    parser.add_argument('--output_dir', default='index/wiki/large-qna')
+    parser.add_argument('--phrase_size', default=961, type=int)
+    parser.add_argument('--load_dir', default='piqateam/piqa-nfs/76')
+    parser.add_argument('--data_dir', default='data/docs_500_2000')
     parser.add_argument('--model', default='large')
+    parser.add_argument('--filter_threshold', default=-2, type=float)
     return parser.parse_args()
 
 

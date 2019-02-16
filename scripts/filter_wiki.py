@@ -18,7 +18,7 @@ def filter_wiki(args):
             from_ = json.load(fp)
         to = {'data': []}
         for article in from_['data']:
-            to_article = {'paragraphs': []}
+            to_article = {'paragraphs': [], 'title': article['title']}
             for para in article['paragraphs']:
                 if args.min_num_chars <= len(para['context']) < args.max_num_chars:
                     to_article['paragraphs'].append(para)
@@ -33,7 +33,7 @@ def get_args():
     parser.add_argument('from_dir')
     parser.add_argument('to_dir')
     parser.add_argument('--min_num_chars', default=500, type=int)
-    parser.add_argument('--max_num_chars', default=5000, type=int)
+    parser.add_argument('--max_num_chars', default=2000, type=int)
     return parser.parse_args()
 
 
