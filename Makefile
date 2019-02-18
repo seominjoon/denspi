@@ -140,7 +140,7 @@ dump_phrases:
 	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
 	--do_index \
-	--output_dir index/squad/large \
+	--output_dir index/squad/sparse \
 	--index_file phrase.hdf5 \
 	--load_dir KR18816/piqa-nfs/132 \
 	--iteration 1 \
@@ -150,7 +150,7 @@ dump_questions:
 	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
 	--do_embed_question \
-	--output_dir index/squad/large \
+	--output_dir index/squad/sparse \
 	--question_emb_file question.hdf5 \
 	--load_dir KR18816/piqa-nfs/132 \
 	--iteration 1 \
