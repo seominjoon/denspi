@@ -31,7 +31,7 @@ def run_dump(args):
                                                     args.load_dir, model_option)]
 
     num_docs = 5076
-    num_gpus = 20
+    num_gpus = args.num_gpus
     num_docs_per_gpu = math.ceil(num_docs / num_gpus)
     start_docs = list(range(0, 5076, num_docs_per_gpu))
     end_docs = start_docs[1:] + [num_docs - 1]
@@ -48,9 +48,10 @@ def get_args():
     parser.add_argument('--output_dir', default='index/wiki/large-qna')
     parser.add_argument('--phrase_size', default=961, type=int)
     parser.add_argument('--load_dir', default='piqateam/piqa-nfs/76')
-    parser.add_argument('--data_dir', default='data/docs_500_2000')
+    parser.add_argument('--data_dir', default='data/docs_100_5000')
     parser.add_argument('--model', default='large')
     parser.add_argument('--filter_threshold', default=-2, type=float)
+    parser.add_argument('--num_gpus', default=30, type=int)
     return parser.parse_args()
 
 

@@ -25,6 +25,7 @@ import json
 import os
 import random
 
+import h5py
 from torch.optim import Adam
 from tqdm import tqdm as tqdm_
 
@@ -259,6 +260,7 @@ def main():
     args.init_checkpoint = os.path.join(args.metadata_dir, args.init_checkpoint.replace(".bin", "") +
                                         "_" + args.bert_model_option + ".bin")
     args.vocab_file = os.path.join(args.metadata_dir, args.vocab_file)
+    args.index_file = os.path.join(args.output_dir, args.index_file)
 
     # Multi-GPU stuff
     if args.local_rank == -1 or args.no_cuda:
@@ -592,9 +594,18 @@ def main():
             dirname = os.path.dirname(args.predict_file)
             basename = os.path.basename(args.predict_file)
             start, end = list(map(int, basename.split(':')))
+
+            # skip files if possible
+            if os.path.exists(args.index_file):
+                with h5py.File(args.index_file, 'r') as f:
+                    dids = list(map(int, f.keys()))
+                start = int(max(dids)/1000)
+                print('%s exists; starting from %d' % (args.index_file, start))
+
             names = [str(i).zfill(4) for i in range(start, end)]
             predict_files = [os.path.join(dirname, name) for name in names]
             offsets = [int(each) * 1000 for each in names]
+
 
         for offset, predict_file in zip(offsets, predict_files):
             try:
@@ -658,9 +669,8 @@ def main():
                                                 filter_start_logits=filter_start_logits,
                                                 filter_end_logits=filter_end_logits)
 
-                hdf5_path = os.path.join(args.output_dir, args.index_file)
                 write_hdf5(context_examples, context_features, get_context_results(),
-                           args.max_answer_length, not args.do_case, hdf5_path, args.filter_threshold,
+                           args.max_answer_length, not args.do_case, args.index_file, args.filter_threshold,
                            args.verbose_logging,
                            offset=args.compression_offset, scale=args.compression_scale,
                            split_by_para=args.split_by_para)
