@@ -25,6 +25,8 @@ def get_args():
     parser.add_argument('--max_answer_length', default=30, type=int)
     parser.add_argument('--top_k', default=5, type=int)
     parser.add_argument('--para', default=False, action='store_true')
+    parser.add_argument('--doc_sample_ratio', default=0.1, type=float)
+    parser.add_argument('--vec_sample_ratio', default=0.1, type=float)
     parser.add_argument('--draft', default=False, action='store_true')
     args = parser.parse_args()
     return args
@@ -53,6 +55,7 @@ def main():
     question_dump = h5py.File(args.question_dump_path)
 
     mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length,
+                doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio,
                 max_norm=args.max_norm, quantizer_path=args.quantizer_path,
                 num_clusters=args.num_clusters, para=args.para)
 

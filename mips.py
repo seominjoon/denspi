@@ -32,63 +32,10 @@ def overlap(t1, t2, a1, a2, b1, b2):
     return True
 
 
-def id2idxs(id_, para=False):
-    if para:
-        return (id_ / 1e7).astype(np.int64), ((id_ % int(1e7)) / 1e4).astype(np.int64), id_ % int(1e4)
-    return (id_ / 1e6).astype(np.int64), id_ % int(1e6)
-
-
-def idxs2id(doc_idx, first_idx, second_idx=None):
-    if second_idx is None:
-        assert np.all(first_idx < 1e6)
-        return doc_idx * int(1e6) + first_idx
-    assert np.all(second_idx < 1e4)
-    assert np.all(first_idx < 1e3)
-    return doc_idx * int(1e7) + first_idx * int(1e4) + second_idx
-
-
-def find_max_norm(dumps, para=False, doc_sample_ratio=0.1, vec_sample_ratio=0.1, seed=29):
+def sample_data(dumps, para=False, doc_sample_ratio=0.1, vec_sample_ratio=0.1, seed=29):
+    vecs = []
     random.seed(seed)
     np.random.seed(seed)
-    max_norm = 0.0
-    for i, f in enumerate(tqdm(dumps, desc='finding max norm')):
-        doc_ids = f.keys()
-        sampled_doc_ids = random.sample(doc_ids, int(doc_sample_ratio * len(doc_ids)))
-        for doc_id in tqdm(sampled_doc_ids, desc=str(i)):
-            if para:
-                for para_id, group in f[doc_id].items():
-                    start = group['start'][:]
-                    num_vecs, d = start.shape
-                    num_samples = int(vec_sample_ratio * num_vecs)
-                    if num_samples == 0:
-                        continue
-                    sampled_vec_idxs = np.random.choice(num_vecs, num_samples)
-                    start = start[sampled_vec_idxs]
-                    start = int8_to_float(start, group.attrs['offset'],
-                                          group.attrs['scale'])
-                    max_norm = max(max_norm, np.linalg.norm(start, axis=1).max())
-
-            else:
-                group = f[doc_id]
-                start = group['start'][:]
-                num_vecs, d = start.shape
-                num_samples = int(vec_sample_ratio * num_vecs)
-                if num_samples == 0:
-                    continue
-                sampled_vec_idxs = np.random.choice(num_vecs, num_samples)
-                start = start[sampled_vec_idxs]
-                start = int8_to_float(start, group.attrs['offset'],
-                                      group.attrs['scale'])
-                max_norm = max(max_norm, np.linalg.norm(start, axis=1).max())
-    return max_norm
-
-
-def get_coarse_quantizer(dumps, num_clusters,
-                         hnsw=False, niter=10, doc_sample_ratio=0.1, vec_sample_ratio=0.1, seed=29, max_norm=None,
-                         para=False):
-    vecs = []
-    np.random.seed(seed)
-    d = None
     for i, f in enumerate(tqdm(dumps)):
         doc_ids = f.keys()
         sampled_doc_ids = random.sample(doc_ids, int(doc_sample_ratio * len(doc_ids)))
@@ -103,12 +50,13 @@ def get_coarse_quantizer(dumps, num_clusters,
                 sampled_vec_idxs = np.random.choice(num_vecs, int(vec_sample_ratio * num_vecs))
                 cur_vecs = int8_to_float(group['start'][:],
                                          group.attrs['offset'], group.attrs['scale'])[sampled_vec_idxs]
-                if max_norm is not None:
-                    norms = np.linalg.norm(cur_vecs, axis=1, keepdims=True)
-                    consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
-                    cur_vecs = np.concatenate([consts, cur_vecs], axis=1)
-                    d += 1
                 vecs.append(cur_vecs)
+    out = np.concatenate(vecs, 0)
+    return out
+
+
+def get_coarse_quantizer(data, num_clusters, hnsw=False, niter=10):
+    d = data.shape[1]
 
     res = faiss.StandardGpuResources()
     index_flat = faiss.IndexFlatL2(d)
@@ -117,8 +65,7 @@ def get_coarse_quantizer(dumps, num_clusters,
     clus = faiss.Clustering(d, num_clusters)
     clus.verbose = True
     clus.niter = niter
-    vecs_cat = np.concatenate(vecs, 0)
-    clus.train(vecs_cat, gpu_index_flat)
+    clus.train(data, gpu_index_flat)
     centroids = faiss.vector_float_to_array(clus.centroids)
     centroids = centroids.reshape(num_clusters, d)
 
@@ -130,7 +77,6 @@ def get_coarse_quantizer(dumps, num_clusters,
     else:
         quantizer = faiss.IndexFlatL2(d)
         quantizer.add(centroids)
-    print('is trained?: %s' % str(quantizer.is_trained))
 
     return quantizer
 
@@ -157,20 +103,24 @@ class MIPS(object):
                 self.idx2word_id = f['word'][:]
         else:
             assert quantizer_path is not None, 'Quantizer path needs to be specified.'
+            sampled_data = sample_data(self.phrase_dumps, para=para, doc_sample_ratio=doc_sample_ratio,
+                                       vec_sample_ratio=vec_sample_ratio, seed=seed)
             if max_norm is None:
-                max_norm = find_max_norm(self.phrase_dumps, para=para, doc_sample_ratio=doc_sample_ratio,
-                                         vec_sample_ratio=vec_sample_ratio, seed=seed)
-                max_norm *= 1.3
+                max_norm = 1.3 * np.linalg.norm(sampled_data, axis=1).max()
             print('max norm: %.2f' % max_norm)
+
+            # ip -> l2
+            norms = np.linalg.norm(sampled_data, axis=1, keepdims=True)
+            consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
+            sampled_data = np.concatenate([consts, sampled_data], axis=1)
+
             if os.path.exists(quantizer_path):
                 quantizer = faiss.read_index(quantizer_path)
             else:
-                quantizer = get_coarse_quantizer(self.phrase_dumps, num_clusters,
-                                                 niter=niter, doc_sample_ratio=doc_sample_ratio,
-                                                 vec_sample_ratio=vec_sample_ratio,
-                                                 seed=seed, max_norm=max_norm, hnsw=True, para=para)
+                quantizer = get_coarse_quantizer(sampled_data, num_clusters, niter=niter, hnsw=True)
 
-            self.start_index = faiss.IndexIVFFlat(quantizer, quantizer.d, quantizer.ntotal, faiss.METRIC_L2)
+            self.start_index = faiss.IndexIVFScalarQuantizer(quantizer, quantizer.d, quantizer.ntotal, faiss.METRIC_L2)
+            self.start_index.train(sampled_data)
             self.idx2doc_id = []
             self.idx2para_id = []
             self.idx2word_id = []
