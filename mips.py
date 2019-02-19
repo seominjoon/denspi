@@ -92,7 +92,7 @@ class MIPS(object):
 
             train_data = np.concatenate(starts, axis=0)
             self.start_index = faiss.index_factory(481, index_factory)
-            print('training start index')
+            print('training start index: %d' % train_data.shape[1])
             self.start_index.train(train_data)
             self.start_index.add_with_ids(train_data, ids)
             faiss.write_index(self.start_index, start_index_path)

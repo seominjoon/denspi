@@ -143,6 +143,8 @@ dump_phrases:
 	--output_dir index/squad/sparse \
 	--index_file phrase.hdf5 \
 	--load_dir KR18816/piqa-nfs/132 \
+	--phrase_size 961 \
+	--split_by_para \
 	--iteration 1 \
 	--parallel"
 
@@ -153,6 +155,8 @@ dump_questions:
 	--output_dir index/squad/sparse \
 	--question_emb_file question.hdf5 \
 	--load_dir KR18816/piqa-nfs/132 \
+	--phrase_size 961 \
+	--split_by_para \
 	--iteration 1 \
 	--parallel"
 
