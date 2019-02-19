@@ -32,14 +32,15 @@ def overlap(t1, t2, a1, a2, b1, b2):
     return True
 
 
-def sample_data(dumps, para=False, doc_sample_ratio=0.1, vec_sample_ratio=0.1, seed=29):
+def sample_data(dump_paths, para=False, doc_sample_ratio=0.1, vec_sample_ratio=0.1, seed=29, max_norm=None):
     vecs = []
     random.seed(seed)
     np.random.seed(seed)
+    dumps = [h5py.File(dump_path, 'r') for dump_path in dump_paths]
     for i, f in enumerate(tqdm(dumps)):
         doc_ids = f.keys()
         sampled_doc_ids = random.sample(doc_ids, int(doc_sample_ratio * len(doc_ids)))
-        for doc_id in tqdm(sampled_doc_ids, desc=str(i)):
+        for doc_id in tqdm(sampled_doc_ids, desc='sampling from %d' % i):
             doc_group = f[doc_id]
             if para:
                 groups = doc_group.values()
@@ -51,11 +52,20 @@ def sample_data(dumps, para=False, doc_sample_ratio=0.1, vec_sample_ratio=0.1, s
                 cur_vecs = int8_to_float(group['start'][:],
                                          group.attrs['offset'], group.attrs['scale'])[sampled_vec_idxs]
                 vecs.append(cur_vecs)
+        break
     out = np.concatenate(vecs, 0)
-    return out
+    for dump in dumps:
+        dump.close()
+
+    norms = np.linalg.norm(out, axis=1, keepdims=True)
+    if max_norm is None:
+        max_norm = np.max(norms)
+    consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
+    out = np.concatenate([consts, out], axis=1)
+    return out, max_norm
 
 
-def get_coarse_quantizer(data, num_clusters, hnsw=False, niter=10):
+def train_coarse_quantizer(data, quantizer_path, num_clusters, hnsw=False, niter=10):
     d = data.shape[1]
 
     res = faiss.StandardGpuResources()
@@ -78,13 +88,68 @@ def get_coarse_quantizer(data, num_clusters, hnsw=False, niter=10):
         quantizer = faiss.IndexFlatL2(d)
         quantizer.add(centroids)
 
-    return quantizer
+    faiss.write_index(quantizer, quantizer_path)
+
+
+def train_index(data, quantizer_path, trained_index_path):
+    quantizer = faiss.read_index(quantizer_path)
+    trained_index = faiss.IndexIVFScalarQuantizer(quantizer, quantizer.d, quantizer.ntotal, faiss.METRIC_L2)
+    trained_index.train(data)
+    faiss.write_index(trained_index, trained_index_path)
+
+
+def add_to_index(dump_path, trained_index_path, target_index_path, idx2id_path, max_norm, para=False):
+    idx2doc_id = []
+    idx2para_id = []
+    idx2word_id = []
+    phrase_dump = h5py.File(dump_path, 'r')
+    start_index = faiss.read_index(trained_index_path)
+
+    offset = 0
+    if para:
+        for doc_idx, doc_group in tqdm(phrase_dump.items(), desc='faiss indexing'):
+            for para_idx, group in doc_group.items():
+                num_vecs = group['start'].shape[0]
+                start = int8_to_float(group['start'][:], group.attrs['offset'], group.attrs['scale'])
+                norms = np.linalg.norm(start, axis=1, keepdims=True)
+                consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
+                start = np.concatenate([consts, start], axis=1)
+                # self.start_index.add_with_ids(start, np.arange(offset, offset + start.shape[0]))
+                start_index.add(start)
+                idx2doc_id.extend([int(doc_idx)] * num_vecs)
+                idx2para_id.extend([int(para_idx)] * num_vecs)
+                idx2word_id.extend(list(range(num_vecs)))
+                offset += start.shape[0]
+    else:
+        for doc_idx, doc_group in tqdm(phrase_dump.items(), desc='faiss indexing'):
+            num_vecs = doc_group['start'].shape[0]
+            start = int8_to_float(doc_group['start'][:], doc_group.attrs['offset'],
+                                  doc_group.attrs['scale'])
+            norms = np.linalg.norm(start, axis=1, keepdims=True)
+            consts = np.sqrt(max_norm ** 2 - norms ** 2)
+            start = np.concatenate([consts, start], axis=1)
+            start_index.add_with_ids(start, np.arange(offset, offset + start.shape[0]))
+            idx2doc_id.extend([int(doc_idx)] * num_vecs)
+            idx2word_id.append(list(range(num_vecs)))
+            offset += start.shape[0]
+
+    idx2doc_id = np.array(idx2doc_id, dtype=np.int32)
+    idx2para_id = np.array(idx2para_id, dtype=np.int32)
+    idx2word_id = np.array(idx2word_id, dtype=np.int32)
+
+    with h5py.File(idx2id_path, 'w') as f:
+        f.create_dataset('doc', data=idx2doc_id)
+        f.create_dataset('para', data=idx2para_id)
+        f.create_dataset('word', data=idx2word_id)
+    faiss.write_index(start_index, target_index_path)
+
+
+def merge_indexes(index_dir, idx2id_dir, target_index_path, target_idx2id_path):
+    pass
 
 
 class MIPS(object):
-    def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length,
-                 max_norm=None, quantizer_path=None, start_subindex_dir=None,
-                 num_clusters=1048576, niter=10, para=False, doc_sample_ratio=0.1, vec_sample_ratio=0.1, seed=29):
+    def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para=False):
         if os.path.isdir(phrase_dump_dir):
             self.phrase_dump_paths = [os.path.join(phrase_dump_dir, name) for name in os.listdir(phrase_dump_dir)]
             dump_names = [os.path.splitext(os.path.basename(path))[0] for path in self.phrase_dump_paths]
@@ -92,74 +157,14 @@ class MIPS(object):
         else:
             self.phrase_dump_paths = [phrase_dump_dir]
         self.phrase_dumps = [h5py.File(path, 'r') for path in self.phrase_dump_paths]
-
         self.max_answer_length = max_answer_length
         self.para = para
-        if os.path.exists(start_index_path):
-            self.start_index = faiss.read_index(start_index_path)
-            with h5py.File(idx2id_path, 'r') as f:
-                self.idx2doc_id = f['doc'][:]
-                self.idx2para_id = f['para'][:]
-                self.idx2word_id = f['word'][:]
-        else:
-            assert quantizer_path is not None, 'Quantizer path needs to be specified.'
-            sampled_data = sample_data(self.phrase_dumps, para=para, doc_sample_ratio=doc_sample_ratio,
-                                       vec_sample_ratio=vec_sample_ratio, seed=seed)
-            if max_norm is None:
-                max_norm = 1.3 * np.linalg.norm(sampled_data, axis=1).max()
-            print('max norm: %.2f' % max_norm)
 
-            # ip -> l2
-            norms = np.linalg.norm(sampled_data, axis=1, keepdims=True)
-            consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
-            sampled_data = np.concatenate([consts, sampled_data], axis=1)
-
-            if os.path.exists(quantizer_path):
-                quantizer = faiss.read_index(quantizer_path)
-            else:
-                quantizer = get_coarse_quantizer(sampled_data, num_clusters, niter=niter, hnsw=True)
-
-            self.start_index = faiss.IndexIVFScalarQuantizer(quantizer, quantizer.d, quantizer.ntotal, faiss.METRIC_L2)
-            self.start_index.train(sampled_data)
-            self.idx2doc_id = []
-            self.idx2para_id = []
-            self.idx2word_id = []
-
-            for phrase_dump in self.phrase_dumps:
-                if para:
-                    for doc_idx, doc_group in tqdm(phrase_dump.items(), desc='faiss indexing'):
-                        for para_idx, group in doc_group.items():
-                            num_vecs = group['start'].shape[0]
-                            start = int8_to_float(group['start'][:], group.attrs['offset'], group.attrs['scale'])
-                            norms = np.linalg.norm(start, axis=1, keepdims=True)
-                            consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
-                            start = np.concatenate([consts, start], axis=1)
-                            self.start_index.add(start)
-                            self.idx2doc_id.extend([int(doc_idx)] * num_vecs)
-                            self.idx2para_id.extend([int(para_idx)] * num_vecs)
-                            self.idx2word_id.extend(list(range(num_vecs)))
-                else:
-                    for doc_idx, doc_group in tqdm(phrase_dump.items(), desc='faiss indexing'):
-                        num_vecs = doc_group['start'].shape[0]
-                        start = int8_to_float(doc_group['start'][:], doc_group.attrs['offset'],
-                                              doc_group.attrs['scale'])
-                        norms = np.linalg.norm(start, axis=1, keepdims=True)
-                        consts = np.sqrt(max_norm ** 2 - norms ** 2)
-                        start = np.concatenate([consts, start], axis=1)
-                        self.start_index.add(start)
-                        self.idx2doc_id.extend([int(doc_idx)] * num_vecs)
-                        self.idx2word_id.append(list(range(num_vecs)))
-
-            self.idx2doc_id = np.array(self.idx2doc_id, dtype=np.int32)
-            self.idx2para_id = np.array(self.idx2para_id, dtype=np.int32)
-            self.idx2word_id = np.array(self.idx2word_id, dtype=np.int32)
-
-            faiss.write_index(quantizer, quantizer_path)
-            with h5py.File(idx2id_path, 'w') as f:
-                f.create_dataset('doc', data=self.idx2doc_id)
-                f.create_dataset('para', data=self.idx2para_id)
-                f.create_dataset('word', data=self.idx2word_id)
-            faiss.write_index(self.start_index, start_index_path)
+        self.start_index = faiss.read_index(start_index_path)
+        with h5py.File(idx2id_path, 'r') as f:
+            self.idx2doc_id = f['doc'][:]
+            self.idx2para_id = f['para'][:]
+            self.idx2word_id = f['word'][:]
 
     def close(self):
         for phrase_dump in self.phrase_dumps:
@@ -284,29 +289,58 @@ class MIPS(object):
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('dump_dir')
-    parser.add_argument('quantizer_path')
-    parser.add_argument('num_clusters', type=int)
+    parser.add_argument('out_dir')
+    parser.add_argument('stage', default='all')
+    parser.add_argument('--quantizer_path', default='quantizer.faiss')
+    parser.add_argument('--max_norm_path', default='max_norm.json')
+    parser.add_argument('--trained_index_path', default='trained.faiss')
+    parser.add_argument('--add_dump_path', default='trained.faiss')
+    parser.add_argument('--target_index_path', default='target.faiss')
+    parser.add_argument('--idx2id_path', default='idx2id.hdf5')
+    parser.add_argument('--num_clusters', type=int, default=4096)
     parser.add_argument('--hnsw', default=False, action='store_true')
     parser.add_argument('--max_norm', default=None, type=float)
+    parser.add_argument('--para', default=False, action='store_true')
     return parser.parse_args()
 
 
 def main():
     args = get_args()
     if os.path.isdir(args.dump_dir):
-        dump_paths = [os.path.join(args.dump_dir, name) for name in os.listdir(args.dump_dir)]
+        dump_names = os.listdir(args.dump_dir)
+        dump_paths = [os.path.join(args.dump_dir, name) for name in dump_names]
+        add_dump_path = os.path.join(args.dump_dir, args.add_dump_path)
     else:
         dump_paths = [args.dump_dir]
-    start = time()
-    if args.max_norm is None:
-        max_norm = find_max_norm(dump_paths)
-    else:
-        max_norm = args.max_norm
-    print('max norm: %.2f' % max_norm)
-    quantizer = get_coarse_quantizer(dump_paths, args.num_clusters, hnsw=args.hnsw, max_norm=max_norm)
-    faiss.write_index(quantizer, args.quantizer_path)
-    end = time()
-    print('total time: %d mins' % int((end - start) / 60))
+        add_dump_path = args.dump_dir
+    if not os.path.exists(args.out_dir):
+        os.makedirs(args.out_dir)
+    quantizer_path = os.path.join(args.out_dir, args.quantizer_path)
+    max_norm_path = os.path.join(args.out_dir, args.max_norm_path)
+    trained_index_path = os.path.join(args.out_dir, args.trained_index_path)
+    target_index_path = os.path.join(args.out_dir, args.target_index_path)
+    idx2id_path = os.path.join(args.out_dir, args.idx2id_path)
+
+    if args.stage == 'coarse':
+        data, max_norm = sample_data(dump_paths, max_norm=args.max_norm)
+        with open(max_norm_path, 'w') as fp:
+            json.dump(max_norm, fp)
+        train_coarse_quantizer(data, quantizer_path, args.num_clusters)
+
+    if args.stage == 'fine':
+        with open(max_norm_path, 'r') as fp:
+            max_norm = json.load(fp)
+        data, _ = sample_data(dump_paths, max_norm=max_norm)
+        train_index(data, quantizer_path, trained_index_path)
+
+    if args.stage == 'add':
+        with open(max_norm_path, 'r') as fp:
+            max_norm = json.load(fp)
+        add_to_index(add_dump_path, trained_index_path, target_index_path, idx2id_path,
+                     max_norm=max_norm, para=args.para)
+
+    if args.stage == 'merge':
+        pass
 
 
 if __name__ == '__main__':

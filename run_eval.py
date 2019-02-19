@@ -21,7 +21,7 @@ def get_args():
     parser.add_argument('--cd_out_path', default="pred_cd.json")
     parser.add_argument('--idx2id_path', default='idx2id.hdf5')
     parser.add_argument('--max_norm', default=None, type=float)
-    parser.add_argument('--num_clusters', default=1048576, type=int)
+    parser.add_argument('--num_clusters', default=524288, type=int)
     parser.add_argument('--max_answer_length', default=30, type=int)
     parser.add_argument('--top_k', default=5, type=int)
     parser.add_argument('--para', default=False, action='store_true')
