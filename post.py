@@ -248,8 +248,9 @@ def filter_metadata(metadata, threshold):
 
 
 def compress_metadata(metadata, offset, scale):
-    for key in ['start', 'end']:
-        metadata[key] = float_to_int8(metadata[key], offset, scale)
+    for key in ['start', 'end', 'sparse']:
+        if key in metadata:
+            metadata[key] = float_to_int8(metadata[key], offset, scale)
     return metadata
 
 

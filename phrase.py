@@ -129,7 +129,7 @@ class PhraseModel(nn.Module):
         # exp_mask = -1e9 * (1.0 - (context_mask.unsqueeze(1) & context_mask.unsqueeze(-1)).float())
         if self.sparse_layer is not None:
             sparse_logits = get_sparse_logits(sparse, query_sparse, context_mask, query_mask, context_ids)
-            all_logits += sparse_logits.unsqueeze(2)
+            all_logits += sparse_logits.unsqueeze(1)
         # all_logits = all_logits + exp_mask
 
         if start_positions is not None and end_positions is not None:
