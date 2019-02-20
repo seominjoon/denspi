@@ -21,7 +21,7 @@ def run_dump(args):
                 "-e",
                 "run_piqa.py",
                 "--memory",
-                "32G",
+                "%dG" % args.mem_size,
                 "--nfs-output",
                 "-a",
                 "--fs nfs --do_index --data_dir %s --predict_file %d:%d  --filter_threshold %.2f "
@@ -57,6 +57,7 @@ def get_args():
     parser.add_argument('--num_gpus', default=30, type=int)
     parser.add_argument('--start', default=0, type=int)
     parser.add_argument('--end', default=5076, type=int)
+    parser.add_argument('--mem_size', default=32, type=int, help='mem size in GB')
     return parser.parse_args()
 
 
