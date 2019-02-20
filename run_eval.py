@@ -54,10 +54,7 @@ def main():
 
     question_dump = h5py.File(args.question_dump_path)
 
-    mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length,
-                doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio,
-                max_norm=args.max_norm, quantizer_path=args.quantizer_path,
-                num_clusters=args.num_clusters, para=args.para)
+    mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para)
 
     vecs = []
     for doc_idx, para_idx, id_, question in tqdm(pairs):
