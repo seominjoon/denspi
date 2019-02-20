@@ -229,6 +229,21 @@ dump_qna_961:
 	--parallel \
 	--iteration 1"
 
+dump_qna_961_m:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--output_dir index/squad/large-qna-m \
+	--predict_file dev-m.json \
+	--phrase_size 961 \
+	--index_file phrase.hdf5 \
+	--question_emb_file question.hdf5 \
+	--load_dir piqateam/piqa-nfs/76 \
+	--filter_threshold -2 \
+	--split_by_para \
+	--parallel \
+	--iteration 1"
+
 train_filter:
 	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \

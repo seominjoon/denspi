@@ -17,9 +17,11 @@ def run_dump(args):
                 "-d",
                 "piqa-nfs",
                 "-g",
-                "1",
+                "0",
+                "-c",
+                "4",
                 "-e",
-                "run_piqa.py",
+                "mips.py",
                 "--memory",
                 "32G",
                 "--nfs-output",
@@ -30,14 +32,11 @@ def run_dump(args):
                                                     args.output_dir, start_doc, end_doc, args.phrase_size,
                                                     args.load_dir, model_option)]
 
-    num_docs = args.end - args.start
+    num_docs = 5076
     num_gpus = args.num_gpus
-    if num_gpus > num_docs:
-        print('You are requesting more GPUs than the number of docs; adjusting num gpus to %d' % num_docs)
-        num_gpus = num_docs
-    num_docs_per_gpu = int(math.ceil(num_docs / num_gpus))
-    start_docs = list(range(args.start, args.end, num_docs_per_gpu))
-    end_docs = start_docs[1:] + [args.end]
+    num_docs_per_gpu = math.ceil(num_docs / num_gpus)
+    start_docs = list(range(0, 5076, num_docs_per_gpu))
+    end_docs = start_docs[1:] + [num_docs - 1]
 
     print(start_docs)
     print(end_docs)
@@ -48,15 +47,13 @@ def run_dump(args):
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--output_dir', default='dump/wiki/large-qna')
+    parser.add_argument('--output_dir', default='index/wiki/large-qna')
     parser.add_argument('--phrase_size', default=961, type=int)
     parser.add_argument('--load_dir', default='piqateam/piqa-nfs/76')
     parser.add_argument('--data_dir', default='data/docs_100_5000')
     parser.add_argument('--model', default='large')
     parser.add_argument('--filter_threshold', default=-2, type=float)
     parser.add_argument('--num_gpus', default=30, type=int)
-    parser.add_argument('--start', default=0, type=int)
-    parser.add_argument('--end', default=5076, type=int)
     return parser.parse_args()
 
 

@@ -599,13 +599,12 @@ def main():
             if os.path.exists(args.index_file):
                 with h5py.File(args.index_file, 'r') as f:
                     dids = list(map(int, f.keys()))
-                start = int(max(dids)/1000)
+                start = int(max(dids) / 1000)
                 print('%s exists; starting from %d' % (args.index_file, start))
 
             names = [str(i).zfill(4) for i in range(start, end)]
             predict_files = [os.path.join(dirname, name) for name in names]
             offsets = [int(each) * 1000 for each in names]
-
 
         for offset, predict_file in zip(offsets, predict_files):
             try:
@@ -653,7 +652,7 @@ def main():
                         input_mask = input_mask.to(device)
                         with torch.no_grad():
                             batch_start, batch_end, batch_span_logits, bs, be, bsp = model(input_ids,
-                                                                                      input_mask)
+                                                                                           input_mask)
                         for i, example_index in enumerate(example_indices):
                             start = batch_start[i].detach().cpu().numpy().astype(args.dtype)
                             end = batch_end[i].detach().cpu().numpy().astype(args.dtype)

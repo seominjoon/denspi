@@ -267,7 +267,11 @@ def write_hdf5(all_examples, all_features, all_results,
                         if not split_by_para:
                             print('%s exists; replacing' % did)
                             del f[did]
-                    dg = f.create_group(did)
+                            dg = f.create_group(did)
+                        else:
+                            dg = f[did]
+                    else:
+                        dg = f.create_group(did)
                     if split_by_para:
                         pid = str(metadata['pid'])
                         if pid in dg:
