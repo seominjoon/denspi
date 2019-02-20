@@ -128,7 +128,7 @@ class PhraseModel(nn.Module):
         all_logits = start_logits.unsqueeze(2) + end_logits.unsqueeze(1) + cross_logits # [B, L, L]
         # exp_mask = -1e9 * (1.0 - (context_mask.unsqueeze(1) & context_mask.unsqueeze(-1)).float())
         if self.sparse_layer is not None:
-            sparse_logits = get_sparse_logits(sparse, query_sparse, context_mask, query_mask, context_ids)
+            sparse_logits = get_sparse_logits(sparse, query_sparse, context_ids, query_ids, context_mask)
             all_logits += sparse_logits.unsqueeze(1)
         # all_logits = all_logits + exp_mask
 
