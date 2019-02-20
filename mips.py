@@ -187,6 +187,7 @@ class MIPS(object):
             query_start = np.concatenate([np.zeros([query_start.shape[0], 1]).astype(np.float32), query_start], axis=1)
             self.start_index.nprobe = nprobe
             start_scores, I = self.start_index.search(query_start, top_k)
+
             doc_idxs = self.idx2doc_id[I]
             start_idxs = self.idx2word_id[I]
             if self.para:
@@ -267,7 +268,6 @@ class MIPS(object):
         query_start = query[:, :bs]
         start_scores, doc_idxs, para_idxs, start_idxs = self.search_start(query_start, top_k=top_k, nprobe=nprobe,
                                                                           doc_idxs=doc_idxs, para_idxs=para_idxs)
-
         # reshape
         query = np.reshape(np.tile(np.expand_dims(query, 1), [1, top_k, 1]), [-1, query.shape[1]])
         idxs = np.reshape(np.tile(np.expand_dims(np.arange(num_queries), 1), [1, top_k]), [-1])
