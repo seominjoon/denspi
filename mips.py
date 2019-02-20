@@ -130,7 +130,7 @@ def add_to_index(dump_path, trained_index_path, target_index_path, idx2id_path, 
             start = np.concatenate([consts, start], axis=1)
             start_index.add_with_ids(start, np.arange(offset, offset + start.shape[0]))
             idx2doc_id.extend([int(doc_idx)] * num_vecs)
-            idx2word_id.append(list(range(num_vecs)))
+            idx2word_id.extend(range(num_vecs))
             offset += start.shape[0]
 
     idx2doc_id = np.array(idx2doc_id, dtype=np.int32)
