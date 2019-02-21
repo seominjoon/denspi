@@ -289,14 +289,13 @@ class MIPS(object):
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('dump_dir')
-    parser.add_argument('out_dir')
-    parser.add_argument('stage', default='all')
+    parser.add_argument('stage')
+    parser.add_argument('--index_name', default='default_index')
     parser.add_argument('--quantizer_path', default='quantizer.faiss')
     parser.add_argument('--max_norm_path', default='max_norm.json')
     parser.add_argument('--trained_index_path', default='trained.faiss')
-    parser.add_argument('--add_dump_path', default='trained.faiss')
-    parser.add_argument('--target_index_path', default='target.faiss')
-    parser.add_argument('--idx2id_path', default='idx2id.hdf5')
+    parser.add_argument('--dump_path', default='dump.hdf5')
+    parser.add_argument('--merged_index_path', default='index.faiss')
     parser.add_argument('--num_clusters', type=int, default=4096)
     parser.add_argument('--hnsw', default=False, action='store_true')
     parser.add_argument('--max_norm', default=None, type=float)
@@ -313,13 +312,21 @@ def main():
     else:
         dump_paths = [args.dump_dir]
         add_dump_path = args.dump_dir
+
+    args.out_dir = os.path.join(args.dump_dir, args.index_name)
     if not os.path.exists(args.out_dir):
         os.makedirs(args.out_dir)
+
     quantizer_path = os.path.join(args.out_dir, args.quantizer_path)
     max_norm_path = os.path.join(args.out_dir, args.max_norm_path)
     trained_index_path = os.path.join(args.out_dir, args.trained_index_path)
-    target_index_path = os.path.join(args.out_dir, args.target_index_path)
-    idx2id_path = os.path.join(args.out_dir, args.idx2id_path)
+
+    index_dir = os.path.join(args.out_dir, 'index')
+    if not os.path.exists(index_dir):
+        os.makedirs(index_dir)
+    target_index_path = os.path.join(index_dir, '%s.faiss' % os.path.basename(args.dump_path))
+    idx2id_path = os.path.join(index_dir, '%s.hdf5' % os.path.basename(args.dump_path))
+    merged_index_path = os.path.join(args.out_dir, args.merged_index_path)
 
     if args.stage == 'coarse':
         data, max_norm = sample_data(dump_paths, max_norm=args.max_norm)
