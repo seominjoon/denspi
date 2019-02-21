@@ -51,28 +51,29 @@ def get_sparse_logits(a, b, a_id, b_id, a_mask, ngrams=['1', '2', '3']):
         logits += (a.matmul(mxq.float()).matmul(b.unsqueeze(2))).squeeze(2)
 
     if '2' in ngrams:
-        bi_ids = torch.cat([a_id[:,:-1].unsqueeze(2), a_id[:,1:].unsqueeze(2)], 2)
-        bi_qids = torch.cat([b_id[:,:-1].unsqueeze(2), b_id[:,1:].unsqueeze(2)], 2)
+        bi_ids = torch.cat([a_id[:, :-1].unsqueeze(2), a_id[:, 1:].unsqueeze(2)], 2)
+        bi_qids = torch.cat([b_id[:, :-1].unsqueeze(2), b_id[:, 1:].unsqueeze(2)], 2)
         bi_mxq = (bi_ids.unsqueeze(2) == bi_qids.unsqueeze(1)) & (
-            a_mask[:,1:].unsqueeze(2).unsqueeze(3) > 0)
+            a_mask[:, 1:].unsqueeze(2).unsqueeze(3) > 0)
         bi_mxq = bi_mxq.sum(-1) == 2
-        logits += (a[:,:,:-1].matmul(bi_mxq.float()).matmul(b[:,:-1].unsqueeze(2))).squeeze(2)
+        logits += (a[:, :, :-1].matmul(bi_mxq.float()).matmul(b[:, :-1].unsqueeze(2))).squeeze(2)
 
     if '3' in ngrams:
         tri_ids = torch.cat(
-            [a_id[:,:-2].unsqueeze(2), a_id[:,1:-1].unsqueeze(2),
-             a_id[:,2:].unsqueeze(2)], 2
+            [a_id[:, :-2].unsqueeze(2), a_id[:, 1:-1].unsqueeze(2),
+             a_id[:, 2:].unsqueeze(2)], 2
         )
         tri_qids = torch.cat(
-            [b_id[:,:-2].unsqueeze(2), b_id[:,1:-1].unsqueeze(2),
-             b_id[:,2:].unsqueeze(2)], 2
+            [b_id[:, :-2].unsqueeze(2), b_id[:, 1:-1].unsqueeze(2),
+             b_id[:, 2:].unsqueeze(2)], 2
         )
         tri_mxq = (tri_ids.unsqueeze(2) == tri_qids.unsqueeze(1)) & (
-            a_mask[:,2:].unsqueeze(2).unsqueeze(3) > 0)
+            a_mask[:, 2:].unsqueeze(2).unsqueeze(3) > 0)
         tri_mxq = tri_mxq.sum(-1) == 3
-        logits += (a[:,:,:-2].matmul(tri_mxq.float()).matmul(b[:,:-2].unsqueeze(2))).squeeze(2)
+        logits += (a[:, :, :-2].matmul(tri_mxq.float()).matmul(b[:, :-2].unsqueeze(2))).squeeze(2)
 
     return logits
+
 
 class PhraseModel(nn.Module):
     def __init__(self, encoder, sparse_encoder, phrase_size, metric):
@@ -98,8 +99,8 @@ class PhraseModel(nn.Module):
             if self.sparse_encoder is not None:
                 sparse = self.sparse_encoder(
                     context_layer,
-                    (1-context_mask).float() * -1e9
-                )[:,:,0,:]
+                    (1 - context_mask).float() * -1e9
+                )[:, :, 0, :]
 
             # embed context
             if query_ids is None:
@@ -113,8 +114,8 @@ class PhraseModel(nn.Module):
             if self.sparse_encoder is not None:
                 query_sparse = self.sparse_encoder(
                     question_layer,
-                    (1-query_mask).float() * -1e9
-                )[:,0,0,:]
+                    (1 - query_mask).float() * -1e9
+                )[:, 0, 0, :]
 
             # embed question
             if context_ids is None:
@@ -125,7 +126,7 @@ class PhraseModel(nn.Module):
         start_logits = get_logits(start, query_start, self.metric)
         end_logits = get_logits(end, query_end, self.metric)
         cross_logits = get_logits(span_logits.unsqueeze(-1), q_span_logits.unsqueeze(-1), self.metric)
-        all_logits = start_logits.unsqueeze(2) + end_logits.unsqueeze(1) + cross_logits # [B, L, L]
+        all_logits = start_logits.unsqueeze(2) + end_logits.unsqueeze(1) + cross_logits  # [B, L, L]
         # exp_mask = -1e9 * (1.0 - (context_mask.unsqueeze(1) & context_mask.unsqueeze(-1)).float())
         if self.sparse_encoder is not None:
             sparse_logits = get_sparse_logits(sparse, query_sparse, context_mask, query_mask, context_ids)
