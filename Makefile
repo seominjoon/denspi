@@ -174,7 +174,7 @@ train_filter_sp:
 	--do_predict \
 	--do_eval \
 	--num_train_epochs 1 \
-	--load_dir KR18816/squad_bert_2/56 \
+	--load_dir piqateam/piqa-nfs/122 \
 	--iteration 3"
 
 eval_old:
@@ -217,10 +217,10 @@ dump_phrases_sp:
 	--do_index \
 	--output_dir index/squad/sparse \
 	--index_file phrase_sp.hdf5 \
-	--load_dir piqateam/piqa-nfs/96 \
+	--load_dir piqateam/piqa-nfs/122 \
 	--phrase_size 961 \
 	--split_by_para \
-	--iteration 1 \
+	--iteration 3 \
 	--use_sparse \
 	--parallel"
 
@@ -230,10 +230,10 @@ dump_questions_sp:
 	--do_embed_question \
 	--output_dir index/squad/sparse \
 	--question_emb_file question_sp.hdf5 \
-	--load_dir piqateam/piqa-nfs/96 \
+	--load_dir piqateam/piqa-nfs/122 \
 	--phrase_size 961 \
 	--split_by_para \
-	--iteration 1 \
+	--iteration 3 \
 	--use_sparse \
 	--parallel"
 

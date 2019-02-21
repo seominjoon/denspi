@@ -42,15 +42,17 @@ class MIPSSparse(MIPS):
             sparse = [np.stack([group['sparse'][each_end_idx,:] 
                        for each_end_idx in each_end_idxs])
                        for group, each_end_idxs in zip(groups, end_idxs)] # [Q, L, P]
-            sparse = [dequant(groups[0], sp) for sp in sparse]
+            # sparse = [dequant(groups[0], sp) for sp in sparse]
+            # print(np.max(q_sparse), np.min(q_sparse))
             input_ids = [group['input_ids'][:] for group in groups]
             common_mask = [(np.expand_dims(ip, 1) == np.expand_dims(q_ip, 0)).astype(np.int) for q_ip, ip in zip(q_input_ids, input_ids)]
             sparse_val = [np.expand_dims(sp, 2) * np.expand_dims(np.expand_dims(q_sp, 0), 1) * np.expand_dims(m, 0) for q_sp, sp, m in zip(q_sparse, sparse, common_mask)]
-            sparse_scores = np.stack([np.sum(np.sum(sp, 1), 1) for sp in sparse_val])
+            sparse_scores = np.stack([np.sum(sp, (1,2)) for sp in sparse_val])
 
         end_scores = np.sum(np.expand_dims(query_end, 1) * end, 2)  # [Q, L]
         span_scores = query_span_logit * span  # [Q, L]
-        scores = np.expand_dims(start_scores, 1) + end_scores + span_scores + sparse_scores + end_mask  # [Q, L]
+        scores = np.expand_dims(start_scores, 1) + end_scores + span_scores + end_mask  # [Q, L]
+        scores += sparse_scores * 1e+1
         pred_end_idxs = np.stack([each[idx] for each, idx in zip(end_idxs, np.argmax(scores, 1))], 0)  # [Q]
         max_scores = np.max(scores, 1)
 

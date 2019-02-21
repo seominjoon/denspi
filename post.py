@@ -168,7 +168,7 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
         sparse_features = [result.sparse[1:len(feature.tokens)-1,1:len(feature.tokens)-1]
             for feature, result in zip(features, results)]
         map_size = sum([k.shape[0] for k in sparse_features])
-        sparse_map = np.zeros((map_size, map_size))
+        sparse_map = np.zeros((map_size, map_size), dtype=np.float32)
         curr_size = 0
         for sparse_feature in sparse_features:
             sparse_map[curr_size:curr_size+sparse_feature.shape[0],
@@ -248,7 +248,7 @@ def filter_metadata(metadata, threshold):
 
 
 def compress_metadata(metadata, offset, scale):
-    for key in ['start', 'end', 'sparse']:
+    for key in ['start', 'end']:
         if key in metadata:
             metadata[key] = float_to_int8(metadata[key], offset, scale)
     return metadata
