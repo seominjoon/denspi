@@ -211,13 +211,13 @@ train_qnad_961:
 	--do_eval \
 	--num_train_epochs 100"
 
-train_base_qnad_961:
+train_base_qnad_705:
 	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 24G --nfs-output -a " \
 	--fs nfs \
 	--bert_model_option 'base_uncased' \
 	--train_file train-v1.1-qnad.json \
 	--train_batch_size 18 \
-	--phrase_size 961 \
+	--phrase_size 705 \
 	--do_train \
 	--do_predict \
 	--do_eval \

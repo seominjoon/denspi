@@ -16,9 +16,10 @@ from mips import MIPS
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('phrase_dump_dir')
-    parser.add_argument('index_dir')
-    parser.add_argument('--start_index_path', default='target.faiss')
+    parser.add_argument('dump_dir')
+    parser.add_argument('--dump_path', default='phrase')
+    parser.add_argument('--index_name', default='default_index')
+    parser.add_argument('--index_path', default='index.faiss')
     parser.add_argument('--idx2id_path', default='idx2id.hdf5')
     parser.add_argument('--port', default=10001, type=int)
     parser.add_argument('--api_port', default=9009, type=int)
@@ -33,10 +34,12 @@ def get_args():
 def main():
     args = get_args()
 
-    start_index_path = os.path.join(args.index_dir, args.start_index_path)
-    idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
+    dump_dir = os.path.join(args.dump_dir, args.dump_path)
+    index_dir = os.path.join(args.dump_dir, args.index_name)
+    index_path = os.path.join(index_dir, args.index_path)
+    idx2id_path = os.path.join(index_dir, args.idx2id_path)
 
-    mips = MIPS(args.phrase_dump_dir, start_index_path, idx2id_path, args.max_answer_length, para=args.para)
+    mips = MIPS(dump_dir, index_path, idx2id_path, args.max_answer_length, para=args.para)
 
     app = Flask(__name__, static_url_path='/static')
 

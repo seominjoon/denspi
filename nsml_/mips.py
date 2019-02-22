@@ -166,6 +166,7 @@ class MIPS(object):
         self.max_answer_length = max_answer_length
         self.para = para
 
+        print('reading %s' % start_index_path)
         self.start_index = faiss.read_index(start_index_path)
         with h5py.File(idx2id_path, 'r') as f:
             self.idx2doc_id = f['doc'][:]
@@ -333,8 +334,9 @@ def main():
     index_dir = os.path.join(args.out_dir, 'index')
     if not os.path.exists(index_dir):
         os.makedirs(index_dir)
-    target_index_path = os.path.join(index_dir, '%s.faiss' % os.path.basename(args.dump_path))
-    idx2id_path = os.path.join(index_dir, '%s.hdf5' % os.path.basename(args.dump_path))
+    dump_name = os.path.splitext(os.path.basename(args.dump_path))[0]
+    target_index_path = os.path.join(index_dir, '%s.faiss' % dump_name)
+    idx2id_path = os.path.join(index_dir, '%s.hdf5' % dump_name)
     merged_index_path = os.path.join(args.out_dir, args.merged_index_path)
 
     if args.stage == 'coarse':
