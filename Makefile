@@ -1,6 +1,7 @@
 dl:
 	python run_piqa.py \
 	--bert_model_option 'base_uncased' \
+	--train_file train-v1.1-qnad.json \
 	--do_train \
 	--do_train_filter \
 	--do_predict \
@@ -199,8 +200,31 @@ train_qna_961:
 	--do_predict \
 	--do_eval"
 
+train_qnad_961:
+	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 24G --nfs-output -a " \
+	--fs nfs \
+	--train_file train-v1.1-qnad.json \
+	--train_batch_size 18 \
+	--phrase_size 961 \
+	--do_train \
+	--do_predict \
+	--do_eval \
+	--num_train_epochs 100"
+
+train_base_qnad_961:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 24G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--train_file train-v1.1-qnad.json \
+	--train_batch_size 18 \
+	--phrase_size 961 \
+	--do_train \
+	--do_predict \
+	--do_eval \
+	--num_train_epochs 10"
+
 dump_na_961:
-	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 24G --nfs-output -a " \
 	--fs nfs \
 	--do_embed_question \
 	--do_index \
