@@ -17,7 +17,10 @@ def add_dummy(args):
         sampled_para = random.choice(sampled_article['paragraphs'])
         sampled_qa = random.choice(sampled_para['qas'])
         if len(sampled_qa['answers']) == 0:
-            context = ""
+            point = random.choice(range(len(sampled_para['context'])))
+            left_offset = random.choice(range(args.min_dist, args.max_dist))
+            right_offset = random.choice(range(args.min_dist, args.max_dist))
+            context = sampled_para['context'][max(0, point - left_offset):min(len(sampled_para['context']), point + right_offset)]
         elif len(sampled_qa['answers']) == 1:
             answer_start = sampled_qa['answers'][0]['answer_start']
             answer_end = answer_start + len(sampled_qa['answers'][0]['text'])
@@ -30,12 +33,12 @@ def add_dummy(args):
             sampled_qa = {'question': sampled_qa['question'], 'id': sampled_qa['id'],
                           'answers': [{'answer_start': answer_start,
                                        'text': sampled_qa['answers'][0]['text']}]}
+
+            assert context[sampled_qa['answers'][0]['answer_start']:].startswith(sampled_qa['answers'][0]['text'])
         else:
             raise Exception()
         new_para = {'context': context, 'qas': [sampled_qa]}
 
-        if context != "":
-            assert context[sampled_qa['answers'][0]['answer_start']:].startswith(sampled_qa['answers'][0]['text'])
 
         article['paragraphs'].append(new_para)
 
