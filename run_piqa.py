@@ -101,6 +101,7 @@ def main():
     parser.add_argument('--eval_script', default='eval/evaluate-v1.1.py', type=str)
 
     # Do's
+    parser.add_argument("--do_load", default=False, action='store_true', help='Do load. If eval, do load automatically')
     parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
     parser.add_argument("--do_train_filter", default=False, action='store_true', help='Train filter or not.')
     parser.add_argument("--do_predict", default=False, action='store_true', help="Whether to run eval on the dev set.")
@@ -250,6 +251,9 @@ def main():
     else:
         raise ValueError(args.fs)
 
+    if not args.do_train:
+        args.do_load = True
+
     # Configure paths
     args.train_file = os.path.join(args.data_dir, args.train_file)
     args.predict_file = os.path.join(args.data_dir, args.predict_file)
@@ -311,7 +315,7 @@ def main():
 
     print('Number of model parameters:', sum(p.numel() for p in model.parameters()))
 
-    if args.do_train and args.init_checkpoint is not None:
+    if not args.do_load and args.init_checkpoint is not None:
         state_dict = torch.load(args.init_checkpoint, map_location='cpu')
         # If below: for Korean BERT compatibility
         if next(iter(state_dict)).startswith('bert.'):
@@ -330,6 +334,10 @@ def main():
                                                           output_device=args.local_rank)
     elif args.parallel or n_gpu > 1:
         model = torch.nn.DataParallel(model)
+
+    if args.do_load:
+        bind_model(processor, model)
+        processor.load(args.iteration, session=args.load_dir)
 
     if args.do_train:
         train_examples = read_squad_examples(
@@ -412,10 +420,6 @@ def main():
                     global_step += 1
 
             processor.save(epoch + 1)
-    else:
-        assert args.load_dir is not None, 'If you are not training, you need to provide --load_dir'
-        bind_model(processor, model)
-        processor.load(args.iteration, session=args.load_dir)
 
     if args.do_train_filter:
         train_examples = read_squad_examples(

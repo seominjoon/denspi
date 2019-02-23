@@ -1,7 +1,9 @@
 import argparse
+import json
 import os
 import random
 
+import faiss
 import h5py
 import numpy as np
 from tqdm import tqdm
@@ -36,7 +38,7 @@ def sample_data(dump_paths, para=False, doc_sample_ratio=0.1, vec_sample_ratio=0
 
     norms = np.linalg.norm(out, axis=1, keepdims=True)
     if max_norm is None:
-        max_norm = np.max(norms)
+        max_norm = 1.3 * np.max(norms)
     consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
     out = np.concatenate([consts, out], axis=1)
     return out, max_norm
@@ -150,13 +152,19 @@ def get_args():
 
 def main():
     args = get_args()
-    from nsml import NSML_NFS_OUTPUT
-    args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
+
+    # from nsml import NSML_NFS_OUTPUT
+    # args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
 
     if os.path.isdir(args.dump_dir):
-        dump_names = os.listdir(args.dump_dir)
-        dump_paths = [os.path.join(args.dump_dir, 'phrase', name) for name in dump_names]
-        dump_path = os.path.join(args.dump_dir, 'phrase', args.dump_path)
+        phrase_path = os.path.join(args.dump_dir, 'phrase.hdf5')
+        if os.path.exists(phrase_path):
+            dump_paths = [phrase_path]
+            dump_path = phrase_path
+        else:
+            dump_names = os.listdir(args.dump_dir)
+            dump_paths = [os.path.join(args.dump_dir, 'phrase', name) for name in dump_names]
+            dump_path = os.path.join(args.dump_dir, 'phrase', args.dump_path)
     else:
         dump_paths = [args.dump_dir]
         dump_path = args.dump_dir
@@ -178,7 +186,7 @@ def main():
     merged_index_path = os.path.join(args.out_dir, args.merged_index_path)
 
     if args.stage == 'coarse':
-        data, max_norm = sample_data(dump_paths, max_norm=args.max_norm)
+        data, max_norm = sample_data(dump_paths, max_norm=args.max_norm, para=args.para)
         with open(max_norm_path, 'w') as fp:
             json.dump(max_norm, fp)
         train_coarse_quantizer(data, quantizer_path, args.num_clusters)
@@ -186,7 +194,7 @@ def main():
     if args.stage == 'fine':
         with open(max_norm_path, 'r') as fp:
             max_norm = json.load(fp)
-        data, _ = sample_data(dump_paths, max_norm=max_norm)
+        data, _ = sample_data(dump_paths, max_norm=max_norm, para=args.para)
         train_index(data, quantizer_path, trained_index_path)
 
     if args.stage == 'add':
