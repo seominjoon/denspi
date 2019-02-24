@@ -15,12 +15,12 @@ def get_args():
     parser.add_argument('data_path')
     parser.add_argument('dir')
     parser.add_argument('--phrase_dump_dir', default='phrase.hdf5')
-    parser.add_argument('--index_path', default='index.faiss')
+    parser.add_argument('--index_path', default='default_index/index.faiss')
     parser.add_argument('--quantizer_path', default='quantizer.faiss')
     parser.add_argument('--question_dump_path', default='question.hdf5')
     parser.add_argument('--od_out_path', default='pred_od.json')
     parser.add_argument('--cd_out_path', default="pred_cd.json")
-    parser.add_argument('--idx2id_path', default='idx2id.hdf5')
+    parser.add_argument('--idx2id_path', default='default_index/idx2id.hdf5')
     parser.add_argument('--max_norm', default=None, type=float)
     parser.add_argument('--num_clusters', default=524288, type=int)
     parser.add_argument('--max_answer_length', default=30, type=int)
@@ -43,7 +43,7 @@ def main():
     args.question_dump_path = os.path.join(args.dir, args.question_dump_path)
     args.od_out_path = os.path.join(args.dir, args.od_out_path)
     args.cd_out_path = os.path.join(args.dir, args.cd_out_path)
-    args.idx2id_path = os.path.join(args.dir, args.cd_out_path)
+    args.idx2id_path = os.path.join(args.dir, args.idx2id_path)
 
     with open(args.data_path, 'r') as fp:
         test_data = json.load(fp)

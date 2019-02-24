@@ -24,3 +24,31 @@ Get help from `run_eval.py -h`
 
 ## 6. Run Demo
 Get help from `run_demo.py -h`
+
+
+## Dump Directory
+```
+model-num_data-name
+|-- phrase
+    |-- 0-500.hdf5
+    ...
+    `-- 5000-5049.hdf5
+|-- question.hdf5
+|-- index_0
+    |-- quantizer.faiss
+    |-- index
+        |-- 0-500.faiss
+        ...
+        `-- 5000-5049.faiss
+    |-- index.faiss
+    `-- misc_file
+|-- index_1
+    |-- quantizer.faiss
+    |-- index
+        |-- 0-500.faiss
+        ...
+        `-- 5000-5049.faiss
+    |-- index.faiss
+    `-- misc_file
+...
+```
