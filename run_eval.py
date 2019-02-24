@@ -63,6 +63,8 @@ def main():
             input_ids = question_index[id_ + '_input_ids'][:]
             sparses.append(sparse)
             input_idss.append(input_ids)
+            # print(sparse)
+            # print(qid2text[id_])
 
     query = np.stack(vecs, 0)
     if args.draft:

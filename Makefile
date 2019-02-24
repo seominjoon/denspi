@@ -1,8 +1,6 @@
 dl:
 	python run_piqa.py \
 	--bert_model_option 'base_uncased' \
-	--do_train \
-	--do_train_filter \
 	--do_predict \
 	--do_eval \
 	--do_embed_question \
@@ -17,6 +15,9 @@ dl:
 	--compression_scale 20.0 \
 	--phrase_size 127 \
 	--split_by_para \
+	--do_train_sparse \
+	--load_dir piqateam_piqa-nfs_76 \
+	--iteration 1 \
 	--use_sparse
 
 train_base_d:
@@ -150,6 +151,19 @@ train_sp:
 	--do_predict \
 	--do_eval"
 
+train_sparse:
+	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 24G --nfs-output -a " \
+	--fs nfs \
+	--train_file train-v1.1-long.json \
+	--train_batch_size 18 \
+	--phrase_size 961 \
+	--use_sparse \
+	--do_train_sparse \
+	--do_predict \
+	--do_eval \
+	--load_dir piqateam/piqa-nfs/76 \
+	--iteration 1"
+
 train_filter:
 	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
@@ -217,7 +231,7 @@ dump_phrases_sp:
 	--do_index \
 	--output_dir index/squad/sparse \
 	--index_file phrase_sp.hdf5 \
-	--load_dir piqateam/piqa-nfs/122 \
+	--load_dir piqateam/piqa-nfs/186 \
 	--phrase_size 961 \
 	--split_by_para \
 	--iteration 3 \
@@ -230,7 +244,7 @@ dump_questions_sp:
 	--do_embed_question \
 	--output_dir index/squad/sparse \
 	--question_emb_file question_sp.hdf5 \
-	--load_dir piqateam/piqa-nfs/122 \
+	--load_dir piqateam/piqa-nfs/186 \
 	--phrase_size 961 \
 	--split_by_para \
 	--iteration 3 \

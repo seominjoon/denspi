@@ -129,7 +129,7 @@ class PhraseModel(nn.Module):
         # exp_mask = -1e9 * (1.0 - (context_mask.unsqueeze(1) & context_mask.unsqueeze(-1)).float())
         if self.sparse_layer is not None:
             sparse_logits = get_sparse_logits(sparse, query_sparse, context_ids, query_ids, context_mask)
-            all_logits += sparse_logits.unsqueeze(1)
+            all_logits += sparse_logits.unsqueeze(2)
         # all_logits = all_logits + exp_mask
 
         if start_positions is not None and end_positions is not None:
@@ -161,6 +161,10 @@ class PhraseModel(nn.Module):
                                cel_1d(all_logits.mean(1), end_positions))
 
             loss = true_loss + help_loss
+
+            # Apply only sparse_logits
+            # if self.sparse_layer is not None:
+            #     loss = cel_1d(sparse_logits, start_positions)
 
             filter_loss = self.filter(start, end, start_positions=start_positions, end_positions=end_positions)
 
