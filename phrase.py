@@ -92,6 +92,7 @@ class PhraseModel(nn.Module):
         if context_ids is not None:
             context_layer = self.encoder(context_ids, context_mask)
             start, end, span_logits = encode_phrase(context_layer, self.phrase_size)
+            # print(start.min(), start.max(), end.min(), end.max())
             start_filter_logits, end_filter_logits = self.filter(start, end)
             sparse = None
             if self.sparse_layer is not None:
@@ -123,7 +124,6 @@ class PhraseModel(nn.Module):
 
         start_logits = get_logits(start, query_start, self.metric)
         end_logits = get_logits(end, query_end, self.metric)
-        # print(start.min(), start.max(), end.min(), end.max())
         cross_logits = get_logits(span_logits.unsqueeze(-1), q_span_logits.unsqueeze(-1), self.metric)
         all_logits = start_logits.unsqueeze(2) + end_logits.unsqueeze(1) + cross_logits # [B, L, L]
         # exp_mask = -1e9 * (1.0 - (context_mask.unsqueeze(1) & context_mask.unsqueeze(-1)).float())

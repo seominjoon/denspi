@@ -1,5 +1,7 @@
+import argparse
 import json
 import os
+import random
 from collections import namedtuple
 from time import time
 
@@ -30,72 +32,151 @@ def overlap(t1, t2, a1, a2, b1, b2):
     return True
 
 
-def id2idxs(id_, para=False):
+def sample_data(dump_paths, para=False, doc_sample_ratio=0.1, vec_sample_ratio=0.1, seed=29, max_norm=None):
+    vecs = []
+    random.seed(seed)
+    np.random.seed(seed)
+    dumps = [h5py.File(dump_path, 'r') for dump_path in dump_paths]
+    for i, f in enumerate(tqdm(dumps)):
+        doc_ids = f.keys()
+        sampled_doc_ids = random.sample(doc_ids, int(doc_sample_ratio * len(doc_ids)))
+        for doc_id in tqdm(sampled_doc_ids, desc='sampling from %d' % i):
+            doc_group = f[doc_id]
+            if para:
+                groups = doc_group.values()
+            else:
+                groups = [doc_group]
+            for group in groups:
+                num_vecs, d = group['start'].shape
+                sampled_vec_idxs = np.random.choice(num_vecs, int(vec_sample_ratio * num_vecs))
+                cur_vecs = int8_to_float(group['start'][:],
+                                         group.attrs['offset'], group.attrs['scale'])[sampled_vec_idxs]
+                vecs.append(cur_vecs)
+        break
+    out = np.concatenate(vecs, 0)
+    for dump in dumps:
+        dump.close()
+
+    norms = np.linalg.norm(out, axis=1, keepdims=True)
+    if max_norm is None:
+        max_norm = np.max(norms)
+    consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
+    out = np.concatenate([consts, out], axis=1)
+    return out, max_norm
+
+
+def train_coarse_quantizer(data, quantizer_path, num_clusters, hnsw=False, niter=10):
+    d = data.shape[1]
+
+    res = faiss.StandardGpuResources()
+    index_flat = faiss.IndexFlatL2(d)
+    # make it into a gpu index
+    gpu_index_flat = faiss.index_cpu_to_gpu(res, 0, index_flat)
+    clus = faiss.Clustering(d, num_clusters)
+    clus.verbose = True
+    clus.niter = niter
+    clus.train(data, gpu_index_flat)
+    centroids = faiss.vector_float_to_array(clus.centroids)
+    centroids = centroids.reshape(num_clusters, d)
+
+    if hnsw:
+        quantizer = faiss.IndexHNSWFlat(d, 32)
+        quantizer.hnsw.efSearch = 128
+        quantizer.train(centroids)
+        quantizer.add(centroids)
+    else:
+        quantizer = faiss.IndexFlatL2(d)
+        quantizer.add(centroids)
+
+    faiss.write_index(quantizer, quantizer_path)
+
+
+def train_index(data, quantizer_path, trained_index_path):
+    quantizer = faiss.read_index(quantizer_path)
+    trained_index = faiss.IndexIVFScalarQuantizer(quantizer, quantizer.d, quantizer.ntotal, faiss.METRIC_L2)
+    trained_index.train(data)
+    faiss.write_index(trained_index, trained_index_path)
+
+
+def add_to_index(dump_path, trained_index_path, target_index_path, idx2id_path, max_norm, para=False):
+    idx2doc_id = []
+    idx2para_id = []
+    idx2word_id = []
+    phrase_dump = h5py.File(dump_path, 'r')
+    start_index = faiss.read_index(trained_index_path)
+
+    offset = 0
     if para:
-        return (id_ / 1e7).astype(np.int64), ((id_ % int(1e7)) / 1e4).astype(np.int64), id_ % int(1e4)
-    return (id_ / 1e6).astype(np.int64), id_ % int(1e6)
+        for doc_idx, doc_group in tqdm(phrase_dump.items(), desc='faiss indexing'):
+            for para_idx, group in doc_group.items():
+                num_vecs = group['start'].shape[0]
+                start = int8_to_float(group['start'][:], group.attrs['offset'], group.attrs['scale'])
+                norms = np.linalg.norm(start, axis=1, keepdims=True)
+                consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
+                start = np.concatenate([consts, start], axis=1)
+                # self.start_index.add_with_ids(start, np.arange(offset, offset + start.shape[0]))
+                start_index.add(start)
+                idx2doc_id.extend([int(doc_idx)] * num_vecs)
+                idx2para_id.extend([int(para_idx)] * num_vecs)
+                idx2word_id.extend(list(range(num_vecs)))
+                offset += start.shape[0]
+    else:
+        for doc_idx, doc_group in tqdm(phrase_dump.items(), desc='faiss indexing'):
+            num_vecs = doc_group['start'].shape[0]
+            start = int8_to_float(doc_group['start'][:], doc_group.attrs['offset'],
+                                  doc_group.attrs['scale'])
+            norms = np.linalg.norm(start, axis=1, keepdims=True)
+            consts = np.sqrt(max_norm ** 2 - norms ** 2)
+            start = np.concatenate([consts, start], axis=1)
+            start_index.add_with_ids(start, np.arange(offset, offset + start.shape[0]))
+            idx2doc_id.extend([int(doc_idx)] * num_vecs)
+            idx2word_id.extend(range(num_vecs))
+            offset += start.shape[0]
+
+    idx2doc_id = np.array(idx2doc_id, dtype=np.int32)
+    idx2para_id = np.array(idx2para_id, dtype=np.int32)
+    idx2word_id = np.array(idx2word_id, dtype=np.int32)
+
+    with h5py.File(idx2id_path, 'w') as f:
+        f.create_dataset('doc', data=idx2doc_id)
+        f.create_dataset('para', data=idx2para_id)
+        f.create_dataset('word', data=idx2word_id)
+    faiss.write_index(start_index, target_index_path)
 
 
-def idxs2id(doc_idx, first_idx, second_idx=None):
-    if second_idx is None:
-        assert np.all(first_idx < 1e6)
-        return doc_idx * int(1e6) + first_idx
-    assert np.all(second_idx < 1e4)
-    assert np.all(first_idx < 1e3)
-    return doc_idx * int(1e7) + first_idx * int(1e4) + second_idx
+def merge_indexes(index_dir, idx2id_dir, target_index_path, target_idx2id_path):
+    pass
 
 
 class MIPS(object):
-    def __init__(self, phrase_index_path, start_index_path, max_answer_length,
-                 para=False, index_factory='IVF4096,SQ8', load_to_memory=False):
-        if load_to_memory:
-            self.phrase_index = h5py.File(phrase_index_path, 'r', driver="core")
+    def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para=False):
+        if os.path.isdir(phrase_dump_dir):
+            self.phrase_dump_paths = [os.path.join(phrase_dump_dir, name) for name in os.listdir(phrase_dump_dir)]
+            dump_names = [os.path.splitext(os.path.basename(path))[0] for path in self.phrase_dump_paths]
+            self.dump_ranges = [list(map(int, name.split('-'))) for name in dump_names]
         else:
-            self.phrase_index = h5py.File(phrase_index_path, 'r')
+            self.phrase_dump_paths = [phrase_dump_dir]
+        self.phrase_dumps = [h5py.File(path, 'r') for path in self.phrase_dump_paths]
         self.max_answer_length = max_answer_length
         self.para = para
-        if os.path.exists(start_index_path):
-            self.start_index = faiss.read_index(start_index_path)
-        else:
-            max_norm = 0
-            if para:
-                for key, doc_group in tqdm(self.phrase_index.items(), desc='find max norm'):
-                    for _, group in doc_group.items():
-                        max_norm = max(max_norm, np.linalg.norm(group['start'][:], axis=1).max())
-            else:
-                for key, doc_group in tqdm(self.phrase_index.items(), desc='find max norm'):
-                    max_norm = max(max_norm, np.linalg.norm(doc_group['start'][:], axis=1).max())
-            print('max norm:', max_norm)
 
-            ids = []
-            starts = []
-            if para:
-                for doc_idx, doc_group in tqdm(self.phrase_index.items(), desc='faiss indexing'):
-                    for para_idx, group in doc_group.items():
-                        cur_ids = idxs2id(int(doc_idx), int(para_idx), np.arange(group['start'].shape[0]))
-                        start = int8_to_float(group['start'][:], group.attrs['offset'], group.attrs['scale'])
-                        norms = np.linalg.norm(start, axis=1, keepdims=True)
-                        consts = np.sqrt(max_norm ** 2 - norms ** 2)
-                        start = np.concatenate([consts, start], axis=1)
-                        starts.append(start)
-                        ids.extend(cur_ids)
-            else:
-                for doc_idx, doc_group in tqdm(self.phrase_index.items(), desc='faiss indexing'):
-                    cur_ids = idxs2id(int(doc_idx), np.arange(doc_group['start'].shape[0]))
-                    start = int8_to_float(doc_group['start'][:], doc_group.attrs['offset'], doc_group.attrs['scale'])
-                    norms = np.linalg.norm(start, axis=1, keepdims=True)
-                    consts = np.sqrt(max_norm ** 2 - norms ** 2)
-                    start = np.concatenate([consts, start], axis=1)
-                    starts.append(start)
-                    ids.extend(cur_ids)
-            ids = np.array(ids)
+        self.start_index = faiss.read_index(start_index_path)
+        with h5py.File(idx2id_path, 'r') as f:
+            self.idx2doc_id = f['doc'][:]
+            self.idx2para_id = f['para'][:]
+            self.idx2word_id = f['word'][:]
 
-            train_data = np.concatenate(starts, axis=0)
-            self.start_index = faiss.index_factory(481, index_factory)
-            print('training start index: %d' % train_data.shape[1])
-            self.start_index.train(train_data)
-            self.start_index.add_with_ids(train_data, ids)
-            faiss.write_index(self.start_index, start_index_path)
+    def close(self):
+        for phrase_dump in self.phrase_dumps:
+            phrase_dump.close()
+
+    def get_doc_group(self, doc_idx):
+        if len(self.phrase_dumps) == 1:
+            return self.phrase_dumps[0][str(doc_idx)]
+        for dump_range, dump in zip(self.dump_ranges, self.phrase_dumps):
+            if dump_range[0] <= int(doc_idx) < dump_range[1]:
+                return dump[str(doc_idx)]
+        raise ValueError('%d not found in dump list' % int(doc_idx))
 
     def search_start(self, query_start, doc_idxs=None, para_idxs=None, top_k=5, nprobe=16):
         # doc_idxs = [Q], para_idxs = [Q]
@@ -106,12 +187,13 @@ class MIPS(object):
             query_start = np.concatenate([np.zeros([query_start.shape[0], 1]).astype(np.float32), query_start], axis=1)
             self.start_index.nprobe = nprobe
             start_scores, I = self.start_index.search(query_start, top_k)
+
+            doc_idxs = self.idx2doc_id[I]
+            start_idxs = self.idx2word_id[I]
             if self.para:
-                doc_idxs, para_idxs, start_idxs = id2idxs(I, para=self.para)  # [Q, K]
-            else:
-                doc_idxs, start_idxs = id2idxs(I, para=self.para)
+                para_idxs = self.idx2para_id[I]
         else:
-            groups = [self.phrase_index[str(doc_idx)][str(para_idx)] for doc_idx, para_idx in zip(doc_idxs, para_idxs)]
+            groups = [self.get_doc_group(doc_idx)[str(para_idx)] for doc_idx, para_idx in zip(doc_idxs, para_idxs)]
             starts = [group['start'][:, :] for group in groups]
             starts = [int8_to_float(start, groups[0].attrs['offset'], groups[0].attrs['scale']) for start in starts]
             all_scores = [np.squeeze(np.matmul(start, query_start[i:i + 1, :].transpose()), -1)
@@ -128,9 +210,10 @@ class MIPS(object):
         # doc_idxs = [Q]
         # start_idxs = [Q]
         # para_idxs = [Q]
-        query_start, query_end, query_span_logit = query[:, :480], query[:, 480:960], query[:, 960:961]
+        bs = int((query.shape[1] - 1) / 2)
+        query_start, query_end, query_span_logit = query[:, :bs], query[:, bs:2 * bs], query[:, -1:]
 
-        groups = [self.phrase_index[str(doc_idx)] for doc_idx in doc_idxs]
+        groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
         if self.para:
             groups = [group[str(para_idx)] for group, para_idx in zip(groups, para_idxs)]
 
@@ -181,10 +264,10 @@ class MIPS(object):
 
     def search(self, query, top_k=5, nprobe=64, doc_idxs=None, para_idxs=None):
         num_queries = query.shape[0]
-        query_start = query[:, :480]
+        bs = int((query.shape[1] - 1) / 2)
+        query_start = query[:, :bs]
         start_scores, doc_idxs, para_idxs, start_idxs = self.search_start(query_start, top_k=top_k, nprobe=nprobe,
                                                                           doc_idxs=doc_idxs, para_idxs=para_idxs)
-
         # reshape
         query = np.reshape(np.tile(np.expand_dims(query, 1), [1, top_k, 1]), [-1, query.shape[1]])
         idxs = np.reshape(np.tile(np.expand_dims(np.arange(num_queries), 1), [1, top_k]), [-1])
@@ -201,3 +284,64 @@ class MIPS(object):
             new_out[i] = sorted(new_out[i], key=lambda each_out: -each_out['score'])
 
         return new_out
+
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('dump_dir')
+    parser.add_argument('out_dir')
+    parser.add_argument('stage', default='all')
+    parser.add_argument('--quantizer_path', default='quantizer.faiss')
+    parser.add_argument('--max_norm_path', default='max_norm.json')
+    parser.add_argument('--trained_index_path', default='trained.faiss')
+    parser.add_argument('--add_dump_path', default='trained.faiss')
+    parser.add_argument('--target_index_path', default='target.faiss')
+    parser.add_argument('--idx2id_path', default='idx2id.hdf5')
+    parser.add_argument('--num_clusters', type=int, default=4096)
+    parser.add_argument('--hnsw', default=False, action='store_true')
+    parser.add_argument('--max_norm', default=None, type=float)
+    parser.add_argument('--para', default=False, action='store_true')
+    return parser.parse_args()
+
+
+def main():
+    args = get_args()
+    if os.path.isdir(args.dump_dir):
+        dump_names = os.listdir(args.dump_dir)
+        dump_paths = [os.path.join(args.dump_dir, name) for name in dump_names]
+        add_dump_path = os.path.join(args.dump_dir, args.add_dump_path)
+    else:
+        dump_paths = [args.dump_dir]
+        add_dump_path = args.dump_dir
+    if not os.path.exists(args.out_dir):
+        os.makedirs(args.out_dir)
+    quantizer_path = os.path.join(args.out_dir, args.quantizer_path)
+    max_norm_path = os.path.join(args.out_dir, args.max_norm_path)
+    trained_index_path = os.path.join(args.out_dir, args.trained_index_path)
+    target_index_path = os.path.join(args.out_dir, args.target_index_path)
+    idx2id_path = os.path.join(args.out_dir, args.idx2id_path)
+
+    if args.stage == 'coarse':
+        data, max_norm = sample_data(dump_paths, max_norm=args.max_norm)
+        with open(max_norm_path, 'w') as fp:
+            json.dump(max_norm, fp)
+        train_coarse_quantizer(data, quantizer_path, args.num_clusters)
+
+    if args.stage == 'fine':
+        with open(max_norm_path, 'r') as fp:
+            max_norm = json.load(fp)
+        data, _ = sample_data(dump_paths, max_norm=max_norm)
+        train_index(data, quantizer_path, trained_index_path)
+
+    if args.stage == 'add':
+        with open(max_norm_path, 'r') as fp:
+            max_norm = json.load(fp)
+        add_to_index(add_dump_path, trained_index_path, target_index_path, idx2id_path,
+                     max_norm=max_norm, para=args.para)
+
+    if args.stage == 'merge':
+        pass
+
+
+if __name__ == '__main__':
+    main()

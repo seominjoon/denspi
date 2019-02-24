@@ -282,9 +282,11 @@ def write_hdf5(all_examples, all_features, all_results,
                     did = str(metadata['did'])
                     if did in f:
                         if not split_by_para:
-                            print('%s exists; skipping' % did)
-                            continue
-                        dg = f[did]
+                            print('%s exists; replacing' % did)
+                            del f[did]
+                            dg = f.create_group(did)
+                        else:
+                            dg = f[did]
                     else:
                         dg = f.create_group(did)
                     if split_by_para:
