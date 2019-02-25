@@ -199,6 +199,21 @@ train_filter:
 	--load_dir piqateam/piqa-nfs/2438 \
 	--iteration 3"
 
+train_filter_sparse:
+	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--train_file train-v1.1-qna-1-1.json \
+	--train_batch_size 18 \
+	--phrase_size 961 \
+	--use_sparse \
+	--do_train_filter \
+	--do_predict \
+	--do_eval \
+	--draft \
+	--draft_num_examples 50000 \
+	--load_dir piqateam/piqa-nfs/186 \
+	--iteration 3"
+
 train_na_961:
 	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 24G --nfs-output -a " \
 	--fs nfs \

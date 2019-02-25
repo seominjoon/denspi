@@ -1,6 +1,6 @@
 PIQA_NFS = /data_nfs/camist002/user/piqa-nfs
-DUMP_DIR = $(PIQA_NFS)/index/squad/sparse
-# DUMP_DIR = ~/github/hiqa-private/index/
+# DUMP_DIR = $(PIQA_NFS)/index/squad/sparse
+DUMP_DIR = ~/github/hiqa-private/index/
 # DUMP_DIR = $(PIQA_NFS)/index/squad/2382_m
 # DUMP_DIR = $(PIQA_NFS)/index/squad/1365_m
 # DUMP_DIR = $(PIQA_NFS)/index/squad/2392_m
