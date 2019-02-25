@@ -10,7 +10,6 @@ DUMP_DIR = ~/github/hiqa-private/index/
 INDEX_DIR = $(DUMP_DIR)/default_index
 DATA_PATH = $(PIQA_NFS)/data/dev-v1.1.json
 PARA = --para
-PARA =
 ADD_ALL = --add_all
 NUM_CLUSTERS = 4096
 HNSW = --hnsw
