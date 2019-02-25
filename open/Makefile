@@ -17,8 +17,7 @@ NUM_CLUSTERS = 32786
 HNSW = --hnsw
 NPROBE = 64
 
-# para
-
+# local
 coarse:
 	python run_index.py $(DUMP_DIR) coarse $(PARA) --num_clusters $(NUM_CLUSTERS) $(HNSW)
 
@@ -60,26 +59,3 @@ nsml_pred:
 	--nprobe $(NPROBE) \
 	--top_k 10 \
 	$(PARA)"
-
-
-# nsml mul
-nsml_coarse_mul:
-	python nsml_cluster.py --output_dir dump/2440_down_20/
-
-
-nsml_add_mul:
-	python nsml_add_to_index.py
-
-
-
-# LOD
-
-coarse_lod:
-	nsml run -d piqa-nfs -g 0 -c 16 -e run_index.py --memory 32G --nfs-output -a " \
-	dump/2440_down_20 \
-	coarse \
-	--fs nfs \
-	--num_clusters 32768 \
-	--hnsw \
-	--doc_sample_ratio 0.2 \
-	--vec_sample_ratio 0.2"
