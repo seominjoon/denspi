@@ -14,29 +14,27 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('data_path')
     parser.add_argument('dir')
-    parser.add_argument('--phrase_dump_dir', default='phrase.hdf5')
     parser.add_argument('--index_path', default='default_index/index.faiss')
     parser.add_argument('--quantizer_path', default='quantizer.faiss')
     parser.add_argument('--question_dump_path', default='question.hdf5')
     parser.add_argument('--od_out_path', default='pred_od.json')
     parser.add_argument('--cd_out_path', default="pred_cd.json")
     parser.add_argument('--idx2id_path', default='default_index/idx2id.hdf5')
-    parser.add_argument('--max_norm', default=None, type=float)
-    parser.add_argument('--num_clusters', default=524288, type=int)
     parser.add_argument('--max_answer_length', default=30, type=int)
     parser.add_argument('--top_k', default=5, type=int)
     parser.add_argument('--para', default=False, action='store_true')
-    parser.add_argument('--doc_sample_ratio', default=0.1, type=float)
-    parser.add_argument('--vec_sample_ratio', default=0.1, type=float)
+    parser.add_argument('--no_od', default=False, action='store_true')
     parser.add_argument('--draft', default=False, action='store_true')
     parser.add_argument('--sparse', default=False, action='store_true')
+    parser.add_argument('--nprobe', default=64, type=int)
     args = parser.parse_args()
     return args
 
 
 def main():
     args = get_args()
-    args.phrase_dump_dir = os.path.join(args.dir, args.phrase_dump_dir)
+    phrase_dump_path = os.path.join(args.dir, 'phrase.hdf5')
+    args.phrase_dump_dir = phrase_dump_path if os.path.exists(phrase_dump_path) else os.path.join(args.dir, 'phrase')
     args.index_path = os.path.join(args.dir, args.index_path)
     args.quantizer_path = os.path.join(args.dir, args.quantizer_path)
     args.question_dump_path = os.path.join(args.dir, args.question_dump_path)
@@ -101,11 +99,14 @@ def main():
                 each_results = mips.search(each_query, top_k=args.top_k, doc_idxs=doc_idxs, para_idxs=para_idxs, q_sparse=each_sparse, q_input_ids=each_input_ids)
             cd_results.extend(each_results)
 
-        if len(sparses) == 0:
-            each_results = mips.search(each_query, top_k=args.top_k)
-        else:
-            each_results = mips.search(each_query, top_k=args.top_k, q_sparse=each_sparse, q_input_ids=each_input_ids)
-        od_results.extend(each_results)
+        if not args.no_od:
+            if len(sparses) == 0:
+                each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe)
+            else:
+                each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe, 
+                    q_sparse=each_sparse, q_input_ids=each_input_ids)
+            od_results.extend(each_results)
+
     top_k_answers = {query_id: [result['answer'] for result in each_results]
                      for (_, _, query_id, _), each_results in zip(pairs, od_results)}
     answers = {query_id: each_results[0]['answer']

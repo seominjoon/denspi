@@ -15,6 +15,7 @@ def sample_data(dump_paths, para=False, doc_sample_ratio=0.1, vec_sample_ratio=0
     vecs = []
     random.seed(seed)
     np.random.seed(seed)
+    print(dump_paths)
     dumps = [h5py.File(dump_path, 'r') for dump_path in dump_paths]
     for i, f in enumerate(tqdm(dumps)):
         doc_ids = f.keys()
@@ -31,7 +32,6 @@ def sample_data(dump_paths, para=False, doc_sample_ratio=0.1, vec_sample_ratio=0
                 cur_vecs = int8_to_float(group['start'][:],
                                          group.attrs['offset'], group.attrs['scale'])[sampled_vec_idxs]
                 vecs.append(cur_vecs)
-        break
     out = np.concatenate(vecs, 0)
     for dump in dumps:
         dump.close()
@@ -77,15 +77,15 @@ def train_index(data, quantizer_path, trained_index_path):
     faiss.write_index(trained_index, trained_index_path)
 
 
-def add_to_index(dump_path, trained_index_path, target_index_path, idx2id_path, max_norm, para=False):
+def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path, max_norm, para=False):
     idx2doc_id = []
     idx2para_id = []
     idx2word_id = []
-    phrase_dump = h5py.File(dump_path, 'r')
+    dumps = [h5py.File(dump_path, 'r') for dump_path in dump_paths]
     print('reading %s' % trained_index_path)
     start_index = faiss.read_index(trained_index_path)
 
-    print('adding %s' % dump_path)
+    print('adding %s' % dump_paths)
     offset = 0
     if para:
         for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='faiss indexing')):
@@ -104,20 +104,22 @@ def add_to_index(dump_path, trained_index_path, target_index_path, idx2id_path, 
             if i % 100 == 0:
                 print('%d/%d' % (i + 1, len(phrase_dump.keys())))
     else:
-        for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='faiss indexing')):
-            num_vecs = doc_group['start'].shape[0]
-            start = int8_to_float(doc_group['start'][:], doc_group.attrs['offset'],
-                                  doc_group.attrs['scale'])
-            norms = np.linalg.norm(start, axis=1, keepdims=True)
-            consts = np.sqrt(max_norm ** 2 - norms ** 2)
-            start = np.concatenate([consts, start], axis=1)
-            start_index.add_with_ids(start, np.arange(offset, offset + start.shape[0]))
-            idx2doc_id.extend([int(doc_idx)] * num_vecs)
-            idx2word_id.extend(range(num_vecs))
-            offset += start.shape[0]
-            if i % 100 == 0:
-                print('%d/%d' % (i + 1, len(phrase_dump.keys())))
+        for di, phrase_dump in enumerate(tqdm(dumps, desc='dumps')):
+            for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='adding %d' % di)):
+                num_vecs = doc_group['start'].shape[0]
+                start = int8_to_float(doc_group['start'][:], doc_group.attrs['offset'],
+                                      doc_group.attrs['scale'])
+                norms = np.linalg.norm(start, axis=1, keepdims=True)
+                consts = np.sqrt(max_norm ** 2 - norms ** 2)
+                start = np.concatenate([consts, start], axis=1)
+                start_index.add_with_ids(start, np.arange(offset, offset + start.shape[0]))
+                idx2doc_id.extend([int(doc_idx)] * num_vecs)
+                idx2word_id.extend(range(num_vecs))
+                offset += start.shape[0]
+                if i % 100 == 0:
+                    print('%d/%d' % (i + 1, len(phrase_dump.keys())))
 
+    print('index ntotal: %d' % start_index.ntotal)
     idx2doc_id = np.array(idx2doc_id, dtype=np.int32)
     idx2para_id = np.array(idx2para_id, dtype=np.int32)
     idx2word_id = np.array(idx2word_id, dtype=np.int32)
@@ -147,27 +149,31 @@ def get_args():
     parser.add_argument('--hnsw', default=False, action='store_true')
     parser.add_argument('--max_norm', default=None, type=float)
     parser.add_argument('--para', default=False, action='store_true')
+    parser.add_argument('--doc_sample_ratio', default=0.2, type=float)
+    parser.add_argument('--vec_sample_ratio', default=0.2, type=float)
+    parser.add_argument('--fs', default='local')
+    parser.add_argument('--add_all', default=False, action='store_true')
     return parser.parse_args()
 
 
 def main():
     args = get_args()
+    if args.fs == 'nfs':
+        from nsml import NSML_NFS_OUTPUT
+        args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
 
     # from nsml import NSML_NFS_OUTPUT
     # args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
 
-    if os.path.isdir(args.dump_dir):
-        phrase_path = os.path.join(args.dump_dir, 'phrase.hdf5')
-        if os.path.exists(phrase_path):
-            dump_paths = [phrase_path]
-            dump_path = phrase_path
-        else:
-            dump_names = os.listdir(args.dump_dir)
-            dump_paths = [os.path.join(args.dump_dir, 'phrase', name) for name in dump_names]
-            dump_path = os.path.join(args.dump_dir, 'phrase', args.dump_path)
+    phrase_path = os.path.join(args.dump_dir, 'phrase.hdf5')
+    if os.path.exists(phrase_path):
+        dump_paths = [phrase_path]
+        dump_path = phrase_path
     else:
-        dump_paths = [args.dump_dir]
-        dump_path = args.dump_dir
+        dump_names = os.listdir(os.path.join(args.dump_dir, 'phrase'))
+        dump_paths = [os.path.join(args.dump_dir, 'phrase', name) for name in dump_names]
+        dump_path = os.path.join(args.dump_dir, 'phrase', args.dump_path)
+    print(dump_paths)
 
     args.out_dir = os.path.join(args.dump_dir, args.index_name)
     if not os.path.exists(args.out_dir):
@@ -186,7 +192,8 @@ def main():
     merged_index_path = os.path.join(args.out_dir, args.merged_index_path)
 
     if args.stage == 'coarse':
-        data, max_norm = sample_data(dump_paths, max_norm=args.max_norm, para=args.para)
+        data, max_norm = sample_data(dump_paths, max_norm=args.max_norm, para=args.para,
+                                     doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio)
         with open(max_norm_path, 'w') as fp:
             json.dump(max_norm, fp)
         train_coarse_quantizer(data, quantizer_path, args.num_clusters)
@@ -194,13 +201,16 @@ def main():
     if args.stage == 'fine':
         with open(max_norm_path, 'r') as fp:
             max_norm = json.load(fp)
-        data, _ = sample_data(dump_paths, max_norm=max_norm, para=args.para)
+        data, _ = sample_data(dump_paths, max_norm=max_norm, para=args.para,
+                              doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio)
         train_index(data, quantizer_path, trained_index_path)
 
     if args.stage == 'add':
         with open(max_norm_path, 'r') as fp:
             max_norm = json.load(fp)
-        add_to_index(dump_path, trained_index_path, target_index_path, idx2id_path,
+        if not args.add_all:
+            dump_paths = [dump_path]
+        add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
                      max_norm=max_norm, para=args.para)
 
     if args.stage == 'merge':

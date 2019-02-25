@@ -74,7 +74,10 @@ def run_dump_phrase(args):
     print(end_docs)
 
     for start_doc, end_doc in zip(start_docs, end_docs):
-        subprocess.run(get_cmd(start_doc, end_doc))
+        if args.no_block:
+            subprocess.Popen(get_cmd(start_doc, end_doc))
+        else:
+            subprocess.run(get_cmd(start_doc, end_doc))
 
 
 def get_args():
@@ -90,6 +93,7 @@ def get_args():
     parser.add_argument('--start', default=0, type=int)
     parser.add_argument('--end', default=5076, type=int)
     parser.add_argument('--mem_size', default=32, type=int, help='mem size in GB')
+    parser.add_argument('--no_block', default=False, action='store_true')
     args = parser.parse_args()
 
     if args.dump_dir is None:

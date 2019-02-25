@@ -30,7 +30,7 @@ def add_dummy(args):
         article['paragraphs'].append(new_para)
 
     print(article)
-    out = {'data': [article] + in_['data'][:30]}
+    out = {'data': [article] + in_['data']}
 
     with open(args.to_path, 'w') as fp:
         json.dump(out, fp)
@@ -40,7 +40,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('from_path')
     parser.add_argument('to_path')
-    parser.add_argument('--num_samples', default=3000, type=int)
+    parser.add_argument('--num_samples', default=10000, type=int)
     parser.add_argument('--min_dist', default=10, type=int)
     parser.add_argument('--max_dist', default=100, type=int)
     parser.add_argument('--seed', default=29, type=int)
