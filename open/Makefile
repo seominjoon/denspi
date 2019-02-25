@@ -8,7 +8,8 @@ DUMP_DIR = $(PIQA_NFS)/$(LOCAL_DUMP_DIR)
 # DUMP_DIR = $(PIQA_NFS)/index/squad/1365_m
 # DUMP_DIR = $(PIQA_NFS)/index/squad/2392_m
 INDEX_DIR = $(DUMP_DIR)/default_index
-DATA_PATH = $(PIQA_NFS)/data/dev-v1.1.json
+LOCAL_DATA_PATH = data/dev-v1.1.json
+DATA_PATH = $(PIQA_NFS)/$(LOCAL_DATA_PATH)
 PARA = --para
 PARA =
 ADD_ALL = --add_all
@@ -52,7 +53,8 @@ nsml_add:
 
 nsml_pred:
 	nsml run -d piqa-nfs -g 0 -c 16 -e run_eval.py --memory 32G --nfs-output -a " \
-	$(DATA_PATH) $(DUMP_DIR) \
+	--fs nfs \
+	$(LOCAL_DATA_PATH) $(LOCAL_DUMP_DIR) \
 	--index_path default_index/index/dump.faiss \
 	--idx2id_path default_index/index/dump.hdf5 \
 	--nprobe $(NPROBE) \

@@ -25,12 +25,17 @@ def get_args():
     parser.add_argument('--no_od', default=False, action='store_true')
     parser.add_argument('--draft', default=False, action='store_true')
     parser.add_argument('--nprobe', default=64, type=int)
+    parser.add_argument('--fs', default='local')
     args = parser.parse_args()
     return args
 
 
 def main():
     args = get_args()
+    if args.fs == 'nfs':
+        from nsml import NSML_NFS_OUTPUT
+        args.data_path = os.path.join(NSML_NFS_OUTPUT, args.data_path)
+        args.dir = os.path.join(NSML_NFS_OUTPUT, args.dir)
     phrase_dump_path = os.path.join(args.dir, 'phrase.hdf5')
     args.phrase_dump_dir = phrase_dump_path if os.path.exists(phrase_dump_path) else os.path.join(args.dir, 'phrase')
     args.index_path = os.path.join(args.dir, args.index_path)
