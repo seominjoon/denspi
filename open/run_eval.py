@@ -55,17 +55,16 @@ def main():
                 question = qa['question']
                 pairs.append([doc_idx, para_idx, id_, question])
 
-    question_dump = h5py.File(args.question_dump_path)
+    with h5py.File(args.question_dump_path, 'r') as question_dump:
+        vecs = []
+        for doc_idx, para_idx, id_, question in tqdm(pairs):
+            vec = question_dump[id_][0, :]
+            vecs.append(vec)
+        query = np.stack(vecs, 0)
+        if args.draft:
+            query = query[:100]
 
     mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para)
-
-    vecs = []
-    for doc_idx, para_idx, id_, question in tqdm(pairs):
-        vec = question_dump[id_][0, :]
-        vecs.append(vec)
-    query = np.stack(vecs, 0)
-    if args.draft:
-        query = query[:100]
 
     # recall at k
     cd_results = []
@@ -92,6 +91,8 @@ def main():
         with open(args.cd_out_path, 'w') as fp:
             json.dump(answers, fp)
 
+    if os.path.exists(args.od_out_path):
+        args.od_out_path = args.od_out_path + '_'
     print('dumping %s' % args.od_out_path)
     with open(args.od_out_path, 'w') as fp:
         json.dump(top_k_answers, fp)
