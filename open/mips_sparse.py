@@ -69,7 +69,7 @@ class MIPSSparse(MIPS):
             sparse_scores = np.stack([np.sum(sp) for sp in sparse_val])
             # sparse_scores = np.stack([linear_mxq(q_idx, q_val, c_idx, c_val) for q_idx, q_val, c_idx, c_val in zip(q_input_ids, q_sparse, input_ids, sparse)])
 
-            rerank_scores = np.reshape(start_scores + sparse_scores * 3, [-1, start_top_k])
+            rerank_scores = np.reshape(start_scores + sparse_scores * 1, [-1, start_top_k])
             rerank_idxs = np.array([scores.argsort()[-out_top_k:][::-1]
                                     for scores in rerank_scores])
             new_I = np.array([each_I[idxs] for each_I, idxs in zip(I, rerank_idxs)])
