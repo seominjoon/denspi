@@ -52,7 +52,7 @@ def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
     return max(scores_for_ground_truths)
 
 
-def evaluate(dataset, predictions, k):
+def evaluate(dataset, predictions, k, no_f1=False):
     count = 0
     f1 = exact_match = total = 0
     for article in dataset:
@@ -69,8 +69,9 @@ def evaluate(dataset, predictions, k):
                 prediction = predictions[qa['id']][:k]
                 exact_match += max(metric_max_over_ground_truths(
                     exact_match_score, each, ground_truths) for each in prediction)
-                f1 += max(metric_max_over_ground_truths(
-                    f1_score, each, ground_truths) for each in prediction)
+                if not no_f1:
+                    f1 += max(metric_max_over_ground_truths(
+                        f1_score, each, ground_truths) for each in prediction)
 
     exact_match = 100.0 * exact_match / total
     f1 = 100.0 * f1 / total
@@ -86,6 +87,8 @@ if __name__ == '__main__':
         description='Evaluation for SQuAD ' + expected_version)
     parser.add_argument('dataset_file', help='Dataset file')
     parser.add_argument('prediction_file', help='Prediction File')
+    parser.add_argument('--no_f1', default=False, action='store_true')
+    parser.add_argument('--k_start', default=1, type=int)
     args = parser.parse_args()
     with open(args.dataset_file) as dataset_file:
         dataset_json = json.load(dataset_file)
@@ -97,5 +100,5 @@ if __name__ == '__main__':
     with open(args.prediction_file) as prediction_file:
         predictions = json.load(prediction_file)
     num_answers = len(next(iter(predictions.values())))
-    for k in range(1, num_answers+1):
-        print('%d:' % k, json.dumps(evaluate(dataset, predictions, k)))
+    for k in range(args.k_start, num_answers+1):
+        print('%d:' % k, json.dumps(evaluate(dataset, predictions, k, no_f1=args.no_f1)))

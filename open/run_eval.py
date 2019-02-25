@@ -26,6 +26,7 @@ def get_args():
     parser.add_argument('--draft', default=False, action='store_true')
     parser.add_argument('--nprobe', default=64, type=int)
     parser.add_argument('--fs', default='local')
+    parser.add_argument('--step_size', default=10, type=int)
     args = parser.parse_args()
     return args
 
@@ -69,7 +70,7 @@ def main():
     # recall at k
     cd_results = []
     od_results = []
-    step_size = 10
+    step_size = args.step_size
     for i in tqdm(range(0, query.shape[0], step_size)):
         each_query = query[i:i+step_size]
 
@@ -91,7 +92,7 @@ def main():
         with open(args.cd_out_path, 'w') as fp:
             json.dump(answers, fp)
 
-    if os.path.exists(args.od_out_path):
+    while os.path.exists(args.od_out_path):
         args.od_out_path = args.od_out_path + '_'
     print('dumping %s' % args.od_out_path)
     with open(args.od_out_path, 'w') as fp:
