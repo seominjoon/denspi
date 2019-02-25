@@ -1,9 +1,9 @@
 PIQA_NFS = /data_nfs/camist002/user/piqa-nfs
 # DUMP_DIR = $(PIQA_NFS)/index/squad/sparse
-# DUMP_DIR = ~/github/hiqa-private/index/
+DUMP_DIR = ~/github/hiqa-private/index/
 # LOCAL_DUMP_DIR = dump/76_dev-100M
 LOCAL_DUMP_DIR = dump/2494_dev-10M
-DUMP_DIR = $(PIQA_NFS)/$(LOCAL_DUMP_DIR)
+# DUMP_DIR = $(PIQA_NFS)/$(LOCAL_DUMP_DIR)
 # DUMP_DIR = $(PIQA_NFS)/dump/76_dev-10M
 # DUMP_DIR = $(PIQA_NFS)/index/squad/large-qna-1Md
 # DUMP_DIR = $(PIQA_NFS)/index/squad/154_m_long
