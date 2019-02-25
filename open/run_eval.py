@@ -20,13 +20,10 @@ def get_args():
     parser.add_argument('--od_out_path', default='pred_od.json')
     parser.add_argument('--cd_out_path', default="pred_cd.json")
     parser.add_argument('--idx2id_path', default='default_index/idx2id.hdf5')
-    parser.add_argument('--max_norm', default=None, type=float)
-    parser.add_argument('--num_clusters', default=524288, type=int)
     parser.add_argument('--max_answer_length', default=30, type=int)
     parser.add_argument('--top_k', default=5, type=int)
     parser.add_argument('--para', default=False, action='store_true')
-    parser.add_argument('--doc_sample_ratio', default=0.1, type=float)
-    parser.add_argument('--vec_sample_ratio', default=0.1, type=float)
+    parser.add_argument('--no_od', default=False, action='store_true')
     parser.add_argument('--draft', default=False, action='store_true')
     args = parser.parse_args()
     return args
@@ -76,8 +73,9 @@ def main():
             each_results = mips.search(each_query, top_k=args.top_k, doc_idxs=doc_idxs, para_idxs=para_idxs)
             cd_results.extend(each_results)
 
-        each_results = mips.search(each_query, top_k=args.top_k)
-        od_results.extend(each_results)
+        if not args.no_od:
+            each_results = mips.search(each_query, top_k=args.top_k)
+            od_results.extend(each_results)
     top_k_answers = {query_id: [result['answer'] for result in each_results]
                      for (_, _, query_id, _), each_results in zip(pairs, od_results)}
     answers = {query_id: each_results[0]['answer']

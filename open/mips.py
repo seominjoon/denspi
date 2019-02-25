@@ -59,7 +59,7 @@ class MIPS(object):
         if len(self.phrase_dumps) == 1:
             return self.phrase_dumps[0][str(doc_idx)]
         for dump_range, dump in zip(self.dump_ranges, self.phrase_dumps):
-            if dump_range[0] <= int(doc_idx) < dump_range[1]:
+            if dump_range[0] * 1000 <= int(doc_idx) < dump_range[1] * 1000:
                 return dump[str(doc_idx)]
         raise ValueError('%d not found in dump list' % int(doc_idx))
 
@@ -116,9 +116,11 @@ class MIPS(object):
         ends = [group['end'][:] for group in groups]
         spans = [group['span_logits'][:] for group in groups]
 
+        default_end = np.zeros(bs).astype(np.float32)
         end_idxs = [group['start2end'][start_idx, :] for group, start_idx in zip(groups, start_idxs)]  # [Q, L]
         end_mask = -1e9 * (np.array(end_idxs) < 0)  # [Q, L]
-        end = np.stack([[each_end[each_end_idx, :] for each_end_idx in each_end_idxs]
+        end = np.stack([[each_end[each_end_idx, :] if each_end.size > 0 else default_end
+                         for each_end_idx in each_end_idxs]
                         for each_end, each_end_idxs in zip(ends, end_idxs)], 0)  # [Q, L, d]
         end = dequant(groups[0], end)
         span = np.stack([[each_span[start_idx, i] for i in range(len(each_end_idxs))]
@@ -134,7 +136,8 @@ class MIPS(object):
                 'title': group.attrs['title'],
                 'doc_idx': doc_idx,
                 'start_pos': group['word2char_start'][start_idx].item(),
-                'end_pos': group['word2char_end'][end_idx].item(),
+                'end_pos': group['word2char_end'][end_idx].item() if len(group['word2char_end']) > 0
+                   else group['word2char_start'][start_idx].item() + 1,
                 'score': score}
                for doc_idx, group, start_idx, end_idx, score in zip(doc_idxs.tolist(), groups, start_idxs.tolist(),
                                                                     pred_end_idxs.tolist(), max_scores.tolist())]

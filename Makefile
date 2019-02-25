@@ -211,7 +211,40 @@ train_short_961:
 	--iteration 1 \
 	--do_train \
 	--do_predict \
-	--num_train_epochs 1 \
+	--num_train_epochs 100 \
+	--do_eval"
+
+eval_short_961:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 12G --nfs-output -a " \
+	--fs nfs \
+	--phrase_size 961 \
+	--load_dir piqadump/piqa-nfs/154 \
+	--iteration 1 \
+	--do_predict \
+	--do_eval"
+
+eval_961:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 12G --nfs-output -a " \
+	--fs nfs \
+	--phrase_size 961 \
+	--do_load \
+	--load_dir piqateam/piqa-nfs/76 \
+	--iteration 1 \
+	--do_predict \
+	--do_eval"
+
+train_long_961:
+	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 24G --nfs-output -a " \
+	--fs nfs \
+	--train_file train-v1.1-long.json \
+	--train_batch_size 18 \
+	--phrase_size 961 \
+	--do_load \
+	--load_dir piqateam/piqa-nfs/76 \
+	--iteration 1 \
+	--do_train \
+	--do_predict \
+	--num_train_epochs 100 \
 	--do_eval"
 
 train_qnad_961:
@@ -293,22 +326,6 @@ dump_qnad_961:
 	--parallel \
 	--iteration 3"
 
-dump_qnad_961_m:
-	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
-	--fs nfs \
-	--do_embed_question \
-	--do_index \
-	--predict_file dev-m.json \
-	--output_dir index/squad/1365_m \
-	--phrase_size 961 \
-	--index_file phrase.hdf5 \
-	--question_emb_file question.hdf5 \
-	--load_dir piqateam/piqa-nfs/1365 \
-	--filter_threshold -999999 \
-	--split_by_para \
-	--parallel \
-	--iteration 3"
-
 
 # 2382,2392
 dump_qnad_961_m:
@@ -322,6 +339,38 @@ dump_qnad_961_m:
 	--index_file phrase.hdf5 \
 	--question_emb_file question.hdf5 \
 	--load_dir piqateam/piqa-nfs/2382 \
+	--filter_threshold -999999 \
+	--split_by_para \
+	--parallel \
+	--iteration 1"
+
+dump_qnad_961_m_2:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_embed_question \
+	--do_index \
+	--predict_file dev-m.json \
+	--output_dir index/squad/154_m_2 \
+	--phrase_size 961 \
+	--index_file phrase.hdf5 \
+	--question_emb_file question.hdf5 \
+	--load_dir piqadump/piqa-nfs/154 \
+	--filter_threshold -999999 \
+	--split_by_para \
+	--parallel \
+	--iteration 2"
+
+dump_qnad_961_m_long:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--do_embed_question \
+	--do_index \
+	--predict_file dev-m.json \
+	--output_dir index/squad/154_m_long \
+	--phrase_size 961 \
+	--index_file phrase.hdf5 \
+	--question_emb_file question.hdf5 \
+	--load_dir piqadump/piqa-nfs/175 \
 	--filter_threshold -999999 \
 	--split_by_para \
 	--parallel \
@@ -343,18 +392,50 @@ train_filter_qnad_961:
 	--iteration 3"
 
 
-dump_qna_961_m:
-	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+train_filter_long:
+	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 24G --nfs-output -a " \
+	--fs nfs \
+	--train_file train-v1.1-long.json \
+	--train_batch_size 18 \
+	--phrase_size 961 \
+	--do_train_filter \
+	--do_predict \
+	--do_eval \
+	--num_train_epochs 1 \
+	--load_dir piqadump/piqa-nfs/175 \
+	--filter_threshold -2 \
+	--draft \
+	--draft_num_examples 50000 \
+	--iteration 1"
+
+
+dump_qna_961_1M:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 32G --nfs-output -a " \
 	--fs nfs \
 	--do_index \
-	--output_dir index/squad/large-qna-m \
-	--predict_file dev-m.json \
+	--output_dir index/squad/large-qna-1M \
+	--predict_file dev-1M.json \
 	--phrase_size 961 \
 	--index_file phrase.hdf5 \
 	--question_emb_file question.hdf5 \
 	--load_dir piqateam/piqa-nfs/76 \
 	--filter_threshold -2 \
 	--split_by_para \
+	--parallel \
+	--iteration 1"
+
+
+dump_qna_961_1Md:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 32G --nfs-output -a " \
+	--fs nfs \
+	--do_index \
+	--output_dir index/squad/large-qna-1Md \
+	--predict_file dev-1M.json \
+	--phrase_size 961 \
+	--index_file phrase.hdf5 \
+	--question_emb_file question.hdf5 \
+	--load_dir piqateam/piqa-nfs/76 \
+	--filter_threshold -2 \
 	--parallel \
 	--iteration 1"
 
@@ -430,5 +511,10 @@ train_filter:
 	--filter_threshold -2 \
 	--iteration 3"
 
-dump:
-	python nsml_dump.py
+dump_lod:
+	python nsml_dump.py --data_name down_20 --load_dir piqateam/piqa-nfs/2440 --num_gpus 10 --mem_size 16
+
+
+dump_10M:
+	python nsml_dump.py --data_name dev-10M --load_dir piqateam/piqa-nfs/76 --num_gpus 5 --mem_size 24 --start 0 --end 51 --no_block
+
