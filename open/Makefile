@@ -1,5 +1,7 @@
 PIQA_NFS = /data_nfs/camist002/user/piqa-nfs
-DUMP_DIR = $(PIQA_NFS)/index/squad/2382_m
+DUMP_DIR = $(PIQA_NFS)/index/squad/sparse
+# DUMP_DIR = ~/github/hiqa-private/index/
+# DUMP_DIR = $(PIQA_NFS)/index/squad/2382_m
 # DUMP_DIR = $(PIQA_NFS)/index/squad/1365_m
 # DUMP_DIR = $(PIQA_NFS)/index/squad/2392_m
 INDEX_DIR = $(DUMP_DIR)/default_index
@@ -20,7 +22,7 @@ pred:
 	--index_path default_index/index/dump.faiss \
 	--idx2id_path default_index/index/dump.hdf5 \
 	--num_clusters 128 \
-	--para
+	--para --sparse
 
 eval:
 	python ../eval/evaluate-v1.1.py $(DATA_PATH) $(DUMP_DIR)/pred_cd.json

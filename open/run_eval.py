@@ -29,7 +29,6 @@ def get_args():
     parser.add_argument('--doc_sample_ratio', default=0.1, type=float)
     parser.add_argument('--vec_sample_ratio', default=0.1, type=float)
     parser.add_argument('--draft', default=False, action='store_true')
-    parser.add_argument('--index_factory', default="IVF4096,SQ8")
     parser.add_argument('--sparse', default=False, action='store_true')
     args = parser.parse_args()
     return args
@@ -60,11 +59,9 @@ def main():
     question_dump = h5py.File(args.question_dump_path)
 
     if not args.sparse:
-        mips = MIPS(args.phrase_index_path, args.faiss_path, args.max_answer_length, load_to_memory=True, para=args.para,
-                index_factory=args.index_factory)
+        mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para)
     else:
-        mips = MIPSSparse(args.phrase_index_path, args.faiss_path, args.max_answer_length, load_to_memory=True, para=args.para,
-                index_factory=args.index_factory)
+        mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para)
 
     vecs = []
     sparses = []
@@ -73,9 +70,9 @@ def main():
         vec = question_dump[id_][0, :]
         vecs.append(vec)
 
-        if (id_ + '_sparse') in question_index and args.sparse:
-            sparse = question_index[id_ + '_sparse'][:]
-            input_ids = question_index[id_ + '_input_ids'][:]
+        if (id_ + '_sparse') in question_dump and args.sparse:
+            sparse = question_dump[id_ + '_sparse'][:]
+            input_ids = question_dump[id_ + '_input_ids'][:]
             sparses.append(sparse)
             input_idss.append(input_ids)
             # print(sparse)

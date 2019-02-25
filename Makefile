@@ -68,18 +68,6 @@ train_base_qna_127:
 	--do_predict \
 	--do_eval"
 
-train_base_sp:
-	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
-	--fs nfs \
-	--bert_model_option 'base_uncased' \
-	--train_file train-v1.1-qna-1-1.json \
-	--train_batch_size 18 \
-	--phrase_size 127 \
-	--do_train \
-	--do_predict \
-	--use_sparse \
-	--do_eval"
-
 train_base_qna_511:
 	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
@@ -176,38 +164,12 @@ dump_base_qna_511:
 	--split_by_para \
 	--iteration 3"
 
-train_filter_base_sp:
-	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
-	--fs nfs \
-	--bert_model_option 'base_uncased' \
-	--train_file train-v1.1-qna-1-1.json \
-	--train_batch_size 18 \
-	--phrase_size 127 \
-	--do_train_filter \
-	--do_predict \
-	--do_eval \
-	--num_train_epochs 1 \
-	--load_dir piqateam/piqa-nfs/82 \
-	--use_sparse \
-	--iteration 3"
-
 train:
 	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 24G --nfs-output -a " \
 	--fs nfs \
 	--train_file train-v1.1-qna-1-1.json \
 	--train_batch_size 18 \
 	--phrase_size 961 \
-	--do_train \
-	--do_predict \
-	--do_eval"
-
-train_sp:
-	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 24G --nfs-output -a " \
-	--fs nfs \
-	--train_file train-v1.1-qna-1-1.json \
-	--train_batch_size 18 \
-	--phrase_size 961 \
-	--use_sparse \
 	--do_train \
 	--do_predict \
 	--do_eval"
@@ -233,7 +195,9 @@ train_filter:
 	--phrase_size 961 \
 	--do_train_filter \
 	--do_predict \
-	--do_eval"
+	--do_eval \
+	--load_dir piqateam/piqa-nfs/2438 \
+	--iteration 3"
 
 train_na_961:
 	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 24G --nfs-output -a " \
@@ -326,20 +290,6 @@ dump_na_961:
 	--filter_threshold -999999 \
 	--split_by_para \
 	--parallel \
-	--iteration 3"
-
-train_filter_sp:
-	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 16G --nfs-output -a " \
-	--fs nfs \
-	--train_file train-v1.1-qna-1-1.json \
-	--train_batch_size 18 \
-	--phrase_size 961 \
-	--use_sparse \
-	--do_train_filter \
-	--do_predict \
-	--do_eval \
-	--num_train_epochs 1 \
-	--load_dir piqateam/piqa-nfs/122 \
 	--iteration 3"
 
 dump_qna_961:
@@ -481,7 +431,7 @@ dump_phrases_sp:
 	--do_index \
 	--output_dir index/squad/sparse \
 	--index_file phrase_sp.hdf5 \
-	--load_dir piqateam/piqa-nfs/186 \
+	--load_dir piqateam/piqa-nfs/2438 \
 	--phrase_size 961 \
 	--split_by_para \
 	--iteration 3 \
@@ -494,7 +444,7 @@ dump_questions_sp:
 	--do_embed_question \
 	--output_dir index/squad/sparse \
 	--question_emb_file question_sp.hdf5 \
-	--load_dir piqateam/piqa-nfs/186 \
+	--load_dir piqateam/piqa-nfs/2438 \
 	--phrase_size 961 \
 	--split_by_para \
 	--iteration 3 \
