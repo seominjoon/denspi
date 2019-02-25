@@ -12,6 +12,7 @@ PARA =
 ADD_ALL = --add_all
 NUM_CLUSTERS = 4096
 HNSW = --hnsw
+NPROBE = 128
 
 # para
 
@@ -28,6 +29,7 @@ pred:
 	python run_eval.py $(DATA_PATH) $(DUMP_DIR) \
 	--index_path default_index/index/dump.faiss \
 	--idx2id_path default_index/index/dump.hdf5 \
+	--nprobe $(NPROBE) \
 	$(PARA)
 
 eval_cd:
@@ -47,7 +49,7 @@ nsml_add:
 
 # You need to serve with the main bert model.
 demo:
-	python run_demo.py
+	python run_demo.py $(DUMP_DIR) --nprobe 64 --top_k 10 --index_path index/dump.faiss --idx2id_path index/dump.hdf5
 
 
 # LOD

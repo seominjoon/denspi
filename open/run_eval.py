@@ -13,7 +13,6 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('data_path')
     parser.add_argument('dir')
-    parser.add_argument('--phrase_dump_dir', default='phrase.hdf5')
     parser.add_argument('--index_path', default='default_index/index.faiss')
     parser.add_argument('--quantizer_path', default='quantizer.faiss')
     parser.add_argument('--question_dump_path', default='question.hdf5')
@@ -25,13 +24,15 @@ def get_args():
     parser.add_argument('--para', default=False, action='store_true')
     parser.add_argument('--no_od', default=False, action='store_true')
     parser.add_argument('--draft', default=False, action='store_true')
+    parser.add_argument('--nprobe', default=64, type=int)
     args = parser.parse_args()
     return args
 
 
 def main():
     args = get_args()
-    args.phrase_dump_dir = os.path.join(args.dir, args.phrase_dump_dir)
+    phrase_dump_path = os.path.join(args.dir, 'phrase.hdf5')
+    args.phrase_dump_dir = phrase_dump_path if os.path.exists(phrase_dump_path) else os.path.join(args.dir, 'phrase')
     args.index_path = os.path.join(args.dir, args.index_path)
     args.quantizer_path = os.path.join(args.dir, args.quantizer_path)
     args.question_dump_path = os.path.join(args.dir, args.question_dump_path)
@@ -74,7 +75,7 @@ def main():
             cd_results.extend(each_results)
 
         if not args.no_od:
-            each_results = mips.search(each_query, top_k=args.top_k)
+            each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe)
             od_results.extend(each_results)
     top_k_answers = {query_id: [result['answer'] for result in each_results]
                      for (_, _, query_id, _), each_results in zip(pairs, od_results)}
