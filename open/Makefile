@@ -1,5 +1,7 @@
 PIQA_NFS = /data_nfs/camist002/user/piqa-nfs
-DUMP_DIR = $(PIQA_NFS)/dump/76_dev-10M
+LOCAL_DUMP_DIR = dump/76_dev-100M
+DUMP_DIR = $(PIQA_NFS)/$(LOCAL_DUMP_DIR)
+# DUMP_DIR = $(PIQA_NFS)/dump/76_dev-10M
 # DUMP_DIR = $(PIQA_NFS)/index/squad/large-qna-1Md
 # DUMP_DIR = $(PIQA_NFS)/index/squad/154_m_long
 # DUMP_DIR = $(PIQA_NFS)/index/squad/2382_m
@@ -10,9 +12,9 @@ DATA_PATH = $(PIQA_NFS)/data/dev-v1.1.json
 PARA = --para
 PARA =
 ADD_ALL = --add_all
-NUM_CLUSTERS = 4096
+NUM_CLUSTERS = 32786
 HNSW = --hnsw
-NPROBE = 128
+NPROBE = 64
 
 # para
 
@@ -30,6 +32,7 @@ pred:
 	--index_path default_index/index/dump.faiss \
 	--idx2id_path default_index/index/dump.hdf5 \
 	--nprobe $(NPROBE) \
+	--top_k 10 \
 	$(PARA)
 
 eval_cd:
@@ -38,18 +41,24 @@ eval_cd:
 eval_od:
 	python ../eval/evaluate-recall.py $(DATA_PATH) $(DUMP_DIR)/pred_od.json
 
-# nsml
-
-nsml_coarse:
-	python nsml_cluster.py --output_dir dump/2440_down_20/
-
-
-nsml_add:
-	python nsml_add_to_index.py
-
 # You need to serve with the main bert model.
 demo:
 	python run_demo.py $(DUMP_DIR) --nprobe 64 --top_k 10 --index_path index/dump.faiss --idx2id_path index/dump.hdf5
+
+# nsml
+nsml_add:
+	nsml run -d piqa-nfs -g 0 -c 16 -e run_index.py --memory 32G --nfs-output -a " \
+	$(LOCAL_DUMP_DIR) add --fs nfs $(PARA) $(ADD_ALL)"
+
+
+# nsml mul
+nsml_coarse_mul:
+	python nsml_cluster.py --output_dir dump/2440_down_20/
+
+
+nsml_add_mul:
+	python nsml_add_to_index.py
+
 
 
 # LOD
