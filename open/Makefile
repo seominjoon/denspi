@@ -13,10 +13,11 @@ DATA_PATH = $(PIQA_NFS)/$(LOCAL_DATA_PATH)
 PARA = --para
 PARA =
 ADD_ALL = --add_all
-NUM_CLUSTERS = 32786
-HNSW = --hnsw
+NUM_CLUSTERS = 8192
+HNSW =
 NPROBE = 64
-TOP_K = 10
+TOP_K = 1000
+STEP_SIZE = 10
 
 # local
 coarse:
@@ -34,17 +35,18 @@ pred:
 	--idx2id_path default_index/index/dump.hdf5 \
 	--nprobe $(NPROBE) \
 	--top_k $(TOP_K) \
+	--step_size $(STEP_SIZE) \
 	$(PARA)
 
 eval_cd:
 	python ../eval/evaluate-v1.1.py $(DATA_PATH) $(DUMP_DIR)/pred_cd.json
 
 eval_od:
-	python ../eval/evaluate-recall.py $(DATA_PATH) $(DUMP_DIR)/pred_od.json
+	python ../eval/evaluate-recall.py $(DATA_PATH) $(DUMP_DIR)/pred_od.json_____ --no_f1 --scores_path ~/tmp/scores_1k.json
 
 # You need to serve with the main bert model.
 demo:
-	python run_demo.py $(DUMP_DIR) --nprobe 64 --top_k $(TOP_K) --index_path index/dump.faiss --idx2id_path index/dump.hdf5
+	python run_demo.py $(DUMP_DIR) --nprobe $(NPROBE) --top_k $(TOP_K) --index_path index/dump.faiss --idx2id_path index/dump.hdf5
 
 # nsml
 nsml_add:
@@ -58,5 +60,6 @@ nsml_pred:
 	--index_path default_index/index/dump.faiss \
 	--idx2id_path default_index/index/dump.hdf5 \
 	--nprobe $(NPROBE) \
-	--top_k 10 \
+	--top_k $(TOP_K) \
+	--step_size $(STEP_SIZE) \
 	$(PARA)"

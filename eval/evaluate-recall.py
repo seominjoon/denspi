@@ -55,6 +55,7 @@ def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
 def evaluate(dataset, predictions, k, no_f1=False):
     count = 0
     f1 = exact_match = total = 0
+    ranks = {}
     for article in dataset:
         for paragraph in article['paragraphs']:
             for qa in paragraph['qas']:
@@ -67,8 +68,10 @@ def evaluate(dataset, predictions, k, no_f1=False):
                     continue
                 ground_truths = list(map(lambda x: x['text'], qa['answers']))
                 prediction = predictions[qa['id']][:k]
-                exact_match += max(metric_max_over_ground_truths(
-                    exact_match_score, each, ground_truths) for each in prediction)
+                rank, cur_exact_match = max(enumerate(metric_max_over_ground_truths(
+                    exact_match_score, each, ground_truths) for each in prediction), key=lambda item: item[1])
+                exact_match += cur_exact_match
+                ranks[qa['id']] = rank + 1 if cur_exact_match == 1.0 else 1e9
                 if not no_f1:
                     f1 += max(metric_max_over_ground_truths(
                         f1_score, each, ground_truths) for each in prediction)
@@ -78,7 +81,7 @@ def evaluate(dataset, predictions, k, no_f1=False):
     if count:
         print('There are %d unanswered question(s)' % count)
 
-    return {'exact_match': exact_match, 'f1': f1}
+    return {'exact_match': exact_match, 'f1': f1, 'ranks': ranks}
 
 
 if __name__ == '__main__':
@@ -89,6 +92,7 @@ if __name__ == '__main__':
     parser.add_argument('prediction_file', help='Prediction File')
     parser.add_argument('--no_f1', default=False, action='store_true')
     parser.add_argument('--k_start', default=1, type=int)
+    parser.add_argument('--scores_path', default='scores.json')
     args = parser.parse_args()
     with open(args.dataset_file) as dataset_file:
         dataset_json = json.load(dataset_file)
@@ -100,5 +104,16 @@ if __name__ == '__main__':
     with open(args.prediction_file) as prediction_file:
         predictions = json.load(prediction_file)
     num_answers = len(next(iter(predictions.values())))
-    for k in range(args.k_start, num_answers+1):
-        print('%d:' % k, json.dumps(evaluate(dataset, predictions, k, no_f1=args.no_f1)))
+    if args.no_f1:
+        e = evaluate(dataset, predictions, num_answers + 1)
+        ranks = e['ranks']
+        scores = {}
+        for k in range(1, num_answers + 1):
+            b = [float(rank <= k) for rank in ranks.values()]
+            scores[k] = sum(b) / len(b)
+        with open(args.scores_path, 'w') as fp:
+            json.dump(scores, fp)
+        print(json.dumps(scores))
+    else:
+        for k in range(args.k_start, num_answers + 1):
+            print('%d:' % k, json.dumps(evaluate(dataset, predictions, k)))

@@ -523,3 +523,6 @@ dump_100M:
 
 dump_100M_:
 	python nsml_dump.py --data_name dev-100M --load_dir piqateam/piqa-nfs/76 --num_gpus 1 --mem_size 24 --start 130 --end 156
+
+dump_30M:
+	python nsml_dump.py --data_name dev-30M --load_dir piqateam/piqa-nfs/76 --num_gpus 10 --mem_size 24 --end 153 --no_block

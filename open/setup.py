@@ -1,4 +1,4 @@
-#nsml: plippe/faiss-docker
+#nsml: minjoon/faiss:190225
 
 """
 Copyright 2018 NAVER Corp.
