@@ -99,6 +99,7 @@ class MIPS(object):
         query_start, query_end, query_span_logit = query[:, :bs], query[:, bs:2 * bs], query[:, -1:]
 
         groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
+
         if self.para:
             groups = [group[str(para_idx)] for group, para_idx in zip(groups, para_idxs)]
 
@@ -119,6 +120,7 @@ class MIPS(object):
         default_end = np.zeros(bs).astype(np.float32)
         end_idxs = [group['start2end'][start_idx, :] for group, start_idx in zip(groups, start_idxs)]  # [Q, L]
         end_mask = -1e9 * (np.array(end_idxs) < 0)  # [Q, L]
+
         end = np.stack([[each_end[each_end_idx, :] if each_end.size > 0 else default_end
                          for each_end_idx in each_end_idxs]
                         for each_end, each_end_idxs in zip(ends, end_idxs)], 0)  # [Q, L, d]

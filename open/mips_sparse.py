@@ -28,7 +28,7 @@ def linear_mxq(q_idx, q_val, c_idx, c_val):
 
 
 class MIPSSparse(MIPS):
-    def search_start(self, query_start, q_sparse, q_input_ids, doc_idxs=None, para_idxs=None, start_top_k=100, out_top_k=5, nprobe=16):
+    def search_start(self, query_start, q_sparse, q_input_ids, doc_idxs=None, para_idxs=None, start_top_k=100, out_top_k=5, nprobe=16, sparse_weight=3e+0):
         # doc_idxs = [Q], para_idxs = [Q]
         assert self.start_index is not None
         query_start = query_start.astype(np.float32)
@@ -69,7 +69,7 @@ class MIPSSparse(MIPS):
             sparse_scores = np.stack([np.sum(sp) for sp in sparse_val])
             # sparse_scores = np.stack([linear_mxq(q_idx, q_val, c_idx, c_val) for q_idx, q_val, c_idx, c_val in zip(q_input_ids, q_sparse, input_ids, sparse)])
 
-            rerank_scores = np.reshape(start_scores + sparse_scores * 3, [-1, start_top_k])
+            rerank_scores = np.reshape(start_scores + sparse_scores * sparse_weight, [-1, start_top_k])
             rerank_idxs = np.array([scores.argsort()[-out_top_k:][::-1]
                                     for scores in rerank_scores])
             new_I = np.array([each_I[idxs] for each_I, idxs in zip(I, rerank_idxs)])
@@ -78,7 +78,7 @@ class MIPSSparse(MIPS):
             start_idxs = self.idx2word_id[new_I]
             if self.para:
                 para_idxs = self.idx2para_id[new_I]
-
+            
             start_scores = np.array([scores[idxs] for scores, idxs in zip(rerank_scores, rerank_idxs)])[:,:out_top_k]
 
         # Closed
@@ -97,13 +97,16 @@ class MIPSSparse(MIPS):
 
 
     # Just added q_sparse / q_input_ids to pass to search_phrase
-    def search(self, query, top_k=5, nprobe=64, doc_idxs=None, para_idxs=None, q_sparse=None, q_input_ids=None):
-        start_top_k = 100
+    def search(self, query, top_k=5, nprobe=64, doc_idxs=None, para_idxs=None, q_sparse=None, q_input_ids=None, start_top_k=100, sparse_weight=3e+0):
         num_queries = query.shape[0]
         bs = int((query.shape[1] - 1) / 2)
         query_start = query[:, :bs]
         start_scores, doc_idxs, para_idxs, start_idxs = self.search_start(query_start, q_sparse, q_input_ids, start_top_k=start_top_k, out_top_k=top_k, nprobe=nprobe,
-                                                                          doc_idxs=doc_idxs, para_idxs=para_idxs)
+                                                                          doc_idxs=doc_idxs, para_idxs=para_idxs, sparse_weight=sparse_weight)
+
+        if doc_idxs.shape[1] != top_k:
+            print("Warning.. %d only retrieved" % doc_idxs.shape[1])
+            top_k = doc_idxs.shape[1]
 
         # reshape
         query = np.reshape(np.tile(np.expand_dims(query, 1), [1, top_k, 1]), [-1, query.shape[1]])
