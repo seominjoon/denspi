@@ -88,21 +88,22 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
     print('adding %s' % dump_paths)
     offset = 0
     if para:
-        for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='faiss indexing')):
-            for para_idx, group in doc_group.items():
-                num_vecs = group['start'].shape[0]
-                start = int8_to_float(group['start'][:], group.attrs['offset'], group.attrs['scale'])
-                norms = np.linalg.norm(start, axis=1, keepdims=True)
-                consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
-                start = np.concatenate([consts, start], axis=1)
-                # self.start_index.add_with_ids(start, np.arange(offset, offset + start.shape[0]))
-                start_index.add(start)
-                idx2doc_id.extend([int(doc_idx)] * num_vecs)
-                idx2para_id.extend([int(para_idx)] * num_vecs)
-                idx2word_id.extend(list(range(num_vecs)))
-                offset += start.shape[0]
-            if i % 100 == 0:
-                print('%d/%d' % (i + 1, len(phrase_dump.keys())))
+        for di, phrase_dump in enumerate(tqdm(dumps, desc='dumps')):
+            for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='faiss indexing')):
+                for para_idx, group in doc_group.items():
+                    num_vecs = group['start'].shape[0]
+                    start = int8_to_float(group['start'][:], group.attrs['offset'], group.attrs['scale'])
+                    norms = np.linalg.norm(start, axis=1, keepdims=True)
+                    consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
+                    start = np.concatenate([consts, start], axis=1)
+                    # self.start_index.add_with_ids(start, np.arange(offset, offset + start.shape[0]))
+                    start_index.add(start)
+                    idx2doc_id.extend([int(doc_idx)] * num_vecs)
+                    idx2para_id.extend([int(para_idx)] * num_vecs)
+                    idx2word_id.extend(list(range(num_vecs)))
+                    offset += start.shape[0]
+                if i % 100 == 0:
+                    print('%d/%d' % (i + 1, len(phrase_dump.keys())))
     else:
         for di, phrase_dump in enumerate(tqdm(dumps, desc='dumps')):
             for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='adding %d' % di)):

@@ -28,6 +28,7 @@ def get_args():
     parser.add_argument('--sparse', default=False, action='store_true')
     parser.add_argument('--nprobe', default=64, type=int)
     parser.add_argument('--fs', default='local')
+    parser.add_argument('--step_size', default=10, type=int)
     args = parser.parse_args()
     return args
 
@@ -59,36 +60,35 @@ def main():
                 qid2text[id_] = question
                 pairs.append([doc_idx, para_idx, id_, question])
 
-    question_dump = h5py.File(args.question_dump_path)
+    with h5py.File(args.question_dump_path, 'r') as question_dump:
+        vecs = []
+        sparses = []
+        input_idss = []
+        for doc_idx, para_idx, id_, question in tqdm(pairs):
+            vec = question_dump[id_][0, :]
+            vecs.append(vec)
+
+            if (id_ + '_sparse') in question_dump and args.sparse:
+                sparse = question_dump[id_ + '_sparse'][:]
+                input_ids = question_dump[id_ + '_input_ids'][:]
+                sparses.append(sparse)
+                input_idss.append(input_ids)
+                # print(sparse)
+                # print(qid2text[id_])
+
+        query = np.stack(vecs, 0)
+        if args.draft:
+            query = query[:100]
 
     if not args.sparse:
         mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para)
     else:
         mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para)
 
-    vecs = []
-    sparses = []
-    input_idss = []
-    for doc_idx, para_idx, id_, question in tqdm(pairs):
-        vec = question_dump[id_][0, :]
-        vecs.append(vec)
-
-        if (id_ + '_sparse') in question_dump and args.sparse:
-            sparse = question_dump[id_ + '_sparse'][:]
-            input_ids = question_dump[id_ + '_input_ids'][:]
-            sparses.append(sparse)
-            input_idss.append(input_ids)
-            # print(sparse)
-            # print(qid2text[id_])
-
-    query = np.stack(vecs, 0)
-    if args.draft:
-        query = query[:100]
-
     # recall at k
     cd_results = []
     od_results = []
-    step_size = 10
+    step_size = args.step_size
     for i in tqdm(range(0, query.shape[0], step_size)):
         each_query = query[i:i+step_size]
 
@@ -122,6 +122,8 @@ def main():
         with open(args.cd_out_path, 'w') as fp:
             json.dump(answers, fp)
 
+    while os.path.exists(args.od_out_path):
+        args.od_out_path = args.od_out_path + '_'
     print('dumping %s' % args.od_out_path)
     with open(args.od_out_path, 'w') as fp:
         json.dump(top_k_answers, fp)
