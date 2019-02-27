@@ -84,25 +84,25 @@ def evaluate(dataset, predictions, k, no_f1=False):
     return {'exact_match': exact_match, 'f1': f1, 'ranks': ranks}
 
 
-if __name__ == '__main__':
+def get_args():
     expected_version = '1.1'
     parser = argparse.ArgumentParser(
         description='Evaluation for SQuAD ' + expected_version)
-    parser.add_argument('dataset_file', help='Dataset file')
-    parser.add_argument('prediction_file', help='Prediction File')
+    parser.add_argument('data_path', help='Dataset file')
+    parser.add_argument('od_out_path', help='Prediction File')
     parser.add_argument('--no_f1', default=False, action='store_true')
     parser.add_argument('--k_start', default=1, type=int)
     parser.add_argument('--scores_path', default='scores.json')
     args = parser.parse_args()
-    with open(args.dataset_file) as dataset_file:
-        dataset_json = json.load(dataset_file)
-        if (dataset_json['version'] != expected_version):
-            print('Evaluation expects v-' + expected_version +
-                  ', but got dataset with v-' + dataset_json['version'],
-                  file=sys.stderr)
+    return args
+
+
+def evaluate_recall(args):
+    with open(args.data_path) as data_path:
+        dataset_json = json.load(data_path)
         dataset = dataset_json['data']
-    with open(args.prediction_file) as prediction_file:
-        predictions = json.load(prediction_file)
+    with open(args.od_out_path) as od_out_path:
+        predictions = json.load(od_out_path)
     num_answers = len(next(iter(predictions.values())))
     if args.no_f1:
         e = evaluate(dataset, predictions, num_answers + 1)
@@ -117,3 +117,12 @@ if __name__ == '__main__':
     else:
         for k in range(args.k_start, num_answers + 1):
             print('%d:' % k, json.dumps(evaluate(dataset, predictions, k)))
+
+
+def main():
+    args = get_args()
+    evaluate_recall(args)
+
+
+if __name__ == '__main__':
+    main()
