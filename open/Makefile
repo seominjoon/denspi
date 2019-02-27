@@ -24,6 +24,7 @@ START_TOP_K = 1000
 TOP_K = 1000
 STEP_SIZE = 1
 SPARSE_WEIGHT = 3e+0
+FINE_QUANT = SQ8
 
 # local
 coarse:

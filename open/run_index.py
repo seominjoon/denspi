@@ -122,9 +122,15 @@ def train_coarse_quantizer(data, quantizer_path, num_clusters, hnsw=False, niter
     faiss.write_index(quantizer, quantizer_path)
 
 
-def train_index(data, quantizer_path, trained_index_path):
+def train_index(data, quantizer_path, trained_index_path, fine_quant='SQ8'):
     quantizer = faiss.read_index(quantizer_path)
-    trained_index = faiss.IndexIVFScalarQuantizer(quantizer, quantizer.d, quantizer.ntotal, faiss.METRIC_L2)
+    if fine_quant == 'SQ8':
+        trained_index = faiss.IndexIVFScalarQuantizer(quantizer, quantizer.d, quantizer.ntotal, faiss.METRIC_L2)
+    elif fine_quant.startswith('PQ'):
+        m = int(fine_quant[2:])
+        trained_index = faiss.IndexIVFPQ(quantizer, quantizer.d, quantizer.ntotal, m, 8)
+    else:
+        raise ValueError(fine_quant)
     trained_index.train(data)
     faiss.write_index(trained_index, trained_index_path)
 
@@ -216,7 +222,7 @@ def run_index(args):
         if args.stage != 'all':
             data, _ = sample_data(dump_paths, max_norm=max_norm, para=args.para,
                                   doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio)
-        train_index(data, args.quantizer_path, args.trained_index_path)
+        train_index(data, args.quantizer_path, args.trained_index_path, fine_quant=args.fine_quant)
 
     if args.stage in ['all', 'add']:
         with open(args.max_norm_path, 'r') as fp:
