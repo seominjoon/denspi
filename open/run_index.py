@@ -51,13 +51,13 @@ def get_args():
         from nsml import NSML_NFS_OUTPUT
         args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
 
-    args.index_dir = os.path.join(args.dump_dir, args.index_name)
+    index_dir = os.path.join(args.dump_dir, args.index_name)
 
-    args.quantizer_path = os.path.join(args.index_dir, args.quantizer_path)
-    args.max_norm_path = os.path.join(args.index_dir, args.max_norm_path)
-    args.trained_index_path = os.path.join(args.index_dir, args.trained_index_path)
-    args.target_index_path = os.path.join(args.index_dir, args.index_path)
-    args.idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
+    args.quantizer_path = os.path.join(index_dir, args.quantizer_path)
+    args.max_norm_path = os.path.join(index_dir, args.max_norm_path)
+    args.trained_index_path = os.path.join(index_dir, args.trained_index_path)
+    args.index_path = os.path.join(index_dir, args.index_path)
+    args.idx2id_path = os.path.join(index_dir, args.idx2id_path)
 
     return args
 
@@ -223,7 +223,7 @@ def run_index(args):
             max_norm = json.load(fp)
         if not args.add_all:
             dump_paths = [dump_path]
-        add_to_index(dump_paths, args.trained_index_path, args.target_index_path, args.idx2id_path,
+        add_to_index(dump_paths, args.trained_index_path, args.index_path, args.idx2id_path,
                      max_norm=max_norm, para=args.para)
 
     if args.stage == 'merge':
