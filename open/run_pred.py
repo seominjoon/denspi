@@ -20,7 +20,7 @@ def get_args():
     parser.add_argument('--index_path', default='index.hdf5')
     parser.add_argument('--idx2id_path', default='idx2id.hdf5')
 
-    parser.add_argument('--result_dir', default='result')
+    parser.add_argument('--pred_dir', default='pred')
 
     # MIPS params
     parser.add_argument('--max_answer_length', default=30, type=int)
@@ -51,11 +51,11 @@ def get_args():
     args.question_dump_path = os.path.join(args.dump_dir, args.question_dump_path)
     args.idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
 
-    args.result_dir = os.path.join(args.dump_dir, args.result_dir)
+    args.pred_dir = os.path.join(args.dump_dir, args.pred_dir)
     out_name = '%s_%d_%.1f_%d_%d' % (args.index_name, args.max_answer_length, args.sparse_weight, args.start_top_k,
                                      args.nprobe)
-    args.od_out_path = os.path.join(args.result_dir, 'od_%s.json' % out_name)
-    args.cd_out_path = os.path.join(args.result_dir, 'cd_%s.json' % out_name)
+    args.od_out_path = os.path.join(args.pred_dir, 'od_%s.json' % out_name)
+    args.cd_out_path = os.path.join(args.pred_dir, 'cd_%s.json' % out_name)
 
     return args
 

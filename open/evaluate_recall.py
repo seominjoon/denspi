@@ -1,5 +1,7 @@
 """ Official evaluation script for v1.1 of the SQuAD dataset. """
 from __future__ import print_function
+
+import os
 from collections import Counter
 import string
 import re
@@ -90,30 +92,38 @@ def get_args():
         description='Evaluation for SQuAD ' + expected_version)
     parser.add_argument('data_path', help='Dataset file')
     parser.add_argument('od_out_path', help='Prediction File')
-    parser.add_argument('--no_f1', default=False, action='store_true')
+    parser.add_argument('--do_f1', default=False, action='store_true')
     parser.add_argument('--k_start', default=1, type=int)
-    parser.add_argument('--scores_path', default='scores.json')
+    parser.add_argument('--scores_dir', default='scores')
     args = parser.parse_args()
+
+    args.scores_path = os.path.join(args.scores_dir, 'scores_%s' % os.path.basename(args.od_out_path))
     return args
 
 
 def evaluate_recall(args):
+    if not os.path.exists(args.scores_dir):
+        os.makedirs(args.scores_dir)
+
     with open(args.data_path) as data_path:
         dataset_json = json.load(data_path)
         dataset = dataset_json['data']
     with open(args.od_out_path) as od_out_path:
         predictions = json.load(od_out_path)
     num_answers = len(next(iter(predictions.values())))
-    if args.no_f1:
+    if not args.do_f1:
         e = evaluate(dataset, predictions, num_answers + 1)
         ranks = e['ranks']
-        scores = {}
+        scores = []
         for k in range(1, num_answers + 1):
             b = [float(rank <= k) for rank in ranks.values()]
-            scores[k] = sum(b) / len(b)
+            scores.append([k, sum(b) / len(b)])
         with open(args.scores_path, 'w') as fp:
             json.dump(scores, fp)
-        print(json.dumps(scores))
+
+        print('Top-k results for %d:' % args.od_out_path)
+        for k, score in scores:
+            print('%d: %.2f' % (k, score * 100))
     else:
         for k in range(args.k_start, num_answers + 1):
             print('%d:' % k, json.dumps(evaluate(dataset, predictions, k)))
