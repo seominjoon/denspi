@@ -157,8 +157,7 @@ def get_args():
     return parser.parse_args()
 
 
-def main():
-    args = get_args()
+def run_index(args):
     if args.fs == 'nfs':
         from nsml import NSML_NFS_OUTPUT
         args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
@@ -216,6 +215,11 @@ def main():
 
     if args.stage == 'merge':
         pass
+
+
+def main():
+    args = get_args()
+    run_index(args)
 
 
 if __name__ == '__main__':

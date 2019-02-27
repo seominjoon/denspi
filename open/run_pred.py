@@ -36,15 +36,15 @@ def get_args():
     return args
 
 
-def main():
-    args = get_args()
+def run_pred(args):
     if args.fs == 'nfs':
         from nsml import NSML_NFS_OUTPUT
         args.data_path = os.path.join(NSML_NFS_OUTPUT, args.data_path)
         args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
         args.index_dir = os.path.join(NSML_NFS_OUTPUT, args.index_dir)
     phrase_dump_path = os.path.join(args.dump_dir, 'phrase.hdf5')
-    args.phrase_dump_dir = phrase_dump_path if os.path.exists(phrase_dump_path) else os.path.join(args.dump_dir, 'phrase')
+    args.phrase_dump_dir = phrase_dump_path if os.path.exists(phrase_dump_path) else os.path.join(args.dump_dir,
+                                                                                                  'phrase')
     args.index_path = os.path.join(args.index_dir, args.index_path)
     args.quantizer_path = os.path.join(args.index_dir, args.quantizer_path)
     args.question_dump_path = os.path.join(args.dump_dir, args.question_dump_path)
@@ -87,40 +87,44 @@ def main():
     if not args.sparse:
         mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para)
     else:
-        mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para)
+        mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length,
+                          para=args.para)
 
     # recall at k
     cd_results = []
     od_results = []
     step_size = args.step_size
     for i in tqdm(range(0, query.shape[0], step_size)):
-        each_query = query[i:i+step_size]
+        each_query = query[i:i + step_size]
 
         if len(sparses) > 0:
-            each_sparse = sparses[i:i+step_size]
-            each_input_ids = input_idss[i:i+step_size]
+            each_sparse = sparses[i:i + step_size]
+            each_input_ids = input_idss[i:i + step_size]
 
         if args.no_od:
-            doc_idxs, para_idxs, _, _ = zip(*pairs[i:i+step_size])
+            doc_idxs, para_idxs, _, _ = zip(*pairs[i:i + step_size])
             if len(sparses) == 0:
                 each_results = mips.search(each_query, top_k=args.top_k, doc_idxs=doc_idxs, para_idxs=para_idxs)
             else:
-                each_results = mips.search(each_query, top_k=args.top_k, doc_idxs=doc_idxs, para_idxs=para_idxs, q_sparse=each_sparse, q_input_ids=each_input_ids, start_top_k=args.start_top_k, sparse_weight=args.sparse_weight)
+                each_results = mips.search(each_query, top_k=args.top_k, doc_idxs=doc_idxs, para_idxs=para_idxs,
+                                           q_sparse=each_sparse, q_input_ids=each_input_ids,
+                                           start_top_k=args.start_top_k, sparse_weight=args.sparse_weight)
             cd_results.extend(each_results)
 
         else:
             if len(sparses) == 0:
                 each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe)
             else:
-                each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe, 
-                    q_sparse=each_sparse, q_input_ids=each_input_ids, start_top_k=args.start_top_k, sparse_weight=args.sparse_weight)
+                each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe,
+                                           q_sparse=each_sparse, q_input_ids=each_input_ids,
+                                           start_top_k=args.start_top_k, sparse_weight=args.sparse_weight)
             od_results.extend(each_results)
 
     top_k_answers = {query_id: [result['answer'] for result in each_results]
                      for (_, _, query_id, _), each_results in zip(pairs, od_results)}
     answers = {query_id: each_results[0]['answer']
                for (_, _, query_id, _), each_results in zip(pairs, cd_results)}
-    
+
     if args.para:
         print('dumping %s' % args.cd_out_path)
         with open(args.cd_out_path, 'w') as fp:
@@ -131,6 +135,11 @@ def main():
     print('dumping %s' % args.od_out_path)
     with open(args.od_out_path, 'w') as fp:
         json.dump(top_k_answers, fp)
+
+
+def main():
+    args = get_args()
+    run_pred(args)
 
 
 if __name__ == '__main__':
