@@ -14,44 +14,53 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('data_path')
     parser.add_argument('dump_dir')
-    parser.add_argument('index_dir')
-    parser.add_argument('--index_path', default='default_index/index.faiss')
-    parser.add_argument('--quantizer_path', default='quantizer.faiss')
     parser.add_argument('--question_dump_path', default='question.hdf5')
-    parser.add_argument('--od_out_path', default='pred_od.json')
-    parser.add_argument('--cd_out_path', default="pred_cd.json")
-    parser.add_argument('--idx2id_path', default='default_index/idx2id.hdf5')
+
+    parser.add_argument('--index_name', default='default_index')
+    parser.add_argument('--index_path', default='index.hdf5')
+    parser.add_argument('--idx2id_path', default='idx2id.hdf5')
+
+    parser.add_argument('--result_dir', default='result')
+
+    # MIPS params
     parser.add_argument('--max_answer_length', default=30, type=int)
-    parser.add_argument('--sparse_weight', default=3e+0, type=float)
+    parser.add_argument('--sparse_weight', default=3, type=float)
     parser.add_argument('--start_top_k', default=100, type=int)
-    parser.add_argument('--top_k', default=5, type=int)
+    parser.add_argument('--nprobe', default=64, type=int)
+    # stable MIPS params
+    parser.add_argument('--top_k', default=10, type=int)
     parser.add_argument('--para', default=False, action='store_true')
+    parser.add_argument('--sparse', default=False, action='store_true')
+
     parser.add_argument('--no_od', default=False, action='store_true')
     parser.add_argument('--draft', default=False, action='store_true')
-    parser.add_argument('--sparse', default=False, action='store_true')
-    parser.add_argument('--nprobe', default=64, type=int)
-    parser.add_argument('--fs', default='local')
     parser.add_argument('--step_size', default=10, type=int)
+    parser.add_argument('--fs', default='local')
     args = parser.parse_args()
-    return args
 
-
-def run_pred(args):
     if args.fs == 'nfs':
         from nsml import NSML_NFS_OUTPUT
         args.data_path = os.path.join(NSML_NFS_OUTPUT, args.data_path)
         args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
-        args.index_dir = os.path.join(NSML_NFS_OUTPUT, args.index_dir)
     phrase_dump_path = os.path.join(args.dump_dir, 'phrase.hdf5')
     args.phrase_dump_dir = phrase_dump_path if os.path.exists(phrase_dump_path) else os.path.join(args.dump_dir,
                                                                                                   'phrase')
-    args.index_path = os.path.join(args.index_dir, args.index_path)
-    args.quantizer_path = os.path.join(args.index_dir, args.quantizer_path)
+
+    index_dir = os.path.join(args.dump_dir, args.index_name)
+    args.index_path = os.path.join(index_dir, args.index_path)
     args.question_dump_path = os.path.join(args.dump_dir, args.question_dump_path)
-    # args.od_out_path = os.path.join(args.dir, args.od_out_path)
-    # args.cd_out_path = os.path.join(args.dir, args.cd_out_path)
     args.idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
 
+    args.result_dir = os.path.join(args.dump_dir, args.result_dir)
+    out_name = '%s_%d_%.1f_%d_%d' % (args.index_name, args.max_answer_length, args.sparse_weight, args.start_top_k,
+                                     args.nprobe)
+    args.od_out_path = os.path.join(args.result_dir, 'od_%s.json' % out_name)
+    args.cd_out_path = os.path.join(args.result_dir, 'cd_%s.json' % out_name)
+
+    return args
+
+
+def run_pred(args):
     with open(args.data_path, 'r') as fp:
         test_data = json.load(fp)
     pairs = []
