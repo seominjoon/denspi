@@ -132,13 +132,6 @@ def main():
     with open(args.od_out_path, 'w') as fp:
         json.dump(top_k_answers, fp)
 
-    # Eval
-    command = "python ../eval/evaluate-recall.py %s %s --no_f1 --scores_path scores.json" % (args.data_path, args.od_out_path)
-    import subprocess
-    process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
-    output, error = process.communicate()
-    print(output)
-
 
 if __name__ == '__main__':
     main()

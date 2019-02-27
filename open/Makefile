@@ -36,7 +36,7 @@ add:
 	python run_index.py $(DUMP_DIR) add $(PARA) $(ADD_ALL)
 
 pred:
-	python run_eval.py $(DATA_PATH) $(DUMP_DIR) \
+	python run_pred.py $(DATA_PATH) $(DUMP_DIR) \
 	--index_path $(INDEX_DIR)/default_index/index/dump.faiss \
 	--idx2id_path default_index/index/dump.hdf5 \
 	--nprobe $(NPROBE) \
@@ -63,7 +63,7 @@ nsml_add:
 	$(LOCAL_DUMP_DIR) add --fs nfs $(PARA) $(ADD_ALL)"
 
 nsml_pred:
-	nsml run -d piqa-nfs -g 0 -c 4 -e run_eval.py --memory 32G --nfs-output -a " \
+	nsml run -d piqa-nfs -g 0 -c 4 -e run_pred.py --memory 32G --nfs-output -a " \
 	--fs nfs \
 	$(LOCAL_DATA_PATH) $(LOCAL_DUMP_DIR) $(LOCAL_INDEX_DIR) \
 	--index_path default_index/index/dump.faiss \
