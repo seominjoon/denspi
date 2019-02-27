@@ -1,7 +1,7 @@
 from mips import MIPS, int8_to_float, adjust
+from scipy.sparse import vstack
 
 import numpy as np
-
 
 def dequant(group, input_):
     if 'offset' in group.attrs:
@@ -28,7 +28,11 @@ def linear_mxq(q_idx, q_val, c_idx, c_val):
 
 
 class MIPSSparse(MIPS):
-    def search_start(self, query_start, q_sparse, q_input_ids, doc_idxs=None, para_idxs=None, start_top_k=100, out_top_k=5, nprobe=16, sparse_weight=3e+0):
+    def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para=False, ranker=None):
+        super(MIPSSparse, self).__init__(phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para)
+        self.tfidf_ranker = ranker
+
+    def search_start(self, query_start, q_sparse, q_input_ids, doc_idxs=None, para_idxs=None, start_top_k=100, out_top_k=5, nprobe=16, sparse_weight=3e+0, q_texts=None):
         # doc_idxs = [Q], para_idxs = [Q]
         assert self.start_index is not None
         query_start = query_start.astype(np.float32)
@@ -53,8 +57,13 @@ class MIPSSparse(MIPS):
             q_sparse = [sparse for sparse in q_sparse for _ in range(start_top_k)]
             q_input_ids = [input_ids for input_ids in q_input_ids for _ in range(start_top_k)]
             groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
+
             if self.para:
                 groups = [group[str(para_idx)] for group, para_idx in zip(groups, para_idxs)]
+                doc_texts = [group.attrs['context'] for group in groups]
+                doc_spvecs = vstack([self.tfidf_ranker.text2spvec(doc) for doc in doc_texts])
+                q_spvecs = vstack([self.tfidf_ranker.text2spvec(q) for q in q_texts])
+
             start = np.stack([group['start'][start_idx, :]
                               for group, start_idx in zip(groups, start_idxs)], 0)  # [Q, d]
             start = dequant(groups[0], start)
@@ -68,8 +77,10 @@ class MIPSSparse(MIPS):
             sparse_val = [np.expand_dims(sp, 1) * np.expand_dims(q_sp, 0) * m for q_sp, sp, m in zip(q_sparse, sparse, common_mask)]
             sparse_scores = np.stack([np.sum(sp) for sp in sparse_val])
             # sparse_scores = np.stack([linear_mxq(q_idx, q_val, c_idx, c_val) for q_idx, q_val, c_idx, c_val in zip(q_input_ids, q_sparse, input_ids, sparse)])
+            tfidf_scores = np.squeeze((doc_spvecs * q_spvecs.T).toarray())
 
-            rerank_scores = np.reshape(start_scores + sparse_scores * sparse_weight, [-1, start_top_k])
+            # rerank_scores = np.reshape(start_scores + sparse_scores * sparse_weight, [-1, start_top_k])
+            rerank_scores = np.reshape(start_scores + tfidf_scores * 1e-1, [-1, start_top_k])
             rerank_idxs = np.array([scores.argsort()[-out_top_k:][::-1]
                                     for scores in rerank_scores])
             new_I = np.array([each_I[idxs] for each_I, idxs in zip(I, rerank_idxs)])
@@ -97,12 +108,12 @@ class MIPSSparse(MIPS):
 
 
     # Just added q_sparse / q_input_ids to pass to search_phrase
-    def search(self, query, top_k=5, nprobe=64, doc_idxs=None, para_idxs=None, q_sparse=None, q_input_ids=None, start_top_k=100, sparse_weight=3e+0):
+    def search(self, query, top_k=5, nprobe=64, doc_idxs=None, para_idxs=None, q_sparse=None, q_input_ids=None, start_top_k=100, sparse_weight=3e+0, q_texts=None):
         num_queries = query.shape[0]
         bs = int((query.shape[1] - 1) / 2)
         query_start = query[:, :bs]
         start_scores, doc_idxs, para_idxs, start_idxs = self.search_start(query_start, q_sparse, q_input_ids, start_top_k=start_top_k, out_top_k=top_k, nprobe=nprobe,
-                                                                          doc_idxs=doc_idxs, para_idxs=para_idxs, sparse_weight=sparse_weight)
+                                                                          doc_idxs=doc_idxs, para_idxs=para_idxs, sparse_weight=sparse_weight, q_texts=q_texts)
 
         if doc_idxs.shape[1] != top_k:
             print("Warning.. %d only retrieved" % doc_idxs.shape[1])

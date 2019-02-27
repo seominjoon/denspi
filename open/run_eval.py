@@ -68,6 +68,7 @@ def main():
         vecs = []
         sparses = []
         input_idss = []
+        q_texts = []
         for doc_idx, para_idx, id_, question in tqdm(pairs):
             vec = question_dump[id_][0, :]
             vecs.append(vec)
@@ -77,6 +78,7 @@ def main():
                 input_ids = question_dump[id_ + '_input_ids'][:]
                 sparses.append(sparse)
                 input_idss.append(input_ids)
+                q_texts.append(qid2text[id_])
                 # print(sparse)
                 # print(qid2text[id_])
 
@@ -87,7 +89,17 @@ def main():
     if not args.sparse:
         mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para)
     else:
-        mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para)
+        # Load retriever
+        from drqa import retriever
+        RET_PATH = os.path.join(os.path.expanduser('~'), 'github/DrQA/data', 
+                    'wikipedia/docs-tfidf-ngram=1-hash=16777216-tokenizer=simple.npz')
+        ranker = None
+        ranker = retriever.get_class('tfidf')(
+            tfidf_path=RET_PATH,
+            strict=False
+        )
+        print('Retriever doc_mat shape {}'.format(ranker.doc_mat.shape))
+        mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para, ranker=ranker)
 
     # recall at k
     cd_results = []
@@ -99,13 +111,14 @@ def main():
         if len(sparses) > 0:
             each_sparse = sparses[i:i+step_size]
             each_input_ids = input_idss[i:i+step_size]
+            each_q_text = q_texts[i:i+step_size]
 
         if args.no_od:
             doc_idxs, para_idxs, _, _ = zip(*pairs[i:i+step_size])
             if len(sparses) == 0:
                 each_results = mips.search(each_query, top_k=args.top_k, doc_idxs=doc_idxs, para_idxs=para_idxs)
             else:
-                each_results = mips.search(each_query, top_k=args.top_k, doc_idxs=doc_idxs, para_idxs=para_idxs, q_sparse=each_sparse, q_input_ids=each_input_ids, start_top_k=args.start_top_k, sparse_weight=args.sparse_weight)
+                each_results = mips.search(each_query, top_k=args.top_k, doc_idxs=doc_idxs, para_idxs=para_idxs, q_sparse=each_sparse, q_input_ids=each_input_ids, start_top_k=args.start_top_k, sparse_weight=args.sparse_weight, q_texts=each_q_text)
             cd_results.extend(each_results)
 
         else:
@@ -113,7 +126,7 @@ def main():
                 each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe)
             else:
                 each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe, 
-                    q_sparse=each_sparse, q_input_ids=each_input_ids, start_top_k=args.start_top_k, sparse_weight=args.sparse_weight)
+                    q_sparse=each_sparse, q_input_ids=each_input_ids, start_top_k=args.start_top_k, sparse_weight=args.sparse_weight, q_texts=each_q_text)
             od_results.extend(each_results)
 
     top_k_answers = {query_id: [result['answer'] for result in each_results]

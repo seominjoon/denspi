@@ -1,9 +1,10 @@
 PIQA_NFS = /data_nfs/camist002/user/piqa-nfs
 # DUMP_DIR = $(PIQA_NFS)/index/squad/sparse
 # DUMP_DIR = ~/github/hiqa-private/index/
-LOCAL_DUMP_DIR = dump/2494_dev-100M
-LOCAL_INDEX_DIR = dump/76_dev-100M
 # LOCAL_DUMP_DIR = dump/2494_dev-10M
+LOCAL_DUMP_DIR = dump/2494_dev-1M
+# LOCAL_DUMP_DIR = dump/2606_dev-1M-100
+LOCAL_INDEX_DIR = dump/2494_dev-1M
 DUMP_DIR = $(PIQA_NFS)/$(LOCAL_DUMP_DIR)
 # DUMP_DIR = $(PIQA_NFS)/dump/76_dev-10M
 # DUMP_DIR = $(PIQA_NFS)/index/squad/large-qna-1Md
@@ -17,11 +18,11 @@ LOCAL_DATA_PATH = data/dev-3.json
 DATA_PATH = $(PIQA_NFS)/$(LOCAL_DATA_PATH)
 PARA = --para
 ADD_ALL = --add_all
-NUM_CLUSTERS = 4096
+NUM_CLUSTERS = 128
 HNSW =
 NPROBE = 64
-START_TOP_K = 1000
-TOP_K = 1000
+START_TOP_K = 100
+TOP_K = 100
 STEP_SIZE = 1
 SPARSE_WEIGHT = 3e+0
 
@@ -36,8 +37,8 @@ add:
 	python run_index.py $(DUMP_DIR) add $(PARA) $(ADD_ALL)
 
 pred:
-	python run_eval.py $(DATA_PATH) $(DUMP_DIR) \
-	--index_path $(INDEX_DIR)/default_index/index/dump.faiss \
+	python run_eval.py $(DATA_PATH) $(DUMP_DIR) $(INDEX_DIR) \
+	--index_path default_index/index/dump.faiss \
 	--idx2id_path default_index/index/dump.hdf5 \
 	--nprobe $(NPROBE) \
 	--top_k $(TOP_K) \

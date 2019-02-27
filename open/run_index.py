@@ -172,7 +172,7 @@ def main():
         dump_path = phrase_path
     else:
         dump_names = os.listdir(os.path.join(args.dump_dir, 'phrase'))
-        dump_paths = [os.path.join(args.dump_dir, 'phrase', name) for name in dump_names]
+        dump_paths = [os.path.join(args.dump_dir, 'phrase', name) for name in dump_names if 'hdf5' in name]
         dump_path = os.path.join(args.dump_dir, 'phrase', args.dump_path)
     print(dump_paths)
 
