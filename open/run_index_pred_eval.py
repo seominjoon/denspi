@@ -53,13 +53,14 @@ def get_args():
     parser.add_argument('--pred_dir', default='pred')
 
     # MIPS params
-    parser.add_argument('--max_answer_length', default=30, type=int)
     parser.add_argument('--sparse_weight', default=3, type=float)
     parser.add_argument('--start_top_k', default=100, type=int)
     parser.add_argument('--nprobe', default=64, type=int)
+
     # stable MIPS params
+    parser.add_argument('--max_answer_length', default=30, type=int)
     parser.add_argument('--top_k', default=10, type=int)
-    parser.add_argument('--para', default=False, action='store_true')
+    # parser.add_argument('--para', default=False, action='store_true')
     parser.add_argument('--sparse', default=False, action='store_true')
 
     parser.add_argument('--no_od', default=False, action='store_true')

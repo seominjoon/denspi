@@ -75,3 +75,20 @@ nsml_pred:
 	--sparse_weight $(SPARSE_WEIGHT) \
 	--step_size $(STEP_SIZE) \
 	$(PARA)"
+
+nsml_all_0:
+	nsml run -d piqa-nfs -g 1 -c 16 -e run_index_pred_eval.py --memory 32G --nfs-output -a " \
+	$(LOCAL_DUMP_DIR) $(LOCAL_DATA_PATH) \
+	--fs nfs \
+	--sparse \
+	--para \
+	--add_all \
+	--step_size $(STEP_SIZE) \
+	--top_k $(TOP_K) \
+	--num_clusters $(NUM_CLUSTERS) \
+	$(HNSW) \
+	--fine_quant $(FINE_QUANT) \
+	--sparse_weight $(SPARSE_WEIGHT) \
+	--start_top_k $(START_TOP_K) \
+	--nprobe $(NPROBE) \
+	"
