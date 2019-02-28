@@ -25,8 +25,8 @@ def run_dump_question(args):
                 "%dG" % args.mem_size,
                 "--nfs-output",
                 "-a",
-                "--fs nfs --do_embed_question --data_dir %s "
-                "--output_dir %s --phrase_size %s --use_sparse "
+                "--fs nsml_nfs --do_embed_question --data_dir %s "
+                "--output_dir %s --phrase_size %s "
                 "--load_dir %s --iteration 1 %s" % (args.data_dir,
                                                     args.dump_dir, args.phrase_size,
                                                     args.load_dir, model_option)]
@@ -49,6 +49,8 @@ def run_dump_phrase(args):
                 "piqa-nfs",
                 "-g",
                 "1",
+                "-c",
+                "4",
                 "-e",
                 "run_piqa.py",
                 "--memory",
@@ -56,7 +58,7 @@ def run_dump_phrase(args):
                 "--nfs-output",
                 "-a",
                 "--fs nfs --do_index --data_dir %s --predict_file %d:%d  --filter_threshold %.2f "
-                "--split_by_para --use_sparse --output_dir %s --index_file %d-%d.hdf5 --phrase_size %s "
+                "--output_dir %s --index_file %d-%d.hdf5 --phrase_size %s "
                 "--load_dir %s --iteration 1 %s" % (args.phrase_data_dir, start_doc, end_doc, args.filter_threshold,
                                                     args.phrase_dump_dir, start_doc, end_doc, args.phrase_size,
                                                     args.load_dir, model_option)]
@@ -112,7 +114,7 @@ def get_args():
 
 def main():
     args = get_args()
-    run_dump_question(args)
+    # run_dump_question(args)
     run_dump_phrase(args)
 
 

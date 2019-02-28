@@ -12,9 +12,12 @@ def normalize(text):
 
 def downsize_and_append(args):
     # TODO : split into several files
-    dev_data_path = os.path.join(args.data_dir, 'dev-v1.1.json')
-    with open(dev_data_path, 'r') as fp:
-        dev_data = json.load(fp)
+    if args.data_dir is None:
+        dev_data = {'data': []}
+    else:
+        dev_data_path = os.path.join(args.data_dir, 'dev-v1.1.json')
+        with open(dev_data_path, 'r') as fp:
+            dev_data = json.load(fp)
 
     names = os.listdir(args.from_dir)
     from_paths = [os.path.join(args.from_dir, name) for name in names]
@@ -22,7 +25,9 @@ def downsize_and_append(args):
     for from_path in tqdm(from_paths):
         with open(from_path, 'r') as fp:
             from_ = json.load(fp)
-        articles = random.sample(from_['data'], args.sample_per_file)
+        articles = from_['data']
+        if args.sample_per_file < len(articles):
+            articles = random.sample(articles, args.sample_per_file)
         for article in articles:
             to_article = {'paragraphs': [], 'title': article['title']}
             context = ""
@@ -50,12 +55,12 @@ def downsize_and_append(args):
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('data_dir')
     parser.add_argument('from_dir')
     parser.add_argument('to_dir')
+    parser.add_argument('--data_dir', default=None)
     parser.add_argument('--min_num_chars', default=500, type=int)
     parser.add_argument('--max_num_chars', default=2000, type=int)
-    parser.add_argument('--sample_per_file', default=1, type=int)
+    parser.add_argument('--sample_per_file', default=1000, type=int)
     parser.add_argument('--docs_per_file', default=1000, type=int)
     parser.add_argument('--concat', default=False, action='store_true')
 
