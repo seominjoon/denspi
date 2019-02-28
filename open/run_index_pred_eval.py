@@ -1,5 +1,6 @@
 import argparse
 import os
+from time import time
 
 from evaluate_recall import evaluate_recall
 from run_index import run_index
@@ -11,7 +12,7 @@ def get_args():
 
     ##### run_index.py
     parser.add_argument('dump_dir')
-    parser.add_argument('stage')
+    # parser.add_argument('stage')
 
     # moved from run_pred.py
     parser.add_argument('data_path')
@@ -41,6 +42,7 @@ def get_args():
     parser.add_argument('--vec_sample_ratio', default=0.2, type=float)
 
     parser.add_argument('--fs', default='local')
+    parser.add_argument('--cuda', default=False, action='store_true')
 
     ##### run_pred.py
     # parser.add_argument('data_path')
@@ -77,6 +79,8 @@ def get_args():
 
     args = parser.parse_args()
 
+    args.stage = 'all'
+
     #### run_index.py
     coarse = 'hnsw' if args.hnsw else 'flat'
     args.index_name = '%d_%s_%s' % (args.num_clusters, coarse, args.fine_quant)
@@ -85,13 +89,13 @@ def get_args():
         from nsml import NSML_NFS_OUTPUT
         args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
 
-    index_dir = os.path.join(args.dump_dir, args.index_name)
+    args.index_dir = os.path.join(args.dump_dir, args.index_name)
 
-    args.quantizer_path = os.path.join(index_dir, args.quantizer_path)
-    args.max_norm_path = os.path.join(index_dir, args.max_norm_path)
-    args.trained_index_path = os.path.join(index_dir, args.trained_index_path)
-    args.index_path = os.path.join(index_dir, args.index_path)
-    args.idx2id_path = os.path.join(index_dir, args.idx2id_path)
+    args.quantizer_path = os.path.join(args.index_dir, args.quantizer_path)
+    args.max_norm_path = os.path.join(args.index_dir, args.max_norm_path)
+    args.trained_index_path = os.path.join(args.index_dir, args.trained_index_path)
+    args.index_path = os.path.join(args.index_dir, args.index_path)
+    args.idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
 
     #### run_pred.py
     if args.fs == 'nfs':
@@ -119,9 +123,14 @@ def get_args():
 
 
 def run_index_pred_eval(args):
+    t0 = time()
     run_index(args)
+    t1 = time()
     run_pred(args)
+    t2 = time()
     evaluate_recall(args)
+
+    print('run_index: %.1f mins, run_pred: %.1f mins' % ((t1 - t0) / 60, (t2 - t1) / 60))
 
 
 def main():

@@ -46,8 +46,8 @@ def get_args():
     args.phrase_dump_dir = phrase_dump_path if os.path.exists(phrase_dump_path) else os.path.join(args.dump_dir,
                                                                                                   'phrase')
 
-    index_dir = os.path.join(args.dump_dir, args.index_name)
-    args.index_path = os.path.join(index_dir, args.index_path)
+    args.index_dir = os.path.join(args.dump_dir, args.index_name)
+    args.index_path = os.path.join(args.index_dir, args.index_path)
     args.question_dump_path = os.path.join(args.dump_dir, args.question_dump_path)
     args.idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
 
@@ -60,6 +60,9 @@ def get_args():
 
 
 def run_pred(args):
+    if not os.path.exists(args.pred_dir):
+        os.makedirs(args.pred_dir)
+
     with open(args.data_path, 'r') as fp:
         test_data = json.load(fp)
     pairs = []
@@ -102,7 +105,8 @@ def run_pred(args):
     cd_results = []
     od_results = []
     step_size = args.step_size
-    for i in tqdm(range(0, query.shape[0], step_size)):
+    is_ = range(0, query.shape[0], step_size)
+    for i in tqdm(is_):
         each_query = query[i:i + step_size]
 
         if len(sparses) > 0:
@@ -127,6 +131,8 @@ def run_pred(args):
                                            q_sparse=each_sparse, q_input_ids=each_input_ids,
                                            start_top_k=args.start_top_k, sparse_weight=args.sparse_weight)
             od_results.extend(each_results)
+        if i % 10 == 0:
+            print('%d/%d' % (i+1, len(is_)))
 
     top_k_answers = {query_id: [result['answer'] for result in each_results]
                      for (_, _, query_id, _), each_results in zip(pairs, od_results)}

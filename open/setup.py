@@ -1,4 +1,4 @@
-#nsml: minjoon/faiss:190225
+#nsml: minjoon/denspin:19022813
 
 """
 Copyright 2018 NAVER Corp.

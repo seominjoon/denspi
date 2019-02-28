@@ -25,9 +25,18 @@ def downsize_and_append(args):
         articles = random.sample(from_['data'], args.sample_per_file)
         for article in articles:
             to_article = {'paragraphs': [], 'title': article['title']}
+            context = ""
             for para in article['paragraphs']:
-                if args.min_num_chars <= len(para['context']) < args.max_num_chars:
-                    to_article['paragraphs'].append(para)
+                if args.concat:
+                    if len(para['context']) > args.max_num_chars:
+                        continue
+                    context = context + " " + para['context']
+                    if args.min_num_chars <= len(context):
+                        to_article['paragraphs'].append({'context': context})
+                        context = ""
+                else:
+                    if args.min_num_chars <= len(para['context']) < args.max_num_chars:
+                        to_article['paragraphs'].append(para)
             dev_data['data'].append(to_article)
 
     if not os.path.exists(args.to_dir):
@@ -48,6 +57,7 @@ def get_args():
     parser.add_argument('--max_num_chars', default=2000, type=int)
     parser.add_argument('--sample_per_file', default=1, type=int)
     parser.add_argument('--docs_per_file', default=1000, type=int)
+    parser.add_argument('--concat', default=False, action='store_true')
 
     return parser.parse_args()
 

@@ -41,6 +41,7 @@ def get_args():
     parser.add_argument('--vec_sample_ratio', default=0.2, type=float)
 
     parser.add_argument('--fs', default='local')
+    parser.add_argument('--cuda', defaul=False, action='store_true')
 
     args = parser.parse_args()
 
@@ -50,14 +51,16 @@ def get_args():
     if args.fs == 'nfs':
         from nsml import NSML_NFS_OUTPUT
         args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
+    elif args.fs == 'nsml':
+        pass
 
-    index_dir = os.path.join(args.dump_dir, args.index_name)
+    args.index_dir = os.path.join(args.dump_dir, args.index_name)
 
-    args.quantizer_path = os.path.join(index_dir, args.quantizer_path)
-    args.max_norm_path = os.path.join(index_dir, args.max_norm_path)
-    args.trained_index_path = os.path.join(index_dir, args.trained_index_path)
-    args.index_path = os.path.join(index_dir, args.index_path)
-    args.idx2id_path = os.path.join(index_dir, args.idx2id_path)
+    args.quantizer_path = os.path.join(args.index_dir, args.quantizer_path)
+    args.max_norm_path = os.path.join(args.index_dir, args.max_norm_path)
+    args.trained_index_path = os.path.join(args.index_dir, args.trained_index_path)
+    args.index_path = os.path.join(args.index_dir, args.index_path)
+    args.idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
 
     return args
 
@@ -67,7 +70,9 @@ def sample_data(dump_paths, para=False, doc_sample_ratio=0.2, vec_sample_ratio=0
     vecs = []
     random.seed(seed)
     np.random.seed(seed)
-    print(dump_paths)
+    print('sampling from:')
+    for dump_path in dump_paths:
+        print(dump_path)
     dumps = [h5py.File(dump_path, 'r') for dump_path in dump_paths]
     for i, f in enumerate(tqdm(dumps)):
         doc_ids = f.keys()
@@ -96,17 +101,18 @@ def sample_data(dump_paths, para=False, doc_sample_ratio=0.2, vec_sample_ratio=0
     return out, max_norm
 
 
-def train_coarse_quantizer(data, quantizer_path, num_clusters, hnsw=False, niter=10):
+def train_coarse_quantizer(data, quantizer_path, num_clusters, hnsw=False, niter=10, cuda=False):
     d = data.shape[1]
 
-    res = faiss.StandardGpuResources()
     index_flat = faiss.IndexFlatL2(d)
     # make it into a gpu index
-    gpu_index_flat = faiss.index_cpu_to_gpu(res, 0, index_flat)
+    if cuda:
+        res = faiss.StandardGpuResources()
+        index_flat = faiss.index_cpu_to_gpu(res, 0, index_flat)
     clus = faiss.Clustering(d, num_clusters)
     clus.verbose = True
     clus.niter = niter
-    clus.train(data, gpu_index_flat)
+    clus.train(data, index_flat)
     centroids = faiss.vector_float_to_array(clus.centroids)
     centroids = centroids.reshape(num_clusters, d)
 
@@ -139,14 +145,17 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
     idx2doc_id = []
     idx2para_id = []
     idx2word_id = []
-    dumps = [h5py.File(dump_path, 'r') for dump_path in dump_paths]
+    # dumps = [h5py.File(dump_path, 'r') for dump_path in dump_paths]
     print('reading %s' % trained_index_path)
     start_index = faiss.read_index(trained_index_path)
 
-    print('adding %s' % dump_paths)
+    print('adding following dumps:')
+    for dump_path in dump_paths:
+        print(dump_path)
     offset = 0
     if para:
-        for di, phrase_dump in enumerate(tqdm(dumps, desc='dumps')):
+        for di, dump_path in enumerate(tqdm(dump_paths, desc='dumps')):
+            phrase_dump = h5py.File(dump_path, 'r', driver='core')
             for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='faiss indexing')):
                 for para_idx, group in doc_group.items():
                     num_vecs = group['start'].shape[0]
@@ -162,8 +171,10 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
                     offset += start.shape[0]
                 if i % 100 == 0:
                     print('%d/%d' % (i + 1, len(phrase_dump.keys())))
+            phrase_dump.close()
     else:
-        for di, phrase_dump in enumerate(tqdm(dumps, desc='dumps')):
+        for di, dump_path in enumerate(tqdm(dump_paths, desc='dumps')):
+            phrase_dump = h5py.File(dump_path, 'r', driver='core')
             for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='adding %d' % di)):
                 num_vecs = doc_group['start'].shape[0]
                 start = int8_to_float(doc_group['start'][:], doc_group.attrs['offset'],
@@ -177,17 +188,20 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
                 offset += start.shape[0]
                 if i % 100 == 0:
                     print('%d/%d' % (i + 1, len(phrase_dump.keys())))
+            phrase_dump.close()
 
     print('index ntotal: %d' % start_index.ntotal)
     idx2doc_id = np.array(idx2doc_id, dtype=np.int32)
     idx2para_id = np.array(idx2para_id, dtype=np.int32)
     idx2word_id = np.array(idx2word_id, dtype=np.int32)
 
+    print('writing index and metadata')
     with h5py.File(idx2id_path, 'w') as f:
         f.create_dataset('doc', data=idx2doc_id)
         f.create_dataset('para', data=idx2para_id)
         f.create_dataset('word', data=idx2word_id)
     faiss.write_index(start_index, target_index_path)
+    print('done')
 
 
 def merge_indexes(index_dir, idx2id_dir, target_index_path, target_idx2id_path):
@@ -203,12 +217,10 @@ def run_index(args):
         dump_names = os.listdir(os.path.join(args.dump_dir, 'phrase'))
         dump_paths = [os.path.join(args.dump_dir, 'phrase', name) for name in dump_names]
         dump_path = os.path.join(args.dump_dir, 'phrase', args.dump_path)
-    print(dump_paths)
-
-    if not os.path.exists(args.out_dir):
-        os.makedirs(args.out_dir)
 
     if args.stage in ['all', 'coarse']:
+        if not os.path.exists(args.index_dir):
+            os.makedirs(args.index_dir)
         data, max_norm = sample_data(dump_paths, max_norm=args.max_norm, para=args.para,
                                      doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio,
                                      max_norm_cf=args.max_norm_cf)
