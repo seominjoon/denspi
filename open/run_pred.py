@@ -144,8 +144,6 @@ def run_pred(args):
         with open(args.cd_out_path, 'w') as fp:
             json.dump(answers, fp)
 
-    while os.path.exists(args.od_out_path):
-        args.od_out_path = args.od_out_path + '_'
     print('dumping %s' % args.od_out_path)
     with open(args.od_out_path, 'w') as fp:
         json.dump(top_k_answers, fp)
