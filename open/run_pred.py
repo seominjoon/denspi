@@ -36,6 +36,7 @@ def get_args():
     parser.add_argument('--draft', default=False, action='store_true')
     parser.add_argument('--step_size', default=10, type=int)
     parser.add_argument('--fs', default='local')
+    parser.add_argument('--num_dummy_zeros', default=0, type=int)
     args = parser.parse_args()
 
     if args.fs == 'nfs':
@@ -96,7 +97,8 @@ def run_pred(args):
             query = query[:100]
 
     if not args.sparse:
-        mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para)
+        mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para,
+                    num_dummy_zeros=args.num_dummy_zeros)
     else:
         mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length,
                           para=args.para)

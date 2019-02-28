@@ -42,6 +42,8 @@ def get_args():
 
     parser.add_argument('--fs', default='local')
     parser.add_argument('--cuda', defaul=False, action='store_true')
+    parser.add_argument('--num_dummy_zeros', default=0, type=int)
+    parser.add_argument('--replace', default=False, action='store_true')
 
     args = parser.parse_args()
 
@@ -66,7 +68,7 @@ def get_args():
 
 
 def sample_data(dump_paths, para=False, doc_sample_ratio=0.2, vec_sample_ratio=0.2, seed=29,
-                max_norm=None, max_norm_cf=1.3):
+                max_norm=None, max_norm_cf=1.3, num_dummy_zeros=0):
     vecs = []
     random.seed(seed)
     np.random.seed(seed)
@@ -98,6 +100,8 @@ def sample_data(dump_paths, para=False, doc_sample_ratio=0.2, vec_sample_ratio=0
         max_norm = max_norm_cf * np.max(norms)
     consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
     out = np.concatenate([consts, out], axis=1)
+    if num_dummy_zeros > 0:
+        out = np.concatenate([out, np.zeros([out.shape[0], num_dummy_zeros], dtype=out.dtype)], axis=1)
     return out, max_norm
 
 
@@ -142,7 +146,7 @@ def train_index(data, quantizer_path, trained_index_path, fine_quant='SQ8'):
 
 
 def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path, max_norm, para=False,
-                 num_docs_per_add=1000):
+                 num_docs_per_add=1000, num_dummy_zeros=0):
     idx2doc_id = []
     idx2para_id = []
     idx2word_id = []
@@ -165,6 +169,9 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
                         norms = np.linalg.norm(start, axis=1, keepdims=True)
                         consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
                         start = np.concatenate([consts, start], axis=1)
+                        if num_dummy_zeros > 0:
+                            start = np.concatenate(
+                                [start, np.zeros([start.shape[0], num_dummy_zeros], dtype=start.dtype)], axis=1)
                         starts.append(start)
                         idx2doc_id.extend([int(doc_idx)] * num_vecs)
                         idx2para_id.extend([int(para_idx)] * num_vecs)
@@ -184,6 +191,9 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
                 norms = np.linalg.norm(start, axis=1, keepdims=True)
                 consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
                 start = np.concatenate([consts, start], axis=1)
+                if num_dummy_zeros > 0:
+                    start = np.concatenate([start, np.zeros([start.shape[0], num_dummy_zeros], dtype=start.dtype)],
+                                           axis=1)
                 starts.append(start)
                 idx2doc_id.extend([int(doc_idx)] * num_vecs)
                 idx2word_id.extend(range(num_vecs))
@@ -227,31 +237,37 @@ def run_index(args):
         dump_paths = [os.path.join(args.dump_dir, 'phrase', name) for name in dump_names]
         dump_path = os.path.join(args.dump_dir, 'phrase', args.dump_path)
 
+    data = None
+
     if args.stage in ['all', 'coarse']:
-        if not os.path.exists(args.index_dir):
-            os.makedirs(args.index_dir)
-        data, max_norm = sample_data(dump_paths, max_norm=args.max_norm, para=args.para,
-                                     doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio,
-                                     max_norm_cf=args.max_norm_cf)
-        with open(args.max_norm_path, 'w') as fp:
-            json.dump(max_norm, fp)
-        train_coarse_quantizer(data, args.quantizer_path, args.num_clusters, cuda=args.cuda)
+        if args.replace or not os.path.exists(args.quantizer_path):
+            if not os.path.exists(args.index_dir):
+                os.makedirs(args.index_dir)
+            data, max_norm = sample_data(dump_paths, max_norm=args.max_norm, para=args.para,
+                                         doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio,
+                                         max_norm_cf=args.max_norm_cf, num_dummy_zeros=args.num_dummy_zeros)
+            with open(args.max_norm_path, 'w') as fp:
+                json.dump(max_norm, fp)
+            train_coarse_quantizer(data, args.quantizer_path, args.num_clusters, cuda=args.cuda)
 
     if args.stage in ['all', 'fine']:
-        with open(args.max_norm_path, 'r') as fp:
-            max_norm = json.load(fp)
-        if args.stage != 'all':
-            data, _ = sample_data(dump_paths, max_norm=max_norm, para=args.para,
-                                  doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio)
-        train_index(data, args.quantizer_path, args.trained_index_path, fine_quant=args.fine_quant)
+        if args.replace or not os.path.exists(args.trained_index_path):
+            with open(args.max_norm_path, 'r') as fp:
+                max_norm = json.load(fp)
+            if data is None:
+                data, _ = sample_data(dump_paths, max_norm=max_norm, para=args.para,
+                                      doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio,
+                                      num_dummy_zeros=args.num_dummy_zeros)
+            train_index(data, args.quantizer_path, args.trained_index_path, fine_quant=args.fine_quant)
 
     if args.stage in ['all', 'add']:
-        with open(args.max_norm_path, 'r') as fp:
-            max_norm = json.load(fp)
-        if not args.add_all:
-            dump_paths = [dump_path]
-        add_to_index(dump_paths, args.trained_index_path, args.index_path, args.idx2id_path,
-                     max_norm=max_norm, para=args.para)
+        if args.replace or not os.path.exists(args.index_path):
+            with open(args.max_norm_path, 'r') as fp:
+                max_norm = json.load(fp)
+            if not args.add_all:
+                dump_paths = [dump_path]
+            add_to_index(dump_paths, args.trained_index_path, args.index_path, args.idx2id_path,
+                         max_norm=max_norm, para=args.para, num_dummy_zeros=args.num_dummy_zeros)
 
     if args.stage == 'merge':
         raise NotImplementedError(args.stage)

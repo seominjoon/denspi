@@ -43,6 +43,8 @@ def get_args():
 
     parser.add_argument('--fs', default='local')
     parser.add_argument('--cuda', default=False, action='store_true')
+    parser.add_argument('--num_dummy_zeros', default=0, type=int)
+    parser.add_argument('--replace', default=False, action='store_true')
 
     ##### run_pred.py
     # parser.add_argument('data_path')

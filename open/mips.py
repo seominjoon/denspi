@@ -33,7 +33,8 @@ def overlap(t1, t2, a1, a2, b1, b2):
 
 
 class MIPS(object):
-    def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para=False):
+    def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para=False,
+                 num_dummy_zeros=0):
         if os.path.isdir(phrase_dump_dir):
             self.phrase_dump_paths = [os.path.join(phrase_dump_dir, name) for name in os.listdir(phrase_dump_dir)]
             dump_names = [os.path.splitext(os.path.basename(path))[0] for path in self.phrase_dump_paths]
@@ -50,6 +51,8 @@ class MIPS(object):
             self.idx2doc_id = f['doc'][:]
             self.idx2para_id = f['para'][:]
             self.idx2word_id = f['word'][:]
+
+        self.num_dummy_zeros = num_dummy_zeros
 
     def close(self):
         for phrase_dump in self.phrase_dumps:
@@ -69,7 +72,11 @@ class MIPS(object):
         query_start = query_start.astype(np.float32)
 
         if doc_idxs is None:
-            query_start = np.concatenate([np.zeros([query_start.shape[0], 1]).astype(np.float32), query_start], axis=1)
+            query_start = np.concatenate([np.zeros([query_start.shape[0], 1]).astype(np.float32),
+                                          query_start], axis=1)
+            if self.num_dummy_zeros > 0:
+                query_start = np.concatenate([query_start, np.zeros([query_start.shape[0], self.num_dummy_zeros],
+                                                                    dtype=query_start.dtype)], axis=1)
             self.start_index.nprobe = nprobe
             start_scores, I = self.start_index.search(query_start, top_k)
 

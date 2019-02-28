@@ -130,9 +130,67 @@ nsml_all_1:
 	--step_size $(STEP_SIZE) \
 	--top_k $(TOP_K) \
 	--num_clusters $(NUM_CLUSTERS) \
-	$(HNSW) \
+	--hnsw \
 	--fine_quant $(FINE_QUANT) \
 	--start_top_k $(START_TOP_K) \
 	--nprobe $(NPROBE) \
 	"
 
+nsml_all_2:
+	nsml run -d piqa-nfs -g 0 -c 4 -e run_index_pred_eval.py --memory 16G --nfs-output -a " \
+	$(LOCAL_DUMP_DIR) $(LOCAL_DATA_PATH) \
+	--fs nfs \
+	--add_all \
+	--step_size $(STEP_SIZE) \
+	--top_k $(TOP_K) \
+	--num_clusters $(NUM_CLUSTERS) \
+	--fine_quant $(FINE_QUANT) \
+	--start_top_k $(START_TOP_K) \
+	--nprobe 128 \
+	"
+
+nsml_all_3:
+	nsml run -d piqa-nfs -g 0 -c 4 -e run_index_pred_eval.py --memory 16G --nfs-output -a " \
+	$(LOCAL_DUMP_DIR) $(LOCAL_DATA_PATH) \
+	--fs nfs \
+	--add_all \
+	--step_size $(STEP_SIZE) \
+	--top_k $(TOP_K) \
+	--num_clusters $(NUM_CLUSTERS) \
+	$(HNSW) \
+	--fine_quant PQ121 \
+	--num_dummy_zeros 3 \
+	--start_top_k $(START_TOP_K) \
+	--nprobe $(NPROBE) \
+	"
+
+nsml_all_4:
+	nsml run -d piqa-nfs -g 1 -c 4 -e run_index_pred_eval.py --memory 16G --nfs-output -a " \
+	$(LOCAL_DUMP_DIR) $(LOCAL_DATA_PATH) \
+	--fs nfs \
+	--add_all \
+	--step_size $(STEP_SIZE) \
+	--top_k $(TOP_K) \
+	--num_clusters $(NUM_CLUSTERS) \
+	$(HNSW) \
+	--fine_quant PQ241 \
+	--num_dummy_zeros 1 \
+	--start_top_k $(START_TOP_K) \
+	--replace \
+	--cuda \
+	--nprobe $(NPROBE) \
+	"
+
+nsml_all_5:
+	nsml run -d piqa-nfs -g 0 -c 4 -e run_index_pred_eval.py --memory 16G --nfs-output -a " \
+	$(LOCAL_DUMP_DIR) $(LOCAL_DATA_PATH) \
+	--fs nfs \
+	--add_all \
+	--step_size $(STEP_SIZE) \
+	--top_k $(TOP_K) \
+	--num_clusters $(NUM_CLUSTERS) \
+	$(HNSW) \
+	--fine_quant PQ481 \
+	--start_top_k $(START_TOP_K) \
+	--nprobe $(NPROBE) \
+	"
