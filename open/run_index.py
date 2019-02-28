@@ -155,7 +155,7 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
     offset = 0
     if para:
         for di, dump_path in enumerate(tqdm(dump_paths, desc='dumps')):
-            with h5py.File(dump_path, 'r', driver='core') as phrase_dump:
+            with h5py.File(dump_path, 'r') as phrase_dump:
                 for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='faiss indexing')):
                     for para_idx, group in doc_group.items():
                         num_vecs = group['start'].shape[0]
@@ -173,7 +173,7 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
                         print('%d/%d' % (i + 1, len(phrase_dump.keys())))
     else:
         for di, dump_path in enumerate(tqdm(dump_paths, desc='dumps')):
-            with h5py.File(dump_path, 'r', driver='core') as phrase_dump:
+            with h5py.File(dump_path, 'r') as phrase_dump:
                 for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='adding %d' % di)):
                     num_vecs = doc_group['start'].shape[0]
                     start = int8_to_float(doc_group['start'][:], doc_group.attrs['offset'],
