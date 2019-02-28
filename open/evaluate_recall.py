@@ -121,7 +121,7 @@ def evaluate_recall(args):
         with open(args.scores_path, 'w') as fp:
             json.dump(scores, fp)
 
-        print('Top-k results for %d:' % args.od_out_path)
+        print('Top-k results for %s:' % args.od_out_path)
         for k, score in scores:
             print('%d: %.2f' % (k, score * 100))
     else:
