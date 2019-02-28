@@ -150,8 +150,6 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
     start_index = faiss.read_index(trained_index_path)
 
     print('adding following dumps:')
-    for dump_path in dump_paths:
-        print(dump_path)
     offset = 0
     if para:
         for di, dump_path in enumerate(tqdm(dump_paths, desc='dumps')):
@@ -174,7 +172,8 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
     else:
         for di, dump_path in enumerate(tqdm(dump_paths, desc='dumps')):
             with h5py.File(dump_path, 'r') as phrase_dump:
-                for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='adding %d' % di)):
+                items = phrase_dump.items()
+                for i, (doc_idx, doc_group) in enumerate(tqdm(items, desc='adding %d' % di)):
                     num_vecs = doc_group['start'].shape[0]
                     start = int8_to_float(doc_group['start'][:], doc_group.attrs['offset'],
                                           doc_group.attrs['scale'])
