@@ -171,20 +171,22 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
                         print('%d/%d' % (i + 1, len(phrase_dump.keys())))
     else:
         for di, phrase_dump in enumerate(tqdm(dumps, desc='dumps')):
-                items = phrase_dump.items()
-                for i, (doc_idx, doc_group) in enumerate(tqdm(items, desc='adding %d' % di)):
-                    num_vecs = doc_group['start'].shape[0]
-                    start = int8_to_float(doc_group['start'][:], doc_group.attrs['offset'],
-                                          doc_group.attrs['scale'])
-                    norms = np.linalg.norm(start, axis=1, keepdims=True)
-                    consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
-                    start = np.concatenate([consts, start], axis=1)
-                    start_index.add(start)
-                    idx2doc_id.extend([int(doc_idx)] * num_vecs)
-                    idx2word_id.extend(range(num_vecs))
-                    offset += start.shape[0]
-                    if i % 100 == 0:
-                        print('%d/%d' % (i + 1, len(phrase_dump.keys())))
+            starts = []
+            for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='adding %d' % di)):
+                num_vecs = doc_group['start'].shape[0]
+                start = int8_to_float(doc_group['start'][:], doc_group.attrs['offset'],
+                                      doc_group.attrs['scale'])
+                norms = np.linalg.norm(start, axis=1, keepdims=True)
+                consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
+                start = np.concatenate([consts, start], axis=1)
+                # start_index.add(start)
+                starts.append(start)
+                idx2doc_id.extend([int(doc_idx)] * num_vecs)
+                idx2word_id.extend(range(num_vecs))
+                offset += start.shape[0]
+                if i % 100 == 0:
+                    print('%d/%d' % (i + 1, len(phrase_dump.keys())))
+            start_index.add(np.concatenate(starts, axis=0))
 
     for dump in dumps:
         dump.close()
