@@ -16,7 +16,7 @@ LOCAL_DATA_PATH = data/dev-3.json
 DATA_PATH = $(PIQA_NFS)/$(LOCAL_DATA_PATH)
 PARA =
 ADD_ALL = --add_all
-NUM_CLUSTERS = 128
+NUM_CLUSTERS = 4096
 HNSW =
 NPROBE = 64
 START_TOP_K = 100
@@ -129,7 +129,7 @@ nsml_all_1:
 	--add_all \
 	--step_size $(STEP_SIZE) \
 	--top_k $(TOP_K) \
-	--num_clusters 128 \
+	--num_clusters $(NUM_CLUSTERS) \
 	$(HNSW) \
 	--fine_quant $(FINE_QUANT) \
 	--start_top_k $(START_TOP_K) \

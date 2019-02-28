@@ -235,7 +235,7 @@ def run_index(args):
                                      max_norm_cf=args.max_norm_cf)
         with open(args.max_norm_path, 'w') as fp:
             json.dump(max_norm, fp)
-        train_coarse_quantizer(data, args.quantizer_path, args.num_clusters)
+        train_coarse_quantizer(data, args.quantizer_path, args.num_clusters, cuda=args.cuda)
 
     if args.stage in ['all', 'fine']:
         with open(args.max_norm_path, 'r') as fp:
