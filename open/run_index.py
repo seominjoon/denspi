@@ -180,7 +180,7 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
                     norms = np.linalg.norm(start, axis=1, keepdims=True)
                     consts = np.sqrt(max_norm ** 2 - norms ** 2)
                     start = np.concatenate([consts, start], axis=1)
-                    start_index.add_with_ids(start, np.arange(offset, offset + start.shape[0]))
+                    start_index.add(start)
                     idx2doc_id.extend([int(doc_idx)] * num_vecs)
                     idx2word_id.extend(range(num_vecs))
                     offset += start.shape[0]
