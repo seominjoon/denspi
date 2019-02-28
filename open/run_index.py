@@ -145,7 +145,7 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
     idx2doc_id = []
     idx2para_id = []
     idx2word_id = []
-    # dumps = [h5py.File(dump_path, 'r') for dump_path in dump_paths]
+    dumps = [h5py.File(dump_path, 'r') for dump_path in dump_paths]
     print('reading %s' % trained_index_path)
     start_index = faiss.read_index(trained_index_path)
 
@@ -170,15 +170,14 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
                     if i % 100 == 0:
                         print('%d/%d' % (i + 1, len(phrase_dump.keys())))
     else:
-        for di, dump_path in enumerate(tqdm(dump_paths, desc='dumps')):
-            with h5py.File(dump_path, 'r') as phrase_dump:
+        for di, phrase_dump in enumerate(tqdm(dumps, desc='dumps')):
                 items = phrase_dump.items()
                 for i, (doc_idx, doc_group) in enumerate(tqdm(items, desc='adding %d' % di)):
                     num_vecs = doc_group['start'].shape[0]
                     start = int8_to_float(doc_group['start'][:], doc_group.attrs['offset'],
                                           doc_group.attrs['scale'])
                     norms = np.linalg.norm(start, axis=1, keepdims=True)
-                    consts = np.sqrt(max_norm ** 2 - norms ** 2)
+                    consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
                     start = np.concatenate([consts, start], axis=1)
                     start_index.add(start)
                     idx2doc_id.extend([int(doc_idx)] * num_vecs)
@@ -186,6 +185,9 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
                     offset += start.shape[0]
                     if i % 100 == 0:
                         print('%d/%d' % (i + 1, len(phrase_dump.keys())))
+
+    for dump in dumps:
+        dump.close()
 
     print('index ntotal: %d' % start_index.ntotal)
     idx2doc_id = np.array(idx2doc_id, dtype=np.int32)
