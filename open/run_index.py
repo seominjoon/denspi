@@ -44,6 +44,7 @@ def get_args():
     parser.add_argument('--cuda', defaul=False, action='store_true')
     parser.add_argument('--num_dummy_zeros', default=0, type=int)
     parser.add_argument('--replace', default=False, action='store_true')
+    parser.add_argument('--num_docs_per_add', default=1000, type=int)
 
     args = parser.parse_args()
 
@@ -281,7 +282,8 @@ def run_index(args):
             if not args.add_all:
                 dump_paths = [dump_path]
             add_to_index(dump_paths, args.trained_index_path, args.index_path, args.idx2id_path,
-                         max_norm=max_norm, para=args.para, num_dummy_zeros=args.num_dummy_zeros, cuda=args.cuda)
+                         max_norm=max_norm, para=args.para, num_dummy_zeros=args.num_dummy_zeros, cuda=args.cuda,
+                         num_docs_per_add=args.num_docs_per_add)
 
     if args.stage == 'merge':
         raise NotImplementedError(args.stage)
