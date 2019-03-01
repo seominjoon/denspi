@@ -12,6 +12,8 @@ def run_dump_question(args):
     else:
         raise ValueError(args.model)
 
+    para = '--para' if args.para else ''
+
     def get_cmd():
         return ["nsml",
                 "run",
@@ -25,9 +27,9 @@ def run_dump_question(args):
                 "%dG" % args.mem_size,
                 "--nfs-output",
                 "-a",
-                "--fs nsml_nfs --do_embed_question --data_dir %s "
+                "--fs nsml_nfs --do_embed_question --data_dir %s %s"
                 "--output_dir %s --phrase_size %s "
-                "--load_dir %s --iteration 1 %s" % (args.data_dir,
+                "--load_dir %s --iteration 1 %s" % (args.data_dir, para,
                                                     args.dump_dir, args.phrase_size,
                                                     args.load_dir, model_option)]
 
@@ -41,6 +43,8 @@ def run_dump_phrase(args):
         model_option = "--parallel"
     else:
         raise ValueError(args.model)
+
+    para = '--para' if args.para else ''
 
     def get_cmd(start_doc, end_doc):
         return ["nsml",
@@ -59,9 +63,9 @@ def run_dump_phrase(args):
                 "-a",
                 "--fs nfs --do_index --data_dir %s --predict_file %d:%d  --filter_threshold %.2f "
                 "--output_dir %s --index_file %d-%d.hdf5 --phrase_size %s "
-                "--load_dir %s --iteration 1 %s" % (args.phrase_data_dir, start_doc, end_doc, args.filter_threshold,
+                "--load_dir %s --iteration 1 %s %s" % (args.phrase_data_dir, start_doc, end_doc, args.filter_threshold,
                                                     args.phrase_dump_dir, start_doc, end_doc, args.phrase_size,
-                                                    args.load_dir, model_option)]
+                                                    args.load_dir, model_option, para)]
 
     num_docs = args.end - args.start
     num_gpus = args.num_gpus
@@ -96,6 +100,7 @@ def get_args():
     parser.add_argument('--end', default=5076, type=int)
     parser.add_argument('--mem_size', default=32, type=int, help='mem size in GB')
     parser.add_argument('--no_block', default=False, action='store_true')
+    parser.add_argument('--para', default=False, action='store_true')
     args = parser.parse_args()
 
     if args.dump_dir is None:
