@@ -144,24 +144,26 @@ def train_index(data, quantizer_path, trained_index_path, fine_quant='SQ8', cuda
 
     if cuda:
         res = faiss.StandardGpuResources()
-        gpu_index = faiss.index_cpu_to_gpu(res, 0, trained_index)
+        gpu_index = faiss.index_cpu_to_gpu_multiple(res, 0, trained_index)
         gpu_index.train(data)
-        faiss.write_index(gpu_index, trained_index_path)
-
+        trained_index = faiss.index_gpu_to_cpu(gpu_index)
     else:
         trained_index.train(data)
-        faiss.write_index(trained_index, trained_index_path)
+    faiss.write_index(trained_index, trained_index_path)
 
 
 def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path, max_norm, para=False,
-                 num_docs_per_add=1000, num_dummy_zeros=0):
+                 num_docs_per_add=1000, num_dummy_zeros=0, cuda=False):
     idx2doc_id = []
     idx2para_id = []
     idx2word_id = []
     dumps = [h5py.File(dump_path, 'r') for dump_path in dump_paths]
     print('reading %s' % trained_index_path)
     start_index = faiss.read_index(trained_index_path)
-    print(start_index)
+
+    if cuda:
+        res = faiss.StandardGpuResources()
+        start_index = faiss.index_cpu_to_gpu_multiple(res, 0, start_index)
 
     print('adding following dumps:')
     for dump_path in dump_paths:
@@ -217,6 +219,9 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
 
     for dump in dumps:
         dump.close()
+
+    if cuda:
+        start_index = faiss.index_gpu_to_cpu(start_index)
 
     print('index ntotal: %d' % start_index.ntotal)
     idx2doc_id = np.array(idx2doc_id, dtype=np.int32)
@@ -276,7 +281,7 @@ def run_index(args):
             if not args.add_all:
                 dump_paths = [dump_path]
             add_to_index(dump_paths, args.trained_index_path, args.index_path, args.idx2id_path,
-                         max_norm=max_norm, para=args.para, num_dummy_zeros=args.num_dummy_zeros)
+                         max_norm=max_norm, para=args.para, num_dummy_zeros=args.num_dummy_zeros, cuda=args.cuda)
 
     if args.stage == 'merge':
         raise NotImplementedError(args.stage)
