@@ -112,7 +112,7 @@ def train_coarse_quantizer(data, quantizer_path, num_clusters, hnsw=False, niter
     # make it into a gpu index
     if cuda:
         res = faiss.StandardGpuResources()
-        index_flat = faiss.index_cpu_to_gpu_multiple(index_flat)
+        index_flat = faiss.index_cpu_to_gpu(res, 0, index_flat)
     clus = faiss.Clustering(d, num_clusters)
     clus.verbose = True
     clus.niter = niter
@@ -144,7 +144,7 @@ def train_index(data, quantizer_path, trained_index_path, fine_quant='SQ8', cuda
 
     if cuda:
         res = faiss.StandardGpuResources()
-        gpu_index = faiss.index_cpu_to_gpu_multiple(trained_index)
+        gpu_index = faiss.index_cpu_to_gpu(res, 0, trained_index)
         gpu_index.train(data)
         trained_index = faiss.index_gpu_to_cpu(gpu_index)
     else:
@@ -163,7 +163,7 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
 
     if cuda:
         res = faiss.StandardGpuResources()
-        start_index = faiss.index_cpu_to_gpu_multiple(start_index)
+        start_index = faiss.index_cpu_to_gpu(res, 0, start_index)
 
     print('adding following dumps:')
     for dump_path in dump_paths:
