@@ -172,28 +172,34 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
     offset = 0
     starts = []
     if para:
-        for di, dump_path in enumerate(tqdm(dump_paths, desc='dumps')):
-            with h5py.File(dump_path, 'r') as phrase_dump:
-                for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='faiss indexing')):
-                    for para_idx, group in doc_group.items():
-                        num_vecs = group['start'].shape[0]
-                        start = int8_to_float(group['start'][:], group.attrs['offset'], group.attrs['scale'])
-                        norms = np.linalg.norm(start, axis=1, keepdims=True)
-                        consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
-                        start = np.concatenate([consts, start], axis=1)
-                        if num_dummy_zeros > 0:
-                            start = np.concatenate(
-                                [start, np.zeros([start.shape[0], num_dummy_zeros], dtype=start.dtype)], axis=1)
-                        starts.append(start)
-                        idx2doc_id.extend([int(doc_idx)] * num_vecs)
-                        idx2para_id.extend([int(para_idx)] * num_vecs)
-                        idx2word_id.extend(list(range(num_vecs)))
-                        offset += start.shape[0]
-                        if len(starts) > 0 and i % num_docs_per_add == 0:
-                            start_index.add(np.concatenate(starts, axis=0))
-                            starts = []
-                    if i % 100 == 0:
-                        print('%d/%d' % (i + 1, len(phrase_dump.keys())))
+        for di, phrase_dump in enumerate(tqdm(dumps, desc='dumps')):
+            for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='faiss indexing')):
+                for para_idx, group in doc_group.items():
+                    num_vecs = group['start'].shape[0]
+                    start = int8_to_float(group['start'][:], group.attrs['offset'], group.attrs['scale'])
+                    norms = np.linalg.norm(start, axis=1, keepdims=True)
+                    consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
+                    start = np.concatenate([consts, start], axis=1)
+                    if num_dummy_zeros > 0:
+                        start = np.concatenate(
+                            [start, np.zeros([start.shape[0], num_dummy_zeros], dtype=start.dtype)], axis=1)
+                    starts.append(start)
+                    idx2doc_id.extend([int(doc_idx)] * num_vecs)
+                    idx2para_id.extend([int(para_idx)] * num_vecs)
+                    idx2word_id.extend(list(range(num_vecs)))
+                    offset += start.shape[0]
+                if len(starts) > 0 and i % num_docs_per_add == 0:
+                    print('concatenating')
+                    concat = np.concatenate(starts, axis=0)
+                    print('adding')
+                    start_index.add(concat)
+                    print('done')
+                    starts = []
+                if i % 100 == 0:
+                    print('%d/%d' % (i + 1, len(phrase_dump.keys())))
+            print('adding leftover')
+            start_index.add(np.concatenate(starts, axis=0))  # leftover
+            print('done')
     else:
         for di, phrase_dump in enumerate(tqdm(dumps, desc='dumps')):
             for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='adding %d' % di)):
@@ -215,8 +221,7 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
                     starts = []
                 if i % 100 == 0:
                     print('%d/%d' % (i + 1, len(phrase_dump.keys())))
-
-    start_index.add(np.concatenate(starts, axis=0))  # leftover
+            start_index.add(np.concatenate(starts, axis=0))  # leftover
 
     for dump in dumps:
         dump.close()
