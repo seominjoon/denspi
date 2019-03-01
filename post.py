@@ -317,8 +317,8 @@ def write_hdf5(all_examples, all_features, all_results,
 
     features = []
     results = []
-    inqueue = Queue()
-    outqueue = Queue()
+    inqueue = Queue(maxsize=1000)
+    outqueue = Queue(maxsize=1000)
     write_p = Process(target=write, args=(outqueue, ))
     p = Process(target=add, args=(inqueue, outqueue))
     write_p.start()
