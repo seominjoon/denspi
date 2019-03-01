@@ -2,9 +2,9 @@ PIQA_NFS = /data_nfs/camist002/user/piqa-nfs
 # DUMP_DIR = $(PIQA_NFS)/index/squad/sparse
 # DUMP_DIR = ~/github/hiqa-private/index/
 # LOCAL_DUMP_DIR = dump/2494_dev-10M
-LOCAL_DUMP_DIR = dump/2494_dev-1M
+LOCAL_DUMP_DIR = dump/76_dev-100M
 # LOCAL_DUMP_DIR = dump/2606_dev-1M-100
-LOCAL_INDEX_DIR = dump/2494_dev-1M
+LOCAL_INDEX_DIR = dump/76_dev-100M
 DUMP_DIR = $(PIQA_NFS)/$(LOCAL_DUMP_DIR)
 # DUMP_DIR = $(PIQA_NFS)/dump/76_dev-10M
 # DUMP_DIR = $(PIQA_NFS)/index/squad/large-qna-1Md
@@ -18,11 +18,11 @@ LOCAL_DATA_PATH = data/dev-3.json
 DATA_PATH = $(PIQA_NFS)/$(LOCAL_DATA_PATH)
 PARA = --para
 ADD_ALL = --add_all
-NUM_CLUSTERS = 128
+NUM_CLUSTERS = 4096
 HNSW =
 NPROBE = 64
-START_TOP_K = 100
-TOP_K = 100
+START_TOP_K = 1000
+TOP_K = 1000
 STEP_SIZE = 1
 SPARSE_WEIGHT = 3e+0
 
@@ -43,8 +43,8 @@ pred:
 	--nprobe $(NPROBE) \
 	--top_k $(TOP_K) \
 	--step_size $(STEP_SIZE) \
-	$(PARA) \
 	--sparse \
+	$(PARA) \
 	--start_top_k $(START_TOP_K) \
 	--sparse_weight $(SPARSE_WEIGHT)
 

@@ -35,7 +35,7 @@ def overlap(t1, t2, a1, a2, b1, b2):
 class MIPS(object):
     def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para=False):
         if os.path.isdir(phrase_dump_dir):
-            self.phrase_dump_paths = [os.path.join(phrase_dump_dir, name) for name in os.listdir(phrase_dump_dir)]
+            self.phrase_dump_paths = [os.path.join(phrase_dump_dir, name) for name in os.listdir(phrase_dump_dir) if 'hdf5' in name]
             dump_names = [os.path.splitext(os.path.basename(path))[0] for path in self.phrase_dump_paths]
             self.dump_ranges = [list(map(int, name.split('-'))) for name in dump_names]
         else:

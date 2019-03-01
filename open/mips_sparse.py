@@ -54,15 +54,17 @@ class MIPSSparse(MIPS):
             doc_idxs = np.reshape(doc_idxs, [-1])
             para_idxs = np.reshape(para_idxs, [-1])
             start_idxs = np.reshape(start_idxs, [-1])
-            q_sparse = [sparse for sparse in q_sparse for _ in range(start_top_k)]
-            q_input_ids = [input_ids for input_ids in q_input_ids for _ in range(start_top_k)]
+            # q_sparse = [sparse for sparse in q_sparse for _ in range(start_top_k)]
+            # q_input_ids = [input_ids for input_ids in q_input_ids for _ in range(start_top_k)]
             groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
 
+            # doc_texts = [' '.join([group[g].attrs['context'] for g in group]) for group in groups]
+            # doc_spvecs = vstack([self.tfidf_ranker.text2spvec(doc) for doc in doc_texts])
             if self.para:
                 groups = [group[str(para_idx)] for group, para_idx in zip(groups, para_idxs)]
-                doc_texts = [group.attrs['context'] for group in groups]
-                doc_spvecs = vstack([self.tfidf_ranker.text2spvec(doc) for doc in doc_texts])
-                q_spvecs = vstack([self.tfidf_ranker.text2spvec(q) for q in q_texts])
+            par_texts = [group.attrs['context'] for group in groups]
+            par_spvecs = vstack([self.tfidf_ranker.text2spvec(par) for par in par_texts])
+            q_spvecs = vstack([self.tfidf_ranker.text2spvec(q) for q in q_texts])
 
             start = np.stack([group['start'][start_idx, :]
                               for group, start_idx in zip(groups, start_idxs)], 0)  # [Q, d]
@@ -70,6 +72,7 @@ class MIPSSparse(MIPS):
             start_scores = np.sum(query_start * start, 1)  # [Q]
 
             # Sparse start rerank
+            '''
             sparse = [group['sparse'][start_idx,:]
                       for group, start_idx in zip(groups, start_idxs)]
             input_ids = [group['input_ids'][:] for group in groups]
@@ -77,10 +80,12 @@ class MIPSSparse(MIPS):
             sparse_val = [np.expand_dims(sp, 1) * np.expand_dims(q_sp, 0) * m for q_sp, sp, m in zip(q_sparse, sparse, common_mask)]
             sparse_scores = np.stack([np.sum(sp) for sp in sparse_val])
             # sparse_scores = np.stack([linear_mxq(q_idx, q_val, c_idx, c_val) for q_idx, q_val, c_idx, c_val in zip(q_input_ids, q_sparse, input_ids, sparse)])
-            tfidf_scores = np.squeeze((doc_spvecs * q_spvecs.T).toarray())
+            '''
+            # doc_scores = np.squeeze((doc_spvecs * q_spvecs.T).toarray())
+            par_scores = np.squeeze((par_spvecs * q_spvecs.T).toarray())
 
             # rerank_scores = np.reshape(start_scores + sparse_scores * sparse_weight, [-1, start_top_k])
-            rerank_scores = np.reshape(start_scores + tfidf_scores * 1e-1, [-1, start_top_k])
+            rerank_scores = np.reshape(start_scores + par_scores * 1e-2, [-1, start_top_k])
             rerank_idxs = np.array([scores.argsort()[-out_top_k:][::-1]
                                     for scores in rerank_scores])
             new_I = np.array([each_I[idxs] for each_I, idxs in zip(I, rerank_idxs)])

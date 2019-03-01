@@ -38,11 +38,17 @@ def get_args():
 
 def main():
     args = get_args()
+    RET_PATH = os.path.join(
+        os.path.expanduser('~'), 'github/DrQA/data', 
+        'wikipedia/docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz')
     if args.fs == 'nfs':
         from nsml import NSML_NFS_OUTPUT
         args.data_path = os.path.join(NSML_NFS_OUTPUT, args.data_path)
         args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
         args.index_dir = os.path.join(NSML_NFS_OUTPUT, args.index_dir)
+        RET_PATH = os.path.join(
+            NSML_NFS_OUTPUT, 'data', 
+            'wikipedia/docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz')
     phrase_dump_path = os.path.join(args.dump_dir, 'phrase.hdf5')
     args.phrase_dump_dir = phrase_dump_path if os.path.exists(phrase_dump_path) else os.path.join(args.dump_dir, 'phrase')
     args.index_path = os.path.join(args.index_dir, args.index_path)
@@ -73,11 +79,11 @@ def main():
             vec = question_dump[id_][0, :]
             vecs.append(vec)
 
-            if (id_ + '_sparse') in question_dump and args.sparse:
-                sparse = question_dump[id_ + '_sparse'][:]
-                input_ids = question_dump[id_ + '_input_ids'][:]
-                sparses.append(sparse)
-                input_idss.append(input_ids)
+            if args.sparse:
+                # sparse = question_dump[id_ + '_sparse'][:]
+                # input_ids = question_dump[id_ + '_input_ids'][:]
+                # sparses.append(sparse)
+                # input_idss.append(input_ids)
                 q_texts.append(qid2text[id_])
                 # print(sparse)
                 # print(qid2text[id_])
@@ -91,14 +97,12 @@ def main():
     else:
         # Load retriever
         from drqa import retriever
-        RET_PATH = os.path.join(os.path.expanduser('~'), 'github/DrQA/data', 
-                    'wikipedia/docs-tfidf-ngram=1-hash=16777216-tokenizer=simple.npz')
         ranker = None
         ranker = retriever.get_class('tfidf')(
             tfidf_path=RET_PATH,
             strict=False
         )
-        print('Retriever doc_mat shape {}'.format(ranker.doc_mat.shape))
+        print('Retriever doc_mat shape {} from {}'.format(ranker.doc_mat.shape, RET_PATH))
         mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para, ranker=ranker)
 
     # recall at k
@@ -108,21 +112,23 @@ def main():
     for i in tqdm(range(0, query.shape[0], step_size)):
         each_query = query[i:i+step_size]
 
-        if len(sparses) > 0:
-            each_sparse = sparses[i:i+step_size]
-            each_input_ids = input_idss[i:i+step_size]
+        if args.sparse:
+            # each_sparse = sparses[i:i+step_size]
+            # each_input_ids = input_idss[i:i+step_size]
+            each_sparse = None
+            each_input_ids = None
             each_q_text = q_texts[i:i+step_size]
 
         if args.no_od:
             doc_idxs, para_idxs, _, _ = zip(*pairs[i:i+step_size])
-            if len(sparses) == 0:
+            if not args.sparse:
                 each_results = mips.search(each_query, top_k=args.top_k, doc_idxs=doc_idxs, para_idxs=para_idxs)
             else:
                 each_results = mips.search(each_query, top_k=args.top_k, doc_idxs=doc_idxs, para_idxs=para_idxs, q_sparse=each_sparse, q_input_ids=each_input_ids, start_top_k=args.start_top_k, sparse_weight=args.sparse_weight, q_texts=each_q_text)
             cd_results.extend(each_results)
 
         else:
-            if len(sparses) == 0:
+            if not args.sparse:
                 each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe)
             else:
                 each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe, 
