@@ -132,7 +132,7 @@ def train_coarse_quantizer(data, quantizer_path, num_clusters, hnsw=False, niter
     faiss.write_index(quantizer, quantizer_path)
 
 
-def train_index(data, quantizer_path, trained_index_path, fine_quant='SQ8'):
+def train_index(data, quantizer_path, trained_index_path, fine_quant='SQ8', cuda=False):
     quantizer = faiss.read_index(quantizer_path)
     if fine_quant == 'SQ8':
         trained_index = faiss.IndexIVFScalarQuantizer(quantizer, quantizer.d, quantizer.ntotal, faiss.METRIC_L2)
@@ -141,8 +141,16 @@ def train_index(data, quantizer_path, trained_index_path, fine_quant='SQ8'):
         trained_index = faiss.IndexIVFPQ(quantizer, quantizer.d, quantizer.ntotal, m, 8)
     else:
         raise ValueError(fine_quant)
-    trained_index.train(data)
-    faiss.write_index(trained_index, trained_index_path)
+
+    if cuda:
+        res = faiss.StandardGpuResources()
+        gpu_index = faiss.index_cpu_to_gpu(res, 0, trained_index)
+        gpu_index.train(data)
+        faiss.write_index(gpu_index, trained_index_path)
+
+    else:
+        trained_index.train(data)
+        faiss.write_index(trained_index, trained_index_path)
 
 
 def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path, max_norm, para=False,
@@ -153,6 +161,7 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
     dumps = [h5py.File(dump_path, 'r') for dump_path in dump_paths]
     print('reading %s' % trained_index_path)
     start_index = faiss.read_index(trained_index_path)
+    print(start_index)
 
     print('adding following dumps:')
     for dump_path in dump_paths:
@@ -258,7 +267,7 @@ def run_index(args):
                 data, _ = sample_data(dump_paths, max_norm=max_norm, para=args.para,
                                       doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio,
                                       num_dummy_zeros=args.num_dummy_zeros)
-            train_index(data, args.quantizer_path, args.trained_index_path, fine_quant=args.fine_quant)
+            train_index(data, args.quantizer_path, args.trained_index_path, fine_quant=args.fine_quant, cuda=args.cuda)
 
     if args.stage in ['all', 'add']:
         if args.replace or not os.path.exists(args.index_path):
