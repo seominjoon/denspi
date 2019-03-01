@@ -24,6 +24,7 @@ import logging
 import json
 import os
 import random
+from time import time
 
 import h5py
 from torch.optim import Adam
@@ -770,12 +771,14 @@ def main():
                                                 filter_end_logits=filter_end_logits,
                                                 sparse=sparse)
 
+                t0 = time()
                 write_hdf5(context_examples, context_features, get_context_results(),
                            args.max_answer_length, not args.do_case, args.index_file, args.filter_threshold,
                            args.verbose_logging,
                            offset=args.compression_offset, scale=args.compression_scale,
                            split_by_para=args.split_by_para,
                            use_sparse=args.use_sparse)
+                print('%s: %.1f mins' % (predict_file, (time() - t0) / 60))
             except Exception as e:
                 with open(os.path.join(args.output_dir, 'error_files.txt'), 'a') as fp:
                     fp.write('error file: %s\n' % predict_file)
