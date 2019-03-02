@@ -639,3 +639,9 @@ dump_1B_c_3200-3500:
 
 dump_1B_c_3400-3450:
 	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 5 --num_cpus 2 --mem_size 16 --start 3400 --end 3450 --para
+
+dump_1B_c_2000-2080:
+	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 16 --num_cpus 2 --mem_size 16 --start 2000 --end 2080 --para
+
+dump_1B_c_2075-2080:
+	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 1 --num_cpus 8 --mem_size 48 --start 2075 --end 2080 --para

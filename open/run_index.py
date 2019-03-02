@@ -16,7 +16,11 @@ def get_args():
     parser.add_argument('dump_dir')
     parser.add_argument('stage')
 
-    parser.add_argument('--dump_path', default='dump.hdf5')  # not used for now
+    parser.add_argument('--dump_paths', default=None,
+                        help='Relative to `dump_dir/phrase`. '
+                             'If specified, creates subindex dir and save there with same name')
+    parser.add_argument('--subindex_name', default='index', help='used only if dump_path is specified.')
+    parser.add_argument('--offset', default=0, type=int)
 
     # relative paths in dump_dir/index_name
     parser.add_argument('--quantizer_path', default='quantizer.faiss')
@@ -41,7 +45,7 @@ def get_args():
     parser.add_argument('--vec_sample_ratio', default=0.2, type=float)
 
     parser.add_argument('--fs', default='local')
-    parser.add_argument('--cuda', defaul=False, action='store_true')
+    parser.add_argument('--cuda', default=False, action='store_true')
     parser.add_argument('--num_dummy_zeros', default=0, type=int)
     parser.add_argument('--replace', default=False, action='store_true')
     parser.add_argument('--num_docs_per_add', default=1000, type=int)
@@ -62,8 +66,15 @@ def get_args():
     args.quantizer_path = os.path.join(args.index_dir, args.quantizer_path)
     args.max_norm_path = os.path.join(args.index_dir, args.max_norm_path)
     args.trained_index_path = os.path.join(args.index_dir, args.trained_index_path)
-    args.index_path = os.path.join(args.index_dir, args.index_path)
-    args.idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
+
+    if args.dump_paths is None:
+        args.index_path = os.path.join(args.index_dir, args.index_path)
+        args.idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
+    else:
+        args.dump_paths = [os.path.join(args.dump_dir, 'phrase', path) for path in args.dump_paths.split(',')]
+        args.subindex_dir = os.path.join(args.index_dir, args.subindex_name)
+        args.index_path = os.path.join(args.subindex_dir, '%d.faiss' % args.offset)
+        args.idx2id_path = os.path.join(args.subindex_dir, '%d.hdf5' % args.offset)
 
     return args
 
@@ -156,8 +167,12 @@ def train_index(data, quantizer_path, trained_index_path, fine_quant='SQ8', cuda
     faiss.write_index(trained_index, trained_index_path)
 
 
+def add_with_offset(index, data, offset):
+    index.add_with_ids(data, np.arange(data.shape[0]) + offset + index.ntotal)
+
+
 def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path, max_norm, para=False,
-                 num_docs_per_add=1000, num_dummy_zeros=0, cuda=False, fine_quant='SQ8'):
+                 num_docs_per_add=1000, num_dummy_zeros=0, cuda=False, fine_quant='SQ8', offset=0):
     idx2doc_id = []
     idx2para_id = []
     idx2word_id = []
@@ -175,7 +190,6 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
     print('adding following dumps:')
     for dump_path in dump_paths:
         print(dump_path)
-    offset = 0
     if para:
         for di, phrase_dump in enumerate(tqdm(dumps, desc='dumps')):
             starts = []
@@ -193,18 +207,19 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
                     idx2doc_id.extend([int(doc_idx)] * num_vecs)
                     idx2para_id.extend([int(para_idx)] * num_vecs)
                     idx2word_id.extend(list(range(num_vecs)))
-                    offset += start.shape[0]
                 if len(starts) > 0 and i % num_docs_per_add == 0:
                     print('concatenating')
                     concat = np.concatenate(starts, axis=0)
                     print('adding')
-                    start_index.add(concat)
+                    add_with_offset(start_index, concat, offset)
+                    # start_index.add(concat)
                     print('done')
                     starts = []
                 if i % 100 == 0:
                     print('%d/%d' % (i + 1, len(phrase_dump.keys())))
             print('adding leftover')
-            start_index.add(np.concatenate(starts, axis=0))  # leftover
+            add_with_offset(start_index, np.concatenate(starts, axis=0), offset)
+            # start_index.add(np.concatenate(starts, axis=0))  # leftover
             print('done')
     else:
         for di, phrase_dump in enumerate(tqdm(dumps, desc='dumps')):
@@ -222,13 +237,14 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
                 starts.append(start)
                 idx2doc_id.extend([int(doc_idx)] * num_vecs)
                 idx2word_id.extend(range(num_vecs))
-                offset += start.shape[0]
                 if len(starts) > 0 and i % num_docs_per_add == 0:
-                    start_index.add(np.concatenate(starts, axis=0))
+                    add_with_offset(start_index, np.concatenate(starts, axis=0), offset)
+                    # start_index.add(np.concatenate(starts, axis=0))
                     starts = []
                 if i % 100 == 0:
                     print('%d/%d' % (i + 1, len(phrase_dump.keys())))
-            start_index.add(np.concatenate(starts, axis=0))  # leftover
+            add_with_offset(start_index, np.concatenate(starts, axis=0), offset)
+            # start_index.add(np.concatenate(starts, axis=0))  # leftover
 
     for dump in dumps:
         dump.close()
@@ -246,6 +262,7 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
         f.create_dataset('doc', data=idx2doc_id)
         f.create_dataset('para', data=idx2para_id)
         f.create_dataset('word', data=idx2word_id)
+        f.attrs['offset'] = offset
     faiss.write_index(start_index, target_index_path)
     print('done')
 
@@ -258,11 +275,9 @@ def run_index(args):
     phrase_path = os.path.join(args.dump_dir, 'phrase.hdf5')
     if os.path.exists(phrase_path):
         dump_paths = [phrase_path]
-        dump_path = phrase_path
     else:
         dump_names = os.listdir(os.path.join(args.dump_dir, 'phrase'))
         dump_paths = [os.path.join(args.dump_dir, 'phrase', name) for name in dump_names]
-        dump_path = os.path.join(args.dump_dir, 'phrase', args.dump_path)
 
     data = None
 
@@ -291,8 +306,10 @@ def run_index(args):
         if args.replace or not os.path.exists(args.index_path):
             with open(args.max_norm_path, 'r') as fp:
                 max_norm = json.load(fp)
-            if not args.add_all:
-                dump_paths = [dump_path]
+            if args.dump_paths is not None:
+                dump_paths = args.dump_paths
+                if not os.path.exists(args.subindex_dir):
+                    os.makedirs(args.subindex_dir)
             add_to_index(dump_paths, args.trained_index_path, args.index_path, args.idx2id_path,
                          max_norm=max_norm, para=args.para, num_dummy_zeros=args.num_dummy_zeros, cuda=args.cuda,
                          num_docs_per_add=args.num_docs_per_add)

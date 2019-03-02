@@ -1,70 +1,93 @@
 import argparse
-import math
 import os
 import subprocess
 
+import h5py
+from tqdm import tqdm
+
+
+def get_size(name):
+    a, b = list(map(int, os.path.splitext(name)[0].split('-')))
+    return b - a
+
+
+def bin_names(names, num_bins):
+    names = sorted(names, key=lambda name_: -get_size(name_))
+    bins = []
+    for name in names:
+        if len(bins) < num_bins:
+            bins.append([name])
+        else:
+            smallest_bin = min(bins, key=lambda bin_: sum(get_size(name_) for name_ in bin_))
+            smallest_bin.append(name)
+    return bins
+
 
 def run_add_to_index(args):
-    def get_cmd(start_doc, end_doc):
+    def get_cmd(dump_paths, offset_):
         return ["nsml",
                 "run",
                 "-d",
                 "piqa-nfs",
                 "-g",
-                "0",
+                "1",
                 "-c",
-                "4",
+                str(args.num_cpus),
                 "-e",
-                "mips.py",
+                "run_index.py",
                 "--memory",
                 "%dG" % args.mem_size,
                 "--nfs-output",
                 "-a",
-                "%s add --index_name %s --dump_path %d-%d.hdf5" % (args.dump_dir, args.index_name, start_doc, end_doc)]
+                "%s add --dump_paths %s --offset %d --num_clusters %d --fs nfs --cuda" % (
+                args.dump_dir, dump_paths, offset_, args.num_clusters)]
 
-    num_docs = args.end - args.start
-    num_gpus = args.num_gpus
-    if num_gpus > num_docs:
-        print('You are requesting more GPUs than the number of docs; adjusting num gpus to %d' % num_docs)
-        num_gpus = num_docs
-    num_docs_per_gpu = int(math.ceil(num_docs / num_gpus))
-    start_docs = list(range(args.start, args.end, num_docs_per_gpu))
-    end_docs = start_docs[1:] + [args.end]
+    names = os.listdir(os.path.join(args.nfs_dir, args.dump_dir, 'phrase'))
+    bins = bin_names(names, args.num_gpus)
 
-    print(start_docs)
-    print(end_docs)
+    if args.compact_offset:
+        raise NotImplementedError()
+        offsets = []
+        count = 0
+        for name in tqdm(names, desc='computing offsets'):
+            offset = count
+            offsets.append(offset)
+            path = os.path.join(args.nfs_dir, args.dump_dir, 'phrase', name)
+            print(path)
+            with h5py.File(path, 'r') as f:
+                for did, group in f.items():
+                    if args.para:
+                        raise NotImplementedError()
+                    else:
+                        num = group['start'].shape[0]
+                        count += num
+    else:
+        offsets = [args.max_num_per_file * each for each in range(len(bins))]
 
-    for start_doc, end_doc in zip(start_docs, end_docs):
-        subprocess.run(get_cmd(start_doc, end_doc))
+    print('adding with offset:')
+    for offset, bin_ in zip(offsets, bins):
+        print('%d: %s' % (offset, ','.join(bin_)))
+
+    for bin_, offset in zip(bins, offsets):
+        subprocess.run(get_cmd(','.join(bin_), offset))
+        if args.draft:
+            break
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dump_dir', default=None)
-    parser.add_argument('--phrase_size', default=961, type=int)
-    parser.add_argument('--load_dir', default='piqateam/piqa-nfs/76')
-    parser.add_argument('--data_dir', default='data')
-    parser.add_argument('--data_name', default='500-2000')
-    parser.add_argument('--model', default='large')
-    parser.add_argument('--filter_threshold', default=-2, type=float)
-    parser.add_argument('--num_gpus', default=10, type=int)
-    parser.add_argument('--start', default=0, type=int)
-    parser.add_argument('--end', default=5076, type=int)
-    parser.add_argument('--mem_size', default=32, type=int, help='mem size in GB')
-
-    parser.add_argument('--index_name', default='default_index')
+    parser.add_argument('dump_dir')
+    parser.add_argument('--num_cpus', default=2, type=int)
+    parser.add_argument('--num_gpus', default=20, type=int)
+    parser.add_argument('--mem_size', default=24, type=int, help='mem size in GB')
+    parser.add_argument('--num_clusters', default=4096, type=int)
+    parser.add_argument('--para', default=False, action='store_true')
+    parser.add_argument('--draft', default=False, action='store_true')
+    parser.add_argument('--nfs_dir', default='/data_nfs/camist002/user/piqa-nfs/')
+    parser.add_argument('--max_num_per_file', default=int(1e9), type=int,
+                        help='max num per file for setting up good offsets.')
+    parser.add_argument('--compact_offset', default=False, action='store_true')
     args = parser.parse_args()
-
-    if args.dump_dir is None:
-        args.dump_dir = os.path.join('dump/%s_%s' % (os.path.basename(args.load_dir),
-                                                     os.path.basename(args.data_name)))
-    if not os.path.exists(args.dump_dir):
-        os.makedirs(args.dump_dir)
-
-    args.phrase_data_dir = os.path.join(args.data_dir, args.data_name)
-    args.phrase_dump_dir = os.path.join(args.dump_dir, 'phrase')
-    if not os.path.exists(args.phrase_dump_dir):
-        os.makedirs(args.phrase_dump_dir)
 
     return args
 

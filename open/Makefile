@@ -194,3 +194,9 @@ nsml_all_5:
 	--start_top_k $(START_TOP_K) \
 	--nprobe $(NPROBE) \
 	"
+
+nsml_add_10M:
+	python nsml_add_to_index.py dump/76_dev-10M-c --num_clusters 4096 --num_gpus 2
+
+nsml_add_1B:
+	python nsml_add_to_index.py dump/76_dev-1B-c --num_clusters 262144
