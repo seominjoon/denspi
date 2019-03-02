@@ -14,50 +14,60 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('data_path')
     parser.add_argument('dump_dir')
-    parser.add_argument('index_dir')
-    parser.add_argument('--index_path', default='default_index/index.faiss')
-    parser.add_argument('--quantizer_path', default='quantizer.faiss')
     parser.add_argument('--question_dump_path', default='question.hdf5')
-    parser.add_argument('--od_out_path', default='pred_od.json')
-    parser.add_argument('--cd_out_path', default="pred_cd.json")
-    parser.add_argument('--idx2id_path', default='default_index/idx2id.hdf5')
-    parser.add_argument('--max_answer_length', default=30, type=int)
-    parser.add_argument('--sparse_weight', default=3e+0, type=float)
+
+    parser.add_argument('--index_name', default='default_index')
+    parser.add_argument('--index_path', default='index.hdf5')
+    parser.add_argument('--idx2id_path', default='idx2id.hdf5')
+
+    parser.add_argument('--pred_dir', default='pred')
+
+    # MIPS params
+    parser.add_argument('--sparse_weight', default=3, type=float)
     parser.add_argument('--start_top_k', default=100, type=int)
-    parser.add_argument('--top_k', default=5, type=int)
+    parser.add_argument('--nprobe', default=64, type=int)
+    # stable MIPS params
+    parser.add_argument('--max_answer_length', default=30, type=int)
+    parser.add_argument('--top_k', default=10, type=int)
     parser.add_argument('--para', default=False, action='store_true')
+    parser.add_argument('--sparse', default=False, action='store_true')
+
     parser.add_argument('--no_od', default=False, action='store_true')
     parser.add_argument('--draft', default=False, action='store_true')
-    parser.add_argument('--sparse', default=False, action='store_true')
-    parser.add_argument('--nprobe', default=64, type=int)
-    parser.add_argument('--fs', default='local')
     parser.add_argument('--step_size', default=10, type=int)
+    parser.add_argument('--fs', default='local')
+    parser.add_argument('--num_dummy_zeros', default=0, type=int)
+    parser.add_argument('--cuda', defaul=False, action='store_true')
     args = parser.parse_args()
-    return args
 
 
 def main():
     args = get_args()
-    RET_PATH = os.path.join(
-        os.path.expanduser('~'), 'github/DrQA/data', 
-        'wikipedia/docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz')
     if args.fs == 'nfs':
         from nsml import NSML_NFS_OUTPUT
         args.data_path = os.path.join(NSML_NFS_OUTPUT, args.data_path)
         args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
-        args.index_dir = os.path.join(NSML_NFS_OUTPUT, args.index_dir)
-        RET_PATH = os.path.join(
-            NSML_NFS_OUTPUT, 'data', 
-            'wikipedia/docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz')
     phrase_dump_path = os.path.join(args.dump_dir, 'phrase.hdf5')
-    args.phrase_dump_dir = phrase_dump_path if os.path.exists(phrase_dump_path) else os.path.join(args.dump_dir, 'phrase')
+    args.phrase_dump_dir = phrase_dump_path if os.path.exists(phrase_dump_path) else os.path.join(args.dump_dir,
+                                                                                                  'phrase')
     args.tfidf_dump_dir = os.path.join(args.dump_dir, 'tfidf')
+
+    args.index_dir = os.path.join(args.dump_dir, args.index_name)
     args.index_path = os.path.join(args.index_dir, args.index_path)
-    args.quantizer_path = os.path.join(args.index_dir, args.quantizer_path)
     args.question_dump_path = os.path.join(args.dump_dir, args.question_dump_path)
-    # args.od_out_path = os.path.join(args.dir, args.od_out_path)
-    # args.cd_out_path = os.path.join(args.dir, args.cd_out_path)
     args.idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
+
+    args.pred_dir = os.path.join(args.dump_dir, args.pred_dir)
+    out_name = '%s_%.1f_%d_%d' % (args.index_name, args.sparse_weight, args.start_top_k, args.nprobe)
+    args.od_out_path = os.path.join(args.pred_dir, 'od_%s.json' % out_name)
+    args.cd_out_path = os.path.join(args.pred_dir, 'cd_%s.json' % out_name)
+
+    return args
+
+
+def run_pred(args):
+    if not os.path.exists(args.pred_dir):
+        os.makedirs(args.pred_dir)
 
     with open(args.data_path, 'r') as fp:
         test_data = json.load(fp)
@@ -94,16 +104,19 @@ def main():
             query = query[:100]
 
     if not args.sparse:
-        mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para)
+        mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para,
+                    num_dummy_zeros=args.num_dummy_zeros)
     else:
-        mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para, tfidf_dump_dir=args.tfidf_dump_dir)
+        mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length,
+                          para=args.para, tfidf_dump_dir=args.tfidf_dump_dir)
 
     # recall at k
     cd_results = []
     od_results = []
     step_size = args.step_size
-    for i in tqdm(range(0, query.shape[0], step_size)):
-        each_query = query[i:i+step_size]
+    is_ = range(0, query.shape[0], step_size)
+    for i in tqdm(is_):
+        each_query = query[i:i + step_size]
 
         if args.sparse:
             # each_sparse = sparses[i:i+step_size]
@@ -113,7 +126,7 @@ def main():
             each_q_text = q_texts[i:i+step_size]
 
         if args.no_od:
-            doc_idxs, para_idxs, _, _ = zip(*pairs[i:i+step_size])
+            doc_idxs, para_idxs, _, _ = zip(*pairs[i:i + step_size])
             if not args.sparse:
                 each_results = mips.search(each_query, top_k=args.top_k, doc_idxs=doc_idxs, para_idxs=para_idxs)
             else:
@@ -127,29 +140,27 @@ def main():
                 each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe, 
                     q_sparse=each_sparse, q_input_ids=each_input_ids, start_top_k=args.start_top_k, sparse_weight=args.sparse_weight, q_texts=each_q_text)
             od_results.extend(each_results)
+        if i % 10 == 0:
+            print('%d/%d' % (i+1, len(is_)))
 
     top_k_answers = {query_id: [result['answer'] for result in each_results]
                      for (_, _, query_id, _), each_results in zip(pairs, od_results)}
     answers = {query_id: each_results[0]['answer']
                for (_, _, query_id, _), each_results in zip(pairs, cd_results)}
-    
+
     if args.para:
         print('dumping %s' % args.cd_out_path)
         with open(args.cd_out_path, 'w') as fp:
             json.dump(answers, fp)
 
-    while os.path.exists(args.od_out_path):
-        args.od_out_path = args.od_out_path + '_'
     print('dumping %s' % args.od_out_path)
     with open(args.od_out_path, 'w') as fp:
         json.dump(top_k_answers, fp)
 
-    # Eval
-    command = "python ../eval/evaluate-recall.py %s %s --no_f1 --scores_path scores.json" % (args.data_path, args.od_out_path)
-    import subprocess
-    process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
-    output, error = process.communicate()
-    print(output)
+
+def main():
+    args = get_args()
+    run_pred(args)
 
 
 if __name__ == '__main__':

@@ -11,14 +11,74 @@ from tqdm import tqdm
 from mips import int8_to_float
 
 
-def sample_data(dump_paths, para=False, doc_sample_ratio=0.1, vec_sample_ratio=0.1, seed=29, max_norm=None):
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('dump_dir')
+    parser.add_argument('stage')
+
+    parser.add_argument('--dump_path', default='dump.hdf5')  # not used for now
+
+    # relative paths in dump_dir/index_name
+    parser.add_argument('--quantizer_path', default='quantizer.faiss')
+    parser.add_argument('--max_norm_path', default='max_norm.json')
+    parser.add_argument('--trained_index_path', default='trained.faiss')
+    parser.add_argument('--index_path', default='index.faiss')
+    parser.add_argument('--idx2id_path', default='idx2id.hdf5')
+
+    # Adding options
+    parser.add_argument('--add_all', default=False, action='store_true')
+
+    # coarse, fine, add
+    parser.add_argument('--num_clusters', type=int, default=4096)
+    parser.add_argument('--hnsw', default=False, action='store_true')
+    parser.add_argument('--fine_quant', default='SQ8',
+                        help='SQ8|SQ4|PQ# where # is number of bytes per vector (for SQ it would be 480 Bytes)')
+    # stable params
+    parser.add_argument('--max_norm', default=None, type=float)
+    parser.add_argument('--max_norm_cf', default=1.3, type=float)
+    parser.add_argument('--para', default=False, action='store_true')
+    parser.add_argument('--doc_sample_ratio', default=0.2, type=float)
+    parser.add_argument('--vec_sample_ratio', default=0.2, type=float)
+
+    parser.add_argument('--fs', default='local')
+    parser.add_argument('--cuda', defaul=False, action='store_true')
+    parser.add_argument('--num_dummy_zeros', default=0, type=int)
+    parser.add_argument('--replace', default=False, action='store_true')
+    parser.add_argument('--num_docs_per_add', default=1000, type=int)
+
+    args = parser.parse_args()
+
+    coarse = 'hnsw' if args.hnsw else 'flat'
+    args.index_name = '%d_%s_%s' % (args.num_clusters, coarse, args.fine_quant)
+
+    if args.fs == 'nfs':
+        from nsml import NSML_NFS_OUTPUT
+        args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
+    elif args.fs == 'nsml':
+        pass
+
+    args.index_dir = os.path.join(args.dump_dir, args.index_name)
+
+    args.quantizer_path = os.path.join(args.index_dir, args.quantizer_path)
+    args.max_norm_path = os.path.join(args.index_dir, args.max_norm_path)
+    args.trained_index_path = os.path.join(args.index_dir, args.trained_index_path)
+    args.index_path = os.path.join(args.index_dir, args.index_path)
+    args.idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
+
+    return args
+
+
+def sample_data(dump_paths, para=False, doc_sample_ratio=0.2, vec_sample_ratio=0.2, seed=29,
+                max_norm=None, max_norm_cf=1.3, num_dummy_zeros=0):
     vecs = []
     random.seed(seed)
     np.random.seed(seed)
-    print(dump_paths)
+    print('sampling from:')
+    for dump_path in dump_paths:
+        print(dump_path)
     dumps = [h5py.File(dump_path, 'r') for dump_path in dump_paths]
     for i, f in enumerate(tqdm(dumps)):
-        doc_ids = f.keys()
+        doc_ids = list(f.keys())
         sampled_doc_ids = random.sample(doc_ids, int(doc_sample_ratio * len(doc_ids)))
         for doc_id in tqdm(sampled_doc_ids, desc='sampling from %d' % i):
             doc_group = f[doc_id]
@@ -38,23 +98,26 @@ def sample_data(dump_paths, para=False, doc_sample_ratio=0.1, vec_sample_ratio=0
 
     norms = np.linalg.norm(out, axis=1, keepdims=True)
     if max_norm is None:
-        max_norm = 1.3 * np.max(norms)
+        max_norm = max_norm_cf * np.max(norms)
     consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
     out = np.concatenate([consts, out], axis=1)
+    if num_dummy_zeros > 0:
+        out = np.concatenate([out, np.zeros([out.shape[0], num_dummy_zeros], dtype=out.dtype)], axis=1)
     return out, max_norm
 
 
-def train_coarse_quantizer(data, quantizer_path, num_clusters, hnsw=False, niter=10):
+def train_coarse_quantizer(data, quantizer_path, num_clusters, hnsw=False, niter=10, cuda=False):
     d = data.shape[1]
 
-    res = faiss.StandardGpuResources()
     index_flat = faiss.IndexFlatL2(d)
     # make it into a gpu index
-    gpu_index_flat = faiss.index_cpu_to_gpu(res, 0, index_flat)
+    if cuda:
+        res = faiss.StandardGpuResources()
+        index_flat = faiss.index_cpu_to_gpu(res, 0, index_flat)
     clus = faiss.Clustering(d, num_clusters)
     clus.verbose = True
     clus.niter = niter
-    clus.train(data, gpu_index_flat)
+    clus.train(data, index_flat)
     centroids = faiss.vector_float_to_array(clus.centroids)
     centroids = centroids.reshape(num_clusters, d)
 
@@ -70,14 +133,31 @@ def train_coarse_quantizer(data, quantizer_path, num_clusters, hnsw=False, niter
     faiss.write_index(quantizer, quantizer_path)
 
 
-def train_index(data, quantizer_path, trained_index_path):
+def train_index(data, quantizer_path, trained_index_path, fine_quant='SQ8', cuda=False):
     quantizer = faiss.read_index(quantizer_path)
-    trained_index = faiss.IndexIVFScalarQuantizer(quantizer, quantizer.d, quantizer.ntotal, faiss.METRIC_L2)
-    trained_index.train(data)
+    if fine_quant == 'SQ8':
+        trained_index = faiss.IndexIVFScalarQuantizer(quantizer, quantizer.d, quantizer.ntotal, faiss.METRIC_L2)
+    elif fine_quant.startswith('PQ'):
+        m = int(fine_quant[2:])
+        trained_index = faiss.IndexIVFPQ(quantizer, quantizer.d, quantizer.ntotal, m, 8)
+    else:
+        raise ValueError(fine_quant)
+
+    if cuda:
+        if fine_quant.startswith('PQ'):
+            print('PQ not supported on GPU; keeping CPU.')
+        else:
+            res = faiss.StandardGpuResources()
+            gpu_index = faiss.index_cpu_to_gpu(res, 0, trained_index)
+            gpu_index.train(data)
+            trained_index = faiss.index_gpu_to_cpu(gpu_index)
+    else:
+        trained_index.train(data)
     faiss.write_index(trained_index, trained_index_path)
 
 
-def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path, max_norm, para=False):
+def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path, max_norm, para=False,
+                 num_docs_per_add=1000, num_dummy_zeros=0, cuda=False, fine_quant='SQ8'):
     idx2doc_id = []
     idx2para_id = []
     idx2word_id = []
@@ -85,10 +165,20 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
     print('reading %s' % trained_index_path)
     start_index = faiss.read_index(trained_index_path)
 
-    print('adding %s' % dump_paths)
+    if cuda:
+        if fine_quant.startswith('PQ'):
+            print('PQ not supported on GPU; keeping CPU.')
+        else:
+            res = faiss.StandardGpuResources()
+            start_index = faiss.index_cpu_to_gpu(res, 0, start_index)
+
+    print('adding following dumps:')
+    for dump_path in dump_paths:
+        print(dump_path)
     offset = 0
     if para:
         for di, phrase_dump in enumerate(tqdm(dumps, desc='dumps')):
+            starts = []
             for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='faiss indexing')):
                 for para_idx, group in doc_group.items():
                     num_vecs = group['start'].shape[0]
@@ -96,76 +186,75 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
                     norms = np.linalg.norm(start, axis=1, keepdims=True)
                     consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
                     start = np.concatenate([consts, start], axis=1)
-                    # self.start_index.add_with_ids(start, np.arange(offset, offset + start.shape[0]))
-                    start_index.add(start)
+                    if num_dummy_zeros > 0:
+                        start = np.concatenate(
+                            [start, np.zeros([start.shape[0], num_dummy_zeros], dtype=start.dtype)], axis=1)
+                    starts.append(start)
                     idx2doc_id.extend([int(doc_idx)] * num_vecs)
                     idx2para_id.extend([int(para_idx)] * num_vecs)
                     idx2word_id.extend(list(range(num_vecs)))
                     offset += start.shape[0]
+                if len(starts) > 0 and i % num_docs_per_add == 0:
+                    print('concatenating')
+                    concat = np.concatenate(starts, axis=0)
+                    print('adding')
+                    start_index.add(concat)
+                    print('done')
+                    starts = []
                 if i % 100 == 0:
                     print('%d/%d' % (i + 1, len(phrase_dump.keys())))
+            print('adding leftover')
+            start_index.add(np.concatenate(starts, axis=0))  # leftover
+            print('done')
     else:
         for di, phrase_dump in enumerate(tqdm(dumps, desc='dumps')):
+            starts = []
             for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='adding %d' % di)):
                 num_vecs = doc_group['start'].shape[0]
                 start = int8_to_float(doc_group['start'][:], doc_group.attrs['offset'],
                                       doc_group.attrs['scale'])
                 norms = np.linalg.norm(start, axis=1, keepdims=True)
-                consts = np.sqrt(max_norm ** 2 - norms ** 2)
+                consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
                 start = np.concatenate([consts, start], axis=1)
-                start_index.add_with_ids(start, np.arange(offset, offset + start.shape[0]))
+                if num_dummy_zeros > 0:
+                    start = np.concatenate([start, np.zeros([start.shape[0], num_dummy_zeros], dtype=start.dtype)],
+                                           axis=1)
+                starts.append(start)
                 idx2doc_id.extend([int(doc_idx)] * num_vecs)
                 idx2word_id.extend(range(num_vecs))
                 offset += start.shape[0]
+                if len(starts) > 0 and i % num_docs_per_add == 0:
+                    start_index.add(np.concatenate(starts, axis=0))
+                    starts = []
                 if i % 100 == 0:
                     print('%d/%d' % (i + 1, len(phrase_dump.keys())))
+            start_index.add(np.concatenate(starts, axis=0))  # leftover
+
+    for dump in dumps:
+        dump.close()
+
+    if cuda and not fine_quant.startswith('PQ'):
+        start_index = faiss.index_gpu_to_cpu(start_index)
 
     print('index ntotal: %d' % start_index.ntotal)
     idx2doc_id = np.array(idx2doc_id, dtype=np.int32)
     idx2para_id = np.array(idx2para_id, dtype=np.int32)
     idx2word_id = np.array(idx2word_id, dtype=np.int32)
 
+    print('writing index and metadata')
     with h5py.File(idx2id_path, 'w') as f:
         f.create_dataset('doc', data=idx2doc_id)
         f.create_dataset('para', data=idx2para_id)
         f.create_dataset('word', data=idx2word_id)
     faiss.write_index(start_index, target_index_path)
+    print('done')
 
 
 def merge_indexes(index_dir, idx2id_dir, target_index_path, target_idx2id_path):
     pass
 
 
-def get_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('dump_dir')
-    parser.add_argument('stage')
-    parser.add_argument('--index_name', default='default_index')
-    parser.add_argument('--quantizer_path', default='quantizer.faiss')
-    parser.add_argument('--max_norm_path', default='max_norm.json')
-    parser.add_argument('--trained_index_path', default='trained.faiss')
-    parser.add_argument('--dump_path', default='dump.hdf5')
-    parser.add_argument('--merged_index_path', default='index.faiss')
-    parser.add_argument('--num_clusters', type=int, default=4096)
-    parser.add_argument('--hnsw', default=False, action='store_true')
-    parser.add_argument('--max_norm', default=None, type=float)
-    parser.add_argument('--para', default=False, action='store_true')
-    parser.add_argument('--doc_sample_ratio', default=0.2, type=float)
-    parser.add_argument('--vec_sample_ratio', default=0.2, type=float)
-    parser.add_argument('--fs', default='local')
-    parser.add_argument('--add_all', default=False, action='store_true')
-    return parser.parse_args()
-
-
-def main():
-    args = get_args()
-    if args.fs == 'nfs':
-        from nsml import NSML_NFS_OUTPUT
-        args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
-
-    # from nsml import NSML_NFS_OUTPUT
-    # args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
-
+def run_index(args):
     phrase_path = os.path.join(args.dump_dir, 'phrase.hdf5')
     if os.path.exists(phrase_path):
         dump_paths = [phrase_path]
@@ -174,48 +263,47 @@ def main():
         dump_names = os.listdir(os.path.join(args.dump_dir, 'phrase'))
         dump_paths = [os.path.join(args.dump_dir, 'phrase', name) for name in dump_names if 'hdf5' in name]
         dump_path = os.path.join(args.dump_dir, 'phrase', args.dump_path)
-    print(dump_paths)
 
-    args.out_dir = os.path.join(args.dump_dir, args.index_name)
-    if not os.path.exists(args.out_dir):
-        os.makedirs(args.out_dir)
+    data = None
 
-    quantizer_path = os.path.join(args.out_dir, args.quantizer_path)
-    max_norm_path = os.path.join(args.out_dir, args.max_norm_path)
-    trained_index_path = os.path.join(args.out_dir, args.trained_index_path)
+    if args.stage in ['all', 'coarse']:
+        if args.replace or not os.path.exists(args.quantizer_path):
+            if not os.path.exists(args.index_dir):
+                os.makedirs(args.index_dir)
+            data, max_norm = sample_data(dump_paths, max_norm=args.max_norm, para=args.para,
+                                         doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio,
+                                         max_norm_cf=args.max_norm_cf, num_dummy_zeros=args.num_dummy_zeros)
+            with open(args.max_norm_path, 'w') as fp:
+                json.dump(max_norm, fp)
+            train_coarse_quantizer(data, args.quantizer_path, args.num_clusters, cuda=args.cuda)
 
-    index_dir = os.path.join(args.out_dir, 'index')
-    if not os.path.exists(index_dir):
-        os.makedirs(index_dir)
-    dump_name = os.path.splitext(os.path.basename(args.dump_path))[0]
-    target_index_path = os.path.join(index_dir, '%s.faiss' % dump_name)
-    idx2id_path = os.path.join(index_dir, '%s.hdf5' % dump_name)
-    merged_index_path = os.path.join(args.out_dir, args.merged_index_path)
+    if args.stage in ['all', 'fine']:
+        if args.replace or not os.path.exists(args.trained_index_path):
+            with open(args.max_norm_path, 'r') as fp:
+                max_norm = json.load(fp)
+            if data is None:
+                data, _ = sample_data(dump_paths, max_norm=max_norm, para=args.para,
+                                      doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio,
+                                      num_dummy_zeros=args.num_dummy_zeros)
+            train_index(data, args.quantizer_path, args.trained_index_path, fine_quant=args.fine_quant, cuda=args.cuda)
 
-    if args.stage == 'coarse':
-        data, max_norm = sample_data(dump_paths, max_norm=args.max_norm, para=args.para,
-                                     doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio)
-        with open(max_norm_path, 'w') as fp:
-            json.dump(max_norm, fp)
-        train_coarse_quantizer(data, quantizer_path, args.num_clusters)
-
-    if args.stage == 'fine':
-        with open(max_norm_path, 'r') as fp:
-            max_norm = json.load(fp)
-        data, _ = sample_data(dump_paths, max_norm=max_norm, para=args.para,
-                              doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio)
-        train_index(data, quantizer_path, trained_index_path)
-
-    if args.stage == 'add':
-        with open(max_norm_path, 'r') as fp:
-            max_norm = json.load(fp)
-        if not args.add_all:
-            dump_paths = [dump_path]
-        add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
-                     max_norm=max_norm, para=args.para)
+    if args.stage in ['all', 'add']:
+        if args.replace or not os.path.exists(args.index_path):
+            with open(args.max_norm_path, 'r') as fp:
+                max_norm = json.load(fp)
+            if not args.add_all:
+                dump_paths = [dump_path]
+            add_to_index(dump_paths, args.trained_index_path, args.index_path, args.idx2id_path,
+                         max_norm=max_norm, para=args.para, num_dummy_zeros=args.num_dummy_zeros, cuda=args.cuda,
+                         num_docs_per_add=args.num_docs_per_add)
 
     if args.stage == 'merge':
-        pass
+        raise NotImplementedError(args.stage)
+
+
+def main():
+    args = get_args()
+    run_index(args)
 
 
 if __name__ == '__main__':

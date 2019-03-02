@@ -31,9 +31,7 @@ def get_args():
     return args
 
 
-def main():
-    args = get_args()
-
+def run_demo(args):
     dump_dir = os.path.join(args.dump_dir, args.dump_path)
     index_dir = os.path.join(args.dump_dir, args.index_name)
     index_path = os.path.join(index_dir, args.index_path)
@@ -85,6 +83,11 @@ def main():
     http_server = HTTPServer(WSGIContainer(app))
     http_server.listen(args.port)
     IOLoop.instance().start()
+
+
+def main():
+    args = get_args()
+    run_demo(args)
 
 
 if __name__ == "__main__":

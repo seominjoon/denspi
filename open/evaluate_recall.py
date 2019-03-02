@@ -1,5 +1,7 @@
 """ Official evaluation script for v1.1 of the SQuAD dataset. """
 from __future__ import print_function
+
+import os
 from collections import Counter
 import string
 import re
@@ -84,36 +86,53 @@ def evaluate(dataset, predictions, k, no_f1=False):
     return {'exact_match': exact_match, 'f1': f1, 'ranks': ranks}
 
 
-if __name__ == '__main__':
+def get_args():
     expected_version = '1.1'
     parser = argparse.ArgumentParser(
         description='Evaluation for SQuAD ' + expected_version)
-    parser.add_argument('dataset_file', help='Dataset file')
-    parser.add_argument('prediction_file', help='Prediction File')
-    parser.add_argument('--no_f1', default=False, action='store_true')
+    parser.add_argument('data_path', help='Dataset file')
+    parser.add_argument('od_out_path', help='Prediction File')
+    parser.add_argument('--do_f1', default=False, action='store_true')
     parser.add_argument('--k_start', default=1, type=int)
-    parser.add_argument('--scores_path', default='scores.json')
+    parser.add_argument('--scores_dir', default='scores')
     args = parser.parse_args()
-    with open(args.dataset_file) as dataset_file:
-        dataset_json = json.load(dataset_file)
-        if (dataset_json['version'] != expected_version):
-            print('Evaluation expects v-' + expected_version +
-                  ', but got dataset with v-' + dataset_json['version'],
-                  file=sys.stderr)
+
+    args.scores_path = os.path.join(args.scores_dir, 'scores_%s' % os.path.basename(args.od_out_path))
+    return args
+
+
+def evaluate_recall(args):
+    if not os.path.exists(args.scores_dir):
+        os.makedirs(args.scores_dir)
+
+    with open(args.data_path) as data_path:
+        dataset_json = json.load(data_path)
         dataset = dataset_json['data']
-    with open(args.prediction_file) as prediction_file:
-        predictions = json.load(prediction_file)
+    with open(args.od_out_path) as od_out_path:
+        predictions = json.load(od_out_path)
     num_answers = len(next(iter(predictions.values())))
-    if args.no_f1:
+    if not args.do_f1:
         e = evaluate(dataset, predictions, num_answers + 1)
         ranks = e['ranks']
-        scores = {}
+        scores = []
         for k in range(1, num_answers + 1):
             b = [float(rank <= k) for rank in ranks.values()]
-            scores[k] = sum(b) / len(b)
+            scores.append([k, sum(b) / len(b)])
         with open(args.scores_path, 'w') as fp:
             json.dump(scores, fp)
-        print(json.dumps(scores))
+
+        print('Top-k results for %s:' % args.od_out_path)
+        for k, score in scores:
+            print('%d: %.2f' % (k, score * 100))
     else:
         for k in range(args.k_start, num_answers + 1):
             print('%d:' % k, json.dumps(evaluate(dataset, predictions, k)))
+
+
+def main():
+    args = get_args()
+    evaluate_recall(args)
+
+
+if __name__ == '__main__':
+    main()

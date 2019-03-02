@@ -275,7 +275,7 @@ def write_hdf5(all_examples, all_features, all_results,
             outqueue_.put(metadata)
 
     def write(outqueue_):
-        with h5py.File(hdf5_path, driver='core') as f:
+        with h5py.File(hdf5_path) as f:
             while True:
                 metadata = outqueue_.get()
                 if metadata:
@@ -317,8 +317,8 @@ def write_hdf5(all_examples, all_features, all_results,
 
     features = []
     results = []
-    inqueue = Queue()
-    outqueue = Queue()
+    inqueue = Queue(maxsize=1000)
+    outqueue = Queue(maxsize=1000)
     write_p = Process(target=write, args=(outqueue, ))
     p = Process(target=add, args=(inqueue, outqueue))
     write_p.start()
