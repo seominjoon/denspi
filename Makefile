@@ -601,11 +601,41 @@ dump_100M_:
 dump_30M:
 	python nsml_dump.py --data_name dev-30M --load_dir piqateam/piqa-nfs/76 --num_gpus 10 --mem_size 24 --end 153 --no_block
 
+dump_10M_c:
+	python nsml_dump.py --data_name dev-10M-c --load_dir piqateam/piqa-nfs/76 --num_gpus 4 --mem_size 32 --end 51
+
+dump_100M_c:
+	python nsml_dump.py --data_name dev-100M-c --load_dir piqateam/piqa-nfs/76 --num_gpus 20 --mem_size 32 --end 508
+
+dump_100M_cp:
+	python nsml_dump.py --data_name dev-100M-cp --load_dir piqateam/piqa-nfs/76 --num_gpus 4 --num_cpus 2 --mem_size 16 --end 104 --para
+
 dump_1B_c:
-	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 20 --mem_size 24
+	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 20 --mem_size 32
 
 dump_1B_c_1524_1778:
 	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 1 --mem_size 24 --start 1524 --end 1778
 
 dump_1B_c_3810_4064:
 	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 1 --mem_size 24 --start 3810 --end 4064
+
+dump_1B_c_4572_4826:
+	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 1 --mem_size 24 --start 4572 --end 4826
+
+dump_1B_c_1600_3200:
+	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 20 --num_cpus 2 --mem_size 16 --start 1600 --end 3200 --para
+
+dump_1B_c_2080_2160:
+	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 2 --num_cpus 2 --mem_size 32 --start 2080 --end 2160 --para
+
+dump_1B_c_2400_2440:
+	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 1 --num_cpus 2 --mem_size 16 --start 2400 --end 2440 --para
+
+dump_1B_c_2440-2560:
+	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 3 --num_cpus 2 --mem_size 16 --start 2440 --end 2560 --para
+
+dump_1B_c_3200-3500:
+	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 6 --num_cpus 2 --mem_size 16 --start 3200 --end 3500 --para
+
+dump_1B_c_3400-3450:
+	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 5 --num_cpus 2 --mem_size 16 --start 3400 --end 3450 --para

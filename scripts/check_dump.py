@@ -27,14 +27,24 @@ def check_dump(args):
     print('dir contiguity test passed!')
     print('checking file corruption...')
     pos = args.start
+    corrupted_paths = []
     while pos < args.end:
         name, pos = find_name(names, pos)
         path = os.path.join(args.dump_dir, name)
-        with h5py.File(path, 'r') as f:
-            print('checking %s...' % path)
-            for dk, group in tqdm(f.items()):
-                keys = list(group.keys())
-    print('file corruption test passed!')
+        try:
+            with h5py.File(path, 'r') as f:
+                print('checking %s...' % path)
+                for dk, group in tqdm(f.items()):
+                    keys = list(group.keys())
+        except:
+            print('%s corrupted!')
+            corrupted_paths.append(path)
+    if len(corrupted_paths) > 0:
+        print('following files are corrupted:')
+        for path in corrupted_paths:
+            print(path)
+    else:
+        print('file corruption test passed!')
 
 
 def get_args():
