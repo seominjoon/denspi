@@ -611,7 +611,10 @@ dump_100M_cp:
 	python nsml_dump.py --data_name dev-100M-cp --load_dir piqateam/piqa-nfs/76 --num_gpus 4 --num_cpus 2 --mem_size 16 --end 104 --para
 
 dump_1B_c:
-	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 20 --mem_size 32
+	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 20 --mem_size 24 --start 3500 --end 5076 --para
+
+dump_1B_c_s:
+	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 8 --mem_size 24 --start 4290 --end 4369 --para
 
 dump_1B_c_1524_1778:
 	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 1 --mem_size 24 --start 1524 --end 1778
