@@ -606,8 +606,8 @@ dump_30M:
 dump_para:
 	nsml run -d piqa-nfs -g 0 -c 1 -e dump_tfidf.py --memory 24G --nfs-output -a " \
 	dump/76_dev-100M-cc/phrase dump/76_dev-100M-cc/tfidf \
-	--start 18 \
-	--end 20 \
+	--start 5 \
+	--end 6 \
 	--ranker_path data/wikipedia/docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz \
 	--nfs"
 

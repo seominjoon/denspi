@@ -77,8 +77,14 @@ def dump_tfidf(ranker, dumps, names, args):
                         print('%s exists; replacing' % str(p_idx))
                         del dg[str(p_idx)]
                     pdg = dg.create_group(str(p_idx))
-                    pdg.create_dataset('vals', data=data[0])
-                    pdg.create_dataset('idxs', data=data[1])
+                    try:
+                        pdg.create_dataset('vals', data=data[0])
+                        pdg.create_dataset('idxs', data=data[1])
+                    except Exception as e:
+                        print('Exception occured {} {}'.format(str(e), data))
+                        pdg.create_dataset('vals', data=[0])
+                        pdg.create_dataset('idxs', data=[0])
+                        
 
 
 def get_args():

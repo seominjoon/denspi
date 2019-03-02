@@ -1,0 +1,9 @@
+data/
+metadata/
+out/
+static/
+index/
+piqateam*
+*.json*
+*.hdf5
+*.npz
