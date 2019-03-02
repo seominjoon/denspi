@@ -602,3 +602,12 @@ dump_100M_:
 
 dump_30M:
 	python nsml_dump.py --data_name dev-30M --load_dir piqateam/piqa-nfs/76 --num_gpus 10 --mem_size 24 --end 153 --no_block
+
+dump_para:
+	nsml run -d piqa-nfs -g 0 -c 1 -e dump_tfidf.py --memory 24G --nfs-output -a " \
+	dump/76_dev-100M-cc/phrase dump/76_dev-100M-cc/tfidf \
+	--start 18 \
+	--end 20 \
+	--ranker_path data/wikipedia/docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz \
+	--nfs"
+

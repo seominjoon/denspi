@@ -1,4 +1,4 @@
-#nsml: dsksd/pytorch:0.4.1
+#nsml: minjoon/denspin:19022813
 
 """
 Copyright 2018 NAVER Corp.

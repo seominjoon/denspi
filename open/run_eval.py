@@ -51,6 +51,7 @@ def main():
             'wikipedia/docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz')
     phrase_dump_path = os.path.join(args.dump_dir, 'phrase.hdf5')
     args.phrase_dump_dir = phrase_dump_path if os.path.exists(phrase_dump_path) else os.path.join(args.dump_dir, 'phrase')
+    args.tfidf_dump_dir = os.path.join(args.dump_dir, 'tfidf')
     args.index_path = os.path.join(args.index_dir, args.index_path)
     args.quantizer_path = os.path.join(args.index_dir, args.quantizer_path)
     args.question_dump_path = os.path.join(args.dump_dir, args.question_dump_path)
@@ -95,15 +96,7 @@ def main():
     if not args.sparse:
         mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para)
     else:
-        # Load retriever
-        from drqa import retriever
-        ranker = None
-        ranker = retriever.get_class('tfidf')(
-            tfidf_path=RET_PATH,
-            strict=False
-        )
-        print('Retriever doc_mat shape {} from {}'.format(ranker.doc_mat.shape, RET_PATH))
-        mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para, ranker=ranker)
+        mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para, tfidf_dump_dir=args.tfidf_dump_dir)
 
     # recall at k
     cd_results = []

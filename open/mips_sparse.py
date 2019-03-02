@@ -28,9 +28,13 @@ def linear_mxq(q_idx, q_val, c_idx, c_val):
 
 
 class MIPSSparse(MIPS):
-    def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para=False, ranker=None):
+    def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para=False, tfidf_dump_dir=None):
         super(MIPSSparse, self).__init__(phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para)
-        self.tfidf_ranker = ranker
+        assert os.path.isdir(tfidf_dump_dir)
+        self.tfidf_dump_paths = [os.path.join(tfidf_dump_dir, name) for name in os.listdir(tfidf_dump_dir) if 'hdf5' in name]
+        dump_names = [os.path.splitext(os.path.basename(path))[0] for path in self.tfidf_dump_paths]
+        print(dump_names)
+        exit()
 
     def search_start(self, query_start, q_sparse, q_input_ids, doc_idxs=None, para_idxs=None, start_top_k=100, out_top_k=5, nprobe=16, sparse_weight=3e+0, q_texts=None):
         # doc_idxs = [Q], para_idxs = [Q]
