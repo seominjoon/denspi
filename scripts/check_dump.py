@@ -31,9 +31,9 @@ def check_dump(args):
         name, pos = find_name(names, pos)
         path = os.path.join(args.dump_dir, name)
         with h5py.File(path, 'r') as f:
+            print('checking %s...' % path)
             for dk, group in tqdm(f.items()):
-                for key, val in group.items():
-                    pass
+                keys = list(group.keys())
     print('file corruption test passed!')
 
 
