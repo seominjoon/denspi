@@ -78,7 +78,7 @@ def sample_data(dump_paths, para=False, doc_sample_ratio=0.2, vec_sample_ratio=0
         print(dump_path)
     dumps = [h5py.File(dump_path, 'r') for dump_path in dump_paths]
     for i, f in enumerate(tqdm(dumps)):
-        doc_ids = f.keys()
+        doc_ids = list(f.keys())
         sampled_doc_ids = random.sample(doc_ids, int(doc_sample_ratio * len(doc_ids)))
         for doc_id in tqdm(sampled_doc_ids, desc='sampling from %d' % i):
             doc_group = f[doc_id]

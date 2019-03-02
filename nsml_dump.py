@@ -54,7 +54,7 @@ def run_dump_phrase(args):
                 "-g",
                 "1",
                 "-c",
-                "4",
+                str(args.num_cpus),
                 "-e",
                 "run_piqa.py",
                 "--memory",
@@ -99,6 +99,7 @@ def get_args():
     parser.add_argument('--start', default=0, type=int)
     parser.add_argument('--end', default=5076, type=int)
     parser.add_argument('--mem_size', default=32, type=int, help='mem size in GB')
+    parser.add_argument('--num_cpus', default=4, type=int, help='num cpus per gpu')
     parser.add_argument('--no_block', default=False, action='store_true')
     parser.add_argument('--para', default=False, action='store_true')
     args = parser.parse_args()

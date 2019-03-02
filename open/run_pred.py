@@ -37,6 +37,7 @@ def get_args():
     parser.add_argument('--step_size', default=10, type=int)
     parser.add_argument('--fs', default='local')
     parser.add_argument('--num_dummy_zeros', default=0, type=int)
+    parser.add_argument('--cuda', defaul=False, action='store_true')
     args = parser.parse_args()
 
     if args.fs == 'nfs':
