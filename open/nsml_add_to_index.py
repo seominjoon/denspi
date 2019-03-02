@@ -11,8 +11,8 @@ def get_size(name):
     return b - a
 
 
-def bin_names(names, num_bins):
-    names = sorted(names, key=lambda name_: -get_size(name_))
+def bin_names(dir_, names, num_bins):
+    names = sorted(names, key=lambda name_: -os.path.getsize(os.path.join(dir_, name_)))
     bins = []
     for name in names:
         if len(bins) < num_bins:
@@ -42,8 +42,9 @@ def run_add_to_index(args):
                 "%s add --dump_paths %s --offset %d --num_clusters %d --fs nfs --cuda" % (
                 args.dump_dir, dump_paths, offset_, args.num_clusters)]
 
-    names = os.listdir(os.path.join(args.nfs_dir, args.dump_dir, 'phrase'))
-    bins = bin_names(names, args.num_gpus)
+    dir_ = os.path.join(args.nfs_dir, args.dump_dir, 'phrase')
+    names = os.listdir(dir_)
+    bins = bin_names(dir_, names, args.num_gpus)
 
     if args.compact_offset:
         raise NotImplementedError()

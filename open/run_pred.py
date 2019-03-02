@@ -17,7 +17,7 @@ def get_args():
     parser.add_argument('--question_dump_path', default='question.hdf5')
 
     parser.add_argument('--index_name', default='default_index')
-    parser.add_argument('--index_path', default='index.hdf5')
+    parser.add_argument('--index_path', default='index.faiss')
     parser.add_argument('--idx2id_path', default='idx2id.hdf5')
 
     parser.add_argument('--pred_dir', default='pred')
@@ -37,7 +37,7 @@ def get_args():
     parser.add_argument('--step_size', default=10, type=int)
     parser.add_argument('--fs', default='local')
     parser.add_argument('--num_dummy_zeros', default=0, type=int)
-    parser.add_argument('--cuda', defaul=False, action='store_true')
+    parser.add_argument('--cuda', default=False, action='store_true')
     args = parser.parse_args()
 
     if args.fs == 'nfs':

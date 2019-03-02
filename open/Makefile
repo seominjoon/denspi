@@ -200,3 +200,27 @@ nsml_add_10M:
 
 nsml_add_1B:
 	python nsml_add_to_index.py dump/76_dev-1B-c --num_clusters 262144
+
+nsml_add_1B_18:
+	nsml run -d piqa-nfs -g 1 -c 2 -e run_index.py --memory 24G --nfs-output -a " \
+	dump/76_dev-1B-c add \
+	--dump_paths 2720-2800.hdf5,3974-4053.hdf5,4132-4211.hdf5,4300-4310.hdf5,2040-2045.hdf5 \
+	--offset 18000000000 \
+	--num_clusters 262144 \
+	--fs nfs \
+	--cuda \
+	"
+
+nsml_merge_10M:
+	nsml run -d piqa-nfs -g 0 -c 4 -e run_index.py --memory 24G --nfs-output -a " \
+	dump/76_dev-10M-c merge \
+	--fs nfs \
+	--replace \
+	"
+
+nsml_pred_10M:
+	nsml run -d piqa-nfs -g 0 -c 4 -e run_pred.py --memory 24G --nfs-output -a " \
+	data/dev-3.json dump/76_dev-10M-c \
+	--index_name 4096_flat_SQ8 \
+	--fs nfs \
+	"

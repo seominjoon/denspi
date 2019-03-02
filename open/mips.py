@@ -47,12 +47,34 @@ class MIPS(object):
 
         print('reading %s' % start_index_path)
         self.start_index = faiss.read_index(start_index_path)
-        with h5py.File(idx2id_path, 'r') as f:
-            self.idx2doc_id = f['doc'][:]
-            self.idx2para_id = f['para'][:]
-            self.idx2word_id = f['word'][:]
+        self.idx_f = h5py.File(idx2id_path, 'r')
+        self.has_offset = not 'doc' in self.idx_f
+        # with h5py.File(idx2id_path, 'r') as f:
+        #     self.idx2doc_id = f['doc'][:]
+        #     self.idx2para_id = f['para'][:]
+        #     self.idx2word_id = f['word'][:]
 
         self.num_dummy_zeros = num_dummy_zeros
+
+    def get_idxs(self, I):
+        if self.has_offset:
+            offsets = (I / 1e9).astype(np.int64) * int(1e9)
+            idxs = I % int(1e9)
+            doc = np.array([[self.idx_f[str(offset)]['doc'][idx] for offset, idx in zip(oo, ii)] for oo, ii in zip(offsets, idxs)])
+            word = np.array([[self.idx_f[str(offset)]['word'][idx] for offset, idx in zip(oo, ii)] for oo, ii in zip(offsets, idxs)])
+            if self.para:
+                para = np.array([[self.idx_f[str(offset)]['para'][idx] for offset, idx in zip(oo, ii)] for oo, ii in zip(offsets, idxs)])
+            else:
+                para = None
+        else:
+            doc = np.array([[self.idx_f['doc'][idx] for idx in ii] for ii in I])
+            word = np.array([[self.idx_f['word'][idx] for idx in ii] for ii in I])
+            if self.para:
+                para = np.array([[self.idx_f['para'][idx] for idx in ii] for ii in I])
+            else:
+                para = None
+
+        return doc, para, word
 
     def close(self):
         for phrase_dump in self.phrase_dumps:
@@ -80,10 +102,7 @@ class MIPS(object):
             self.start_index.nprobe = nprobe
             start_scores, I = self.start_index.search(query_start, top_k)
 
-            doc_idxs = self.idx2doc_id[I]
-            start_idxs = self.idx2word_id[I]
-            if self.para:
-                para_idxs = self.idx2para_id[I]
+            doc_idxs, para_idxs, start_idxs = self.get_idxs(I)
         else:
             groups = [self.get_doc_group(doc_idx)[str(para_idx)] for doc_idx, para_idx in zip(doc_idxs, para_idxs)]
             starts = [group['start'][:, :] for group in groups]
@@ -146,7 +165,7 @@ class MIPS(object):
                 'doc_idx': doc_idx,
                 'start_pos': group['word2char_start'][start_idx].item(),
                 'end_pos': group['word2char_end'][end_idx].item() if len(group['word2char_end']) > 0
-                   else group['word2char_start'][start_idx].item() + 1,
+                else group['word2char_start'][start_idx].item() + 1,
                 'score': score}
                for doc_idx, group, start_idx, end_idx, score in zip(doc_idxs.tolist(), groups, start_idxs.tolist(),
                                                                     pred_end_idxs.tolist(), max_scores.tolist())]

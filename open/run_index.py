@@ -28,6 +28,7 @@ def get_args():
     parser.add_argument('--trained_index_path', default='trained.faiss')
     parser.add_argument('--index_path', default='index.faiss')
     parser.add_argument('--idx2id_path', default='idx2id.hdf5')
+    parser.add_argument('--inv_path', default='merged.invdata')
 
     # Adding options
     parser.add_argument('--add_all', default=False, action='store_true')
@@ -66,13 +67,14 @@ def get_args():
     args.quantizer_path = os.path.join(args.index_dir, args.quantizer_path)
     args.max_norm_path = os.path.join(args.index_dir, args.max_norm_path)
     args.trained_index_path = os.path.join(args.index_dir, args.trained_index_path)
+    args.inv_path = os.path.join(args.index_dir, args.inv_path)
 
+    args.subindex_dir = os.path.join(args.index_dir, args.subindex_name)
     if args.dump_paths is None:
         args.index_path = os.path.join(args.index_dir, args.index_path)
         args.idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
     else:
         args.dump_paths = [os.path.join(args.dump_dir, 'phrase', path) for path in args.dump_paths.split(',')]
-        args.subindex_dir = os.path.join(args.index_dir, args.subindex_name)
         args.index_path = os.path.join(args.subindex_dir, '%d.faiss' % args.offset)
         args.idx2id_path = os.path.join(args.subindex_dir, '%d.hdf5' % args.offset)
 
@@ -250,6 +252,7 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
         dump.close()
 
     if cuda and not fine_quant.startswith('PQ'):
+        print('moving back to cpu')
         start_index = faiss.index_gpu_to_cpu(start_index)
 
     print('index ntotal: %d' % start_index.ntotal)
@@ -267,8 +270,60 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
     print('done')
 
 
-def merge_indexes(index_dir, idx2id_dir, target_index_path, target_idx2id_path):
-    pass
+def merge_indexes(subindex_dir, trained_index_path, target_index_path, target_idx2id_path, target_inv_path):
+    # target_inv_path = merged_index.ivfdata
+    names = os.listdir(subindex_dir)
+    idx2id_paths = [os.path.join(subindex_dir, name) for name in names if name.endswith('.hdf5')]
+    index_paths = [os.path.join(subindex_dir, name) for name in names if name.endswith('.faiss')]
+
+    print('copying idx2id')
+    with h5py.File(target_idx2id_path, 'w') as out:
+        for idx2id_path in tqdm(idx2id_paths, desc='copying idx2id'):
+            with h5py.File(idx2id_path, 'r') as in_:
+                offset = str(in_.attrs['offset'])
+                group = out.create_group(offset)
+                group.create_dataset('doc', data=in_['doc'])
+                group.create_dataset('para', data=in_['para'])
+                group.create_dataset('word', data=in_['word'])
+
+    print('loading invlists')
+    ivfs = []
+    for index_path in tqdm(index_paths, desc='loading invlists'):
+        # the IO_FLAG_MMAP is to avoid actually loading the data thus
+        # the total size of the inverted lists can exceed the
+        # available RAM
+        index = faiss.read_index(index_path,
+                                 faiss.IO_FLAG_MMAP)
+        ivfs.append(index.invlists)
+
+        # avoid that the invlists get deallocated with the index
+        index.own_invlists = False
+
+    # construct the output index
+    index = faiss.read_index(trained_index_path)
+
+    # prepare the output inverted lists. They will be written
+    # to merged_index.ivfdata
+    invlists = faiss.OnDiskInvertedLists(
+        index.nlist, index.code_size,
+        target_inv_path)
+
+    # merge all the inverted lists
+    print('merging')
+    ivf_vector = faiss.InvertedListsPtrVector()
+    for ivf in tqdm(ivfs):
+        ivf_vector.push_back(ivf)
+
+    print("merge %d inverted lists " % ivf_vector.size())
+    ntotal = invlists.merge_from(ivf_vector.data(), ivf_vector.size())
+    print(ntotal)
+
+    # now replace the inverted lists in the output index
+    index.ntotal = ntotal
+    index.replace_invlists(invlists)
+
+    print('writing index')
+    faiss.write_index(index, target_index_path)
 
 
 def run_index(args):
@@ -312,10 +367,11 @@ def run_index(args):
                     os.makedirs(args.subindex_dir)
             add_to_index(dump_paths, args.trained_index_path, args.index_path, args.idx2id_path,
                          max_norm=max_norm, para=args.para, num_dummy_zeros=args.num_dummy_zeros, cuda=args.cuda,
-                         num_docs_per_add=args.num_docs_per_add)
+                         num_docs_per_add=args.num_docs_per_add, offset=args.offset)
 
     if args.stage == 'merge':
-        raise NotImplementedError(args.stage)
+        if args.replace or not os.path.exists(args.index_path):
+            merge_indexes(args.subindex_dir, args.trained_index_path, args.index_path, args.idx2id_path, args.inv_path)
 
 
 def main():
