@@ -37,7 +37,7 @@ def check_dump(args):
                 for dk, group in tqdm(f.items()):
                     keys = list(group.keys())
         except:
-            print('%s corrupted!')
+            print('%s corrupted!' % path)
             corrupted_paths.append(path)
     if len(corrupted_paths) > 0:
         print('following files are corrupted:')
