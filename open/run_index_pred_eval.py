@@ -17,7 +17,11 @@ def get_args():
     # moved from run_pred.py
     parser.add_argument('data_path')
 
-    parser.add_argument('--dump_path', default='dump.hdf5')  # not used for now
+    parser.add_argument('--dump_paths', default=None,
+                        help='Relative to `dump_dir/phrase`. '
+                             'If specified, creates subindex dir and save there with same name')
+    parser.add_argument('--subindex_name', default='index', help='used only if dump_path is specified.')
+    parser.add_argument('--offset', default=0, type=int)
 
     # relative paths in dump_dir/index_name
     parser.add_argument('--quantizer_path', default='quantizer.faiss')

@@ -198,18 +198,6 @@ nsml_all_5:
 nsml_add_10M:
 	python nsml_add_to_index.py dump/76_dev-10M-c --num_clusters 4096 --num_gpus 2
 
-nsml_add_1B:
-	python nsml_add_to_index.py dump/76_dev-1B-c --num_clusters 262144
-
-nsml_add_1B_18:
-	nsml run -d piqa-nfs -g 1 -c 2 -e run_index.py --memory 24G --nfs-output -a " \
-	dump/76_dev-1B-c add \
-	--dump_paths 2720-2800.hdf5,3974-4053.hdf5,4132-4211.hdf5,4300-4310.hdf5,2040-2045.hdf5 \
-	--offset 18000000000 \
-	--num_clusters 262144 \
-	--fs nfs \
-	--cuda \
-	"
 
 nsml_merge_10M:
 	nsml run -d piqa-nfs -g 0 -c 4 -e run_index.py --memory 24G --nfs-output -a " \
@@ -223,4 +211,93 @@ nsml_pred_10M:
 	data/dev-3.json dump/76_dev-10M-c \
 	--index_name 4096_flat_SQ8 \
 	--fs nfs \
+	"
+
+nsml_add_1B:
+	python nsml_add_to_index.py dump/76_dev-1B-c --num_clusters 262144
+
+nsml_add_1B_18:
+	nsml run -d piqa-nfs -g 1 -c 2 -e run_index.py --memory 24G --nfs-output -a " \
+	dump/76_dev-1B-c add \
+	--dump_paths 2720-2800.hdf5,3974-4053.hdf5,4132-4211.hdf5,4300-4310.hdf5,2040-2045.hdf5 \
+	--offset 18000000000 \
+	--num_clusters 262144 \
+	--fs nfs \
+	--cuda \
+	"
+
+nsml_merge_1B:
+	nsml run -d piqa-nfs -g 0 -c 4 -e run_index.py --memory 40G --nfs-output -a " \
+	dump/76_dev-1B-c merge \
+	--fs nfs \
+	--num_clusters 262144 \
+	"
+
+nsml_pred_1B_10:
+	nsml run -d piqa-nfs -g 0 -c 8 -e run_pred.py --memory 24G --nfs-output -a " \
+	data/dev-3.json dump/76_dev-1B-c \
+	--index_name 262144_flat_SQ8 \
+	--fs nfs \
+	--top_k 10 \
+	"
+
+nsml_pred_1B_100:
+	nsml run -d piqa-nfs -g 0 -c 8 -e run_pred.py --memory 24G --nfs-output -a " \
+	data/dev-3.json dump/76_dev-1B-c \
+	--index_name 262144_flat_SQ8 \
+	--fs nfs \
+	--top_k 100 \
+	"
+
+nsml_pred_1B_1000:
+	nsml run -d piqa-nfs -g 0 -c 8 -e run_pred.py --memory 24G --nfs-output -a " \
+	data/dev-3.json dump/76_dev-1B-c \
+	--index_name 262144_flat_SQ8 \
+	--fs nfs \
+	--top_k 1000 \
+	"
+
+t10_all:
+	python run_index_pred_eval.py \
+	$(PIQA_NFS)/dump/76_t10 $(DATA_PATH) \
+	--fs local \
+	--add_all \
+	--step_size 10 \
+	--top_k 100 \
+	--num_clusters 4096 \
+	--fine_quant SQ8 \
+	--start_top_k 100 \
+	--nprobe 64 \
+	--cuda
+
+nsml_t10_all:
+	nsml run -d piqa-nfs -g 1 -c 4 -e run_index_pred_eval.py --memory 24sG --nfs-output -a " \
+	dump/76_t10 $(LOCAL_DATA_PATH) \
+	--fs nfs \
+	--add_all \
+	--step_size 10 \
+	--top_k 100 \
+	--num_clusters 4096 \
+	--fine_quant SQ8 \
+	--start_top_k 100 \
+	--nprobe 64 \
+	--cuda \
+	"
+
+nsml_t10_add:
+	python nsml_add_to_index.py dump/76_t10 --num_clusters 4096 --num_gpus 5
+
+nsml_t10_merge:
+	nsml run -d piqa-nfs -g 0 -c 4 -e run_index.py --memory 24G --nfs-output -a " \
+	dump/76_t10 merge \
+	--fs nfs \
+	--num_clusters 4096 \
+	"
+
+nsml_t10_pred:
+	nsml run -d piqa-nfs -g 0 -c 4 -e run_pred.py --memory 24G --nfs-output -a " \
+	data/dev-3.json dump/76_t10 \
+	--index_name 4096_flat_SQ8 \
+	--fs nfs \
+	--top_k 100 \
 	"

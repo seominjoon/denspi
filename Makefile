@@ -648,3 +648,12 @@ dump_1B_c_2000-2080:
 
 dump_1B_c_2075-2080:
 	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 1 --num_cpus 8 --mem_size 48 --start 2075 --end 2080 --para
+
+dump_t10:
+	python nsml_dump.py --data_name t10 --load_dir piqateam/piqa-nfs/76 --num_gpus 10 --mem_size 32 --end 51
+
+dump_t10:
+	python nsml_dump.py --data_name t10 --load_dir piqateam/piqa-nfs/76 --num_gpus 10 --mem_size 32 --end 51
+
+dump_t100:
+	python nsml_dump.py --data_name t100 --load_dir piqateam/piqa-nfs/76 --num_gpus 20 --mem_size 24 --end 509

@@ -85,7 +85,7 @@ def get_args():
     parser.add_argument('--para', default=False, action='store_true')
     parser.add_argument('--draft', default=False, action='store_true')
     parser.add_argument('--nfs_dir', default='/data_nfs/camist002/user/piqa-nfs/')
-    parser.add_argument('--max_num_per_file', default=int(1e9), type=int,
+    parser.add_argument('--max_num_per_file', default=int(1e8), type=int,
                         help='max num per file for setting up good offsets.')
     parser.add_argument('--compact_offset', default=False, action='store_true')
     args = parser.parse_args()

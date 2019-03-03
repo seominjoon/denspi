@@ -58,8 +58,8 @@ class MIPS(object):
 
     def get_idxs(self, I):
         if self.has_offset:
-            offsets = (I / 1e9).astype(np.int64) * int(1e9)
-            idxs = I % int(1e9)
+            offsets = (I / 1e8).astype(np.int64) * int(1e8)
+            idxs = I % int(1e8)
             doc = np.array([[self.idx_f[str(offset)]['doc'][idx] for offset, idx in zip(oo, ii)] for oo, ii in zip(offsets, idxs)])
             word = np.array([[self.idx_f[str(offset)]['word'][idx] for offset, idx in zip(oo, ii)] for oo, ii in zip(offsets, idxs)])
             if self.para:
