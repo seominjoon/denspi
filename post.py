@@ -2,8 +2,10 @@ import collections
 import io
 import json
 import logging
-from multiprocessing import Queue
+from multiprocessing import Queue, Pool
+from multiprocessing.pool import ThreadPool
 from tempfile import TemporaryFile
+from threading import Thread
 
 import numpy as np
 import six
@@ -164,15 +166,15 @@ def get_metadata(id2example, features, results, max_answer_length, do_lower_case
     input_ids = None
     sparse_map = None
     if split_by_para and results[0].sparse is not None:
-        input_ids = np.concatenate([f.input_ids[1:len(f.tokens)-1] for f in features], axis=0)
-        sparse_features = [result.sparse[1:len(feature.tokens)-1,1:len(feature.tokens)-1]
-            for feature, result in zip(features, results)]
+        input_ids = np.concatenate([f.input_ids[1:len(f.tokens) - 1] for f in features], axis=0)
+        sparse_features = [result.sparse[1:len(feature.tokens) - 1, 1:len(feature.tokens) - 1]
+                           for feature, result in zip(features, results)]
         map_size = sum([k.shape[0] for k in sparse_features])
         sparse_map = np.zeros((map_size, map_size), dtype=np.float32)
         curr_size = 0
         for sparse_feature in sparse_features:
-            sparse_map[curr_size:curr_size+sparse_feature.shape[0],
-                       curr_size:curr_size+sparse_feature.shape[0]] = sparse_feature
+            sparse_map[curr_size:curr_size + sparse_feature.shape[0],
+            curr_size:curr_size + sparse_feature.shape[0]] = sparse_feature
             curr_size += sparse_feature.shape[0]
 
     fs = np.concatenate([result.filter_start_logits[1:len(feature.tokens) - 1]
@@ -254,6 +256,12 @@ def compress_metadata(metadata, offset, scale):
     return metadata
 
 
+def pool_func(item):
+    metadata_ = get_metadata(*item[:-1])
+    metadata_ = filter_metadata(metadata_, item[-1])
+    return metadata_
+
+
 def write_hdf5(all_examples, all_features, all_results,
                max_answer_length, do_lower_case, hdf5_path, filter_threshold, verbose_logging, offset=None, scale=None,
                split_by_para=False, use_sparse=False):
@@ -266,13 +274,30 @@ def write_hdf5(all_examples, all_features, all_results,
     id2feature = {feature.unique_id: feature for feature in all_features}
     id2example = {id_: all_examples[id2feature[id_].example_index] for id_ in id2feature}
 
-    # Separating writing part for potentially multi-processed dumping
+    def add_(inqueue_, outqueue_):
+        with ThreadPool(2) as pool:
+            items = []
+            for item in iter(inqueue_.get, None):
+                args = list(item[:3]) + [max_answer_length, do_lower_case, verbose_logging] + [item[3], filter_threshold]
+                items.append(args)
+                if len(items) < 16:
+                    continue
+                out = pool.map(pool_func, items)
+                map(outqueue_.put, out)
+                items = []
+
+            out = pool.map(pool_func, items)
+            map(outqueue_.put, out)
+
+            outqueue_.put(None)
+
     def add(inqueue_, outqueue_):
-        for id2example_, features_, results_, split_by_para in iter(inqueue_.get, None):
-            metadata = get_metadata(id2example_, features_, results_, max_answer_length, do_lower_case, verbose_logging,
-                                    split_by_para)
-            metadata = filter_metadata(metadata, filter_threshold)
-            outqueue_.put(metadata)
+        for item in iter(inqueue_.get, None):
+            args = list(item[:3]) + [max_answer_length, do_lower_case, verbose_logging] + [item[3], filter_threshold]
+            out = pool_func(args)
+            outqueue_.put(out)
+
+        outqueue_.put(None)
 
     def write(outqueue_):
         with h5py.File(hdf5_path) as f:
@@ -317,10 +342,10 @@ def write_hdf5(all_examples, all_features, all_results,
 
     features = []
     results = []
-    inqueue = Queue(maxsize=1000)
-    outqueue = Queue(maxsize=1000)
-    write_p = Process(target=write, args=(outqueue, ))
-    p = Process(target=add, args=(inqueue, outqueue))
+    inqueue = Queue(maxsize=500)
+    outqueue = Queue(maxsize=500)
+    write_p = Thread(target=write, args=(outqueue,))
+    p = Thread(target=add, args=(inqueue, outqueue))
     write_p.start()
     p.start()
 
@@ -335,6 +360,7 @@ def write_hdf5(all_examples, all_features, all_results,
 
         if condition:
             in_ = (id2example, features, results, split_by_para)
+            print('inqueue size: %d, outqueue size: %d' % (inqueue.qsize(), outqueue.qsize()))
             inqueue.put(in_)
             # add(id2example, features, results, split_by_para)
             features = [feature]
@@ -348,7 +374,6 @@ def write_hdf5(all_examples, all_features, all_results,
     inqueue.put(in_)
     inqueue.put(None)
     p.join()
-    outqueue.put(None)
     write_p.join()
 
 
@@ -360,7 +385,7 @@ def get_question_results(question_examples, query_eval_features, question_datalo
         input_mask_ = input_mask_.to(device)
         with torch.no_grad():
             batch_start, batch_end, batch_span_logits, batch_sparse = model(query_ids=input_ids_,
-                                                              query_mask=input_mask_)
+                                                                            query_mask=input_mask_)
         for i, example_index in enumerate(example_indices):
             start = batch_start[i].detach().cpu().numpy().astype(np.float16)
             end = batch_end[i].detach().cpu().numpy().astype(np.float16)
@@ -385,8 +410,8 @@ def write_question_results(question_results, question_features, path):
             sparse = None
             input_ids = None
             if question_result.sparse is not None:
-                sparse = question_result.sparse[1:len(question_feature.tokens)-1]
-                input_ids = question_feature.input_ids[1:len(question_feature.tokens)-1]
+                sparse = question_result.sparse[1:len(question_feature.tokens) - 1]
+                input_ids = question_feature.input_ids[1:len(question_feature.tokens) - 1]
 
             data = np.concatenate([question_result.start, question_result.end, question_result.span_logit], -1)
             f.create_dataset(question_result.qas_id, data=data)

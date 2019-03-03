@@ -49,6 +49,8 @@ def run_demo(args):
     def search(query, top_k, nprobe=64):
         (start, end, span), _ = query2emb(query, args.api_port)()
         phrase_vec = np.concatenate([start, end, span], 1)
+        print(phrase_vec.shape)
+        print(phrase_vec[0, :3])
         rets = mips.search(phrase_vec, top_k=top_k, nprobe=nprobe)
         out = rets[0]
         return out

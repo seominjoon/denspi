@@ -271,7 +271,7 @@ t10_all:
 	--cuda
 
 nsml_t10_all:
-	nsml run -d piqa-nfs -g 1 -c 4 -e run_index_pred_eval.py --memory 24sG --nfs-output -a " \
+	nsml run -d piqa-nfs -g 1 -c 4 -e run_index_pred_eval.py --memory 24G --nfs-output -a " \
 	dump/76_t10 $(LOCAL_DATA_PATH) \
 	--fs nfs \
 	--add_all \
@@ -300,4 +300,83 @@ nsml_t10_pred:
 	--index_name 4096_flat_SQ8 \
 	--fs nfs \
 	--top_k 100 \
+	"
+
+t10_merge:
+	python run_index.py \
+	/home/minjoon/dump/76_t10 merge \
+	--fs local \
+	--num_clusters 4096
+
+t10_pred:
+	python run_pred.py \
+	$(PIQA_NFS)/data/dev-3.json /home/minjoon/dump/76_t10 \
+	--index_name 4096_flat_SQ8 \
+	--fs local \
+	--top_k 100
+
+t10_demo:
+	python run_demo.py /home/minjoon/dump/76_t10 --nprobe 64 --top_k 1 --index_name 4096_flat_SQ8
+
+t100_merge:
+	python run_index.py \
+	$(PIQA_NFS)/dump/76_t100 merge \
+	--fs local \
+	--num_clusters 32768 \
+	--replace
+
+t100_pred:
+	python run_pred.py \
+	$(PIQA_NFS)/data/dev-3.json $(PIQA_NFS)/dump/76_t100 \
+	--index_name 32768_flat_SQ8 \
+	--fs local \
+	--top_k 100
+
+nsml_t100_all:
+	nsml run -d piqa-nfs -g 1 -c 4 -e run_index_pred_eval.py --memory 32G --nfs-output -a " \
+	dump/76_t100 $(LOCAL_DATA_PATH) \
+	--fs nfs \
+	--add_all \
+	--step_size 10 \
+	--top_k 100 \
+	--num_clusters 32768 \
+	--fine_quant SQ8 \
+	--start_top_k 100 \
+	--nprobe 64 \
+	--cuda \
+	"
+
+nsml_t100_add:
+	python nsml_add_to_index.py dump/76_t100 --num_clusters 32768 --num_gpus 10
+
+nsml_t100_merge:
+	nsml run -d piqa-nfs -g 0 -c 4 -e run_index.py --memory 24G --nfs-output -a " \
+	dump/76_t100 merge \
+	--fs nfs \
+	--num_clusters 32768 \
+	"
+
+t100_demo:
+	python run_demo.py $(PIQA_NFS)/dump/76_t100 --nprobe 128 --top_k 100 --index_name 32768_flat_SQ8
+
+nsml_t100_pred:
+	nsml run -d piqa-nfs -g 0 -c 4 -e run_pred.py --memory 24G --nfs-output -a " \
+	data/dev-3.json dump/76_t100 \
+	--index_name 32768_flat_SQ8 \
+	--fs nfs \
+	--top_k 100 \
+	"
+
+nsml_1B_all:
+	nsml run -d piqa-nfs -g 1 -c 8 -e run_index_pred_eval.py --memory 32G --nfs-output -a " \
+	dump/76_dev-1B-c $(LOCAL_DATA_PATH) \
+	--fs nfs \
+	--add_all \
+	--step_size 10 \
+	--top_k 100 \
+	--num_clusters 524288 \
+	--fine_quant SQ8 \
+	--start_top_k 100 \
+	--nprobe 64 \
+	--cuda \
 	"

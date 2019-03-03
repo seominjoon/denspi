@@ -40,7 +40,8 @@ def get_args():
                         help='SQ8|SQ4|PQ# where # is number of bytes per vector (for SQ it would be 480 Bytes)')
     # stable params
     parser.add_argument('--max_norm', default=None, type=float)
-    parser.add_argument('--max_norm_cf', default=1.3, type=float)
+    parser.add_argument('--max_norm_cf', default=1.0, type=float)
+    parser.add_argument('--norm_th', default=10.0, type=float)
     parser.add_argument('--para', default=False, action='store_true')
     parser.add_argument('--doc_sample_ratio', default=0.2, type=float)
     parser.add_argument('--vec_sample_ratio', default=0.2, type=float)

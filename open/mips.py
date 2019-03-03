@@ -103,6 +103,7 @@ class MIPS(object):
             start_scores, I = self.start_index.search(query_start, top_k)
 
             doc_idxs, para_idxs, start_idxs = self.get_idxs(I)
+            print(doc_idxs, para_idxs)
         else:
             groups = [self.get_doc_group(doc_idx)[str(para_idx)] for doc_idx, para_idx in zip(doc_idxs, para_idxs)]
             starts = [group['start'][:, :] for group in groups]

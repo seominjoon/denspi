@@ -41,6 +41,7 @@ def get_args():
     # stable params
     parser.add_argument('--max_norm', default=None, type=float)
     parser.add_argument('--max_norm_cf', default=1.3, type=float)
+    parser.add_argument('--norm_th', default=999, type=float)
     parser.add_argument('--para', default=False, action='store_true')
     parser.add_argument('--doc_sample_ratio', default=0.2, type=float)
     parser.add_argument('--vec_sample_ratio', default=0.2, type=float)
@@ -82,7 +83,7 @@ def get_args():
 
 
 def sample_data(dump_paths, para=False, doc_sample_ratio=0.2, vec_sample_ratio=0.2, seed=29,
-                max_norm=None, max_norm_cf=1.3, num_dummy_zeros=0):
+                max_norm=None, max_norm_cf=1.3, num_dummy_zeros=0, norm_th=999):
     vecs = []
     random.seed(seed)
     np.random.seed(seed)
@@ -104,6 +105,7 @@ def sample_data(dump_paths, para=False, doc_sample_ratio=0.2, vec_sample_ratio=0
                 sampled_vec_idxs = np.random.choice(num_vecs, int(vec_sample_ratio * num_vecs))
                 cur_vecs = int8_to_float(group['start'][:],
                                          group.attrs['offset'], group.attrs['scale'])[sampled_vec_idxs]
+                cur_vecs = cur_vecs[np.linalg.norm(cur_vecs, axis=1) <= norm_th]
                 vecs.append(cur_vecs)
     out = np.concatenate(vecs, 0)
     for dump in dumps:
@@ -169,12 +171,19 @@ def train_index(data, quantizer_path, trained_index_path, fine_quant='SQ8', cuda
     faiss.write_index(trained_index, trained_index_path)
 
 
-def add_with_offset(index, data, offset):
-    index.add_with_ids(data, np.arange(data.shape[0]) + offset + index.ntotal)
+def add_with_offset(index, data, offset, valids=None):
+    ids = np.arange(data.shape[0]) + offset + index.ntotal
+    if valids is not None:
+        data = data[valids]
+        ids = ids[valids]
+    index.add_with_ids(data, ids)
+
+
+ignore_ids = ['219522', '506288', '172909']
 
 
 def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path, max_norm, para=False,
-                 num_docs_per_add=1000, num_dummy_zeros=0, cuda=False, fine_quant='SQ8', offset=0):
+                 num_docs_per_add=1000, num_dummy_zeros=0, cuda=False, fine_quant='SQ8', offset=0, norm_th=999):
     idx2doc_id = []
     idx2para_id = []
     idx2word_id = []
@@ -226,10 +235,14 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
     else:
         for di, phrase_dump in enumerate(tqdm(dumps, desc='dumps')):
             starts = []
+            valids = []
             for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='adding %d' % di)):
+                if doc_idx in ignore_ids:
+                    continue
                 num_vecs = doc_group['start'].shape[0]
                 start = int8_to_float(doc_group['start'][:], doc_group.attrs['offset'],
                                       doc_group.attrs['scale'])
+                valid = np.linalg.norm(start, axis=1) <= norm_th
                 norms = np.linalg.norm(start, axis=1, keepdims=True)
                 consts = np.sqrt(np.maximum(0.0, max_norm ** 2 - norms ** 2))
                 start = np.concatenate([consts, start], axis=1)
@@ -237,15 +250,17 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
                     start = np.concatenate([start, np.zeros([start.shape[0], num_dummy_zeros], dtype=start.dtype)],
                                            axis=1)
                 starts.append(start)
+                valids.append(valid)
                 idx2doc_id.extend([int(doc_idx)] * num_vecs)
                 idx2word_id.extend(range(num_vecs))
                 if len(starts) > 0 and i % num_docs_per_add == 0:
-                    add_with_offset(start_index, np.concatenate(starts, axis=0), offset)
+                    add_with_offset(start_index, np.concatenate(starts, axis=0), offset, np.concatenate(valids))
                     # start_index.add(np.concatenate(starts, axis=0))
                     starts = []
+                    valids = []
                 if i % 100 == 0:
                     print('%d/%d' % (i + 1, len(phrase_dump.keys())))
-            add_with_offset(start_index, np.concatenate(starts, axis=0), offset)
+            add_with_offset(start_index, np.concatenate(starts, axis=0), offset, np.concatenate(valids))
             # start_index.add(np.concatenate(starts, axis=0))  # leftover
 
     for dump in dumps:
@@ -342,7 +357,8 @@ def run_index(args):
                 os.makedirs(args.index_dir)
             data, max_norm = sample_data(dump_paths, max_norm=args.max_norm, para=args.para,
                                          doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio,
-                                         max_norm_cf=args.max_norm_cf, num_dummy_zeros=args.num_dummy_zeros)
+                                         max_norm_cf=args.max_norm_cf, num_dummy_zeros=args.num_dummy_zeros,
+                                         norm_th=args.norm_th)
             with open(args.max_norm_path, 'w') as fp:
                 json.dump(max_norm, fp)
             train_coarse_quantizer(data, args.quantizer_path, args.num_clusters, cuda=args.cuda)
@@ -354,7 +370,7 @@ def run_index(args):
             if data is None:
                 data, _ = sample_data(dump_paths, max_norm=max_norm, para=args.para,
                                       doc_sample_ratio=args.doc_sample_ratio, vec_sample_ratio=args.vec_sample_ratio,
-                                      num_dummy_zeros=args.num_dummy_zeros)
+                                      num_dummy_zeros=args.num_dummy_zeros, norm_th=args.norm_th)
             train_index(data, args.quantizer_path, args.trained_index_path, fine_quant=args.fine_quant, cuda=args.cuda)
 
     if args.stage in ['all', 'add']:
@@ -367,7 +383,7 @@ def run_index(args):
                     os.makedirs(args.subindex_dir)
             add_to_index(dump_paths, args.trained_index_path, args.index_path, args.idx2id_path,
                          max_norm=max_norm, para=args.para, num_dummy_zeros=args.num_dummy_zeros, cuda=args.cuda,
-                         num_docs_per_add=args.num_docs_per_add, offset=args.offset)
+                         num_docs_per_add=args.num_docs_per_add, offset=args.offset, norm_th=args.norm_th)
 
     if args.stage == 'merge':
         if args.replace or not os.path.exists(args.index_path):

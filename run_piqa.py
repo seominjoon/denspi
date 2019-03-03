@@ -117,7 +117,7 @@ def main():
     parser.add_argument("--do_case", default=False, action='store_true',
                         help="Whether to lower case the input text. Should be True for uncased "
                              "models and False for cased models.")
-    parser.add_argument('--phrase_size', default=511, type=int)
+    parser.add_argument('--phrase_size', default=961, type=int)
     parser.add_argument('--metric', default='ip', type=str, help='ip | l2')
     parser.add_argument("--use_sparse", default=False, action='store_true')
 
@@ -663,7 +663,6 @@ def main():
             import subprocess
             process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
             output, error = process.communicate()
-            print(output)
 
     if args.do_embed_question:
         question_examples = read_squad_examples(
@@ -789,7 +788,8 @@ def main():
             question_examples = [SquadExample(qas_id='serve', question_text=text)]
             query_eval_features = convert_questions_to_features(
                 examples=question_examples,
-                tokenizer=tokenizer)
+                tokenizer=tokenizer,
+                max_query_length=16)
             question_dataloader = convert_question_features_to_dataloader(query_eval_features, args.fp16,
                                                                           args.local_rank,
                                                                           args.predict_batch_size)
