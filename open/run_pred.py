@@ -61,8 +61,8 @@ def get_args():
     args.idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
 
     args.pred_dir = os.path.join(args.dump_dir, args.pred_dir)
-    out_name = '%s_%s_%.1f_%d_%d' % (args.index_name, args.sparse_type,
-            args.sparse_weight, args.start_top_k, args.nprobe)
+    out_name = '%s_%s_%.1f_%d_%d_%d_%s' % (args.index_name, args.sparse_type,
+            args.sparse_weight, args.start_top_k, args.top_k, args.nprobe, 'sp' if args.sparse else 'ds')
     args.od_out_path = os.path.join(args.pred_dir, 'od_%s.json' % out_name)
     args.cd_out_path = os.path.join(args.pred_dir, 'cd_%s.json' % out_name)
 

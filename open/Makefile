@@ -19,12 +19,12 @@ SPARSE = --sparse
 ADD_ALL = --add_all
 NUM_CLUSTERS = 4096
 HNSW =
-NPROBE = 64
+NPROBE = 256
 START_TOP_K = 1000
-TOP_K = 1000
+TOP_K = 10
 STEP_SIZE = 1
 SPARSE_WEIGHT = 1e-1
-SPARSE_TYPE = dp
+SPARSE_TYPE = p
 FINE_QUANT = SQ8
 
 # local
@@ -94,7 +94,7 @@ nsml_add:
 	$(LOCAL_DUMP_DIR) add --fs nfs $(PARA) $(ADD_ALL)"
 
 nsml_pred:
-	nsml run -d piqa-nfs -g 0 -c 4 -e run_pred.py --memory 48G --nfs-output -a " \
+	nsml run -d piqa-nfs -g 0 -c 4 -e run_pred.py --memory 64G --nfs-output -a " \
 	--fs nfs \
 	$(LOCAL_DATA_PATH) $(LOCAL_DUMP_DIR) \
 	--index_name 32768_flat_SQ8 \

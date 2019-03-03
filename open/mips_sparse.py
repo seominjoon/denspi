@@ -78,6 +78,15 @@ class MIPSSparse(MIPS):
             if self.para:
                 para_idxs = self.idx2para_id[I]
 
+            # Only top faiss for profiling
+            '''
+            doc_idxs = doc_idxs[:,:out_top_k]
+            start_idxs = start_idxs[:,:out_top_k]
+            if self.para:
+                para_idxs = para_idxs[:,:out_top_k]
+            start_scores = start_scores[:,:out_top_k]
+
+            '''
             # Rerank based on sparse + dense (start)
             query_start = np.reshape(np.tile(np.expand_dims(query_start[:,1:], 1), 
                                      [1, start_top_k, 1]), [-1, query_start[:,1:].shape[1]])
@@ -94,7 +103,7 @@ class MIPSSparse(MIPS):
                     doc_bounds = [[m.start() for m in re.finditer('\[PAR\]', group.attrs['context'])] for group in groups]
                     doc_starts = [group['word2char_start'][start_idx].item() for group, start_idx in zip(groups, start_idxs)]
                     para_idxs = [sum([1 if start > bound else 0 for bound in par_bound])
-                                for par_bound, start in zip(doc_bounds, doc_starts)]
+                                 for par_bound, start in zip(doc_bounds, doc_starts)]
 
             # Get Q vec, dense vec
             if not len(self.sparse_type) == 0:
@@ -114,8 +123,9 @@ class MIPSSparse(MIPS):
             if 'p' in self.sparse_type:
                 tfidf_groups = [self.get_tfidf_group(doc_idx) for doc_idx in doc_idxs]
                 tfidf_groups = [group[str(para_idx)] for group, para_idx in zip(tfidf_groups, para_idxs)]
-                par_spvecs = vstack([sp.csr_matrix((data['vals'], data['idxs'], np.array([0, len(data['idxs'])])), shape=(1,self.hash_size))
-                              for data in tfidf_groups])
+                par_spvecs = vstack([sp.csr_matrix((data['vals'], data['idxs'], np.array([0, len(data['idxs'])])),
+                                     shape=(1,self.hash_size))
+                                     for data in tfidf_groups])
                 par_scores = np.squeeze((par_spvecs * q_spvecs.T).toarray())
                 start_scores += par_scores * self.sparse_weight
 
@@ -167,6 +177,7 @@ class MIPSSparse(MIPS):
         start_idxs = np.reshape(start_idxs, [-1])
 
         out = self.search_phrase(query, doc_idxs, start_idxs, para_idxs=para_idxs, start_scores=start_scores)
+        # out = self.search_phrase(query, doc_idxs, start_idxs, para_idxs=para_idxs)
         new_out = [[] for _ in range(num_queries)]
         for idx, each_out in zip(idxs, out):
             new_out[idx].append(each_out)
