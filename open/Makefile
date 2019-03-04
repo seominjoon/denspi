@@ -391,27 +391,34 @@ nsml_1B_all:
 	--add_all \
 	--step_size 10 \
 	--top_k 100 \
-	--num_clusters 262144 \
+	--hnsw \
+	--num_clusters 524288 \
 	--fine_quant SQ8 \
 	--start_top_k 100 \
 	--nprobe 64 \
 	--cuda \
+	--vec_sample_ratio 0.1 \
 	"
+
+1B_all:
+	python run_index_pred_eval.py \
+	/home/minjoon/dump/76_dev-1B-c /home/data/dev-3.json \
+	--fs local \
+	--add_all \
+	--step_size 10 \
+	--top_k 100 \
+	--hnsw \
+	--num_clusters 524288 \
+	--fine_quant SQ8 \
+	--start_top_k 100 \
+	--nprobe 64 \
+	--cuda \
+	--vec_sample_ratio 0.1
 
 1B_demo:
 	python run_demo.py $(PIQA_NFS)/dump/76_dev-1B-c --nprobe 128 --top_k 100 --index_name 262144_flat_SQ8
 
-1B_merge:
-	python run_index.py \
-	$(PIQA_NFS)/dump/76_dev-1B-c merge \
-	--fs local \
-	--num_clusters 262144
 
-1B_move:
-	python run_index.py \
-	$(PIQA_NFS)/dump/76_dev-1B-c move \
-	--fs local \
-	--num_clusters 262144
 
 nsml_1B_merge:
 	nsml run -d piqa-nfs -g 0 -c 4 -e run_index.py --memory 24G --nfs-output -a " \
@@ -429,15 +436,36 @@ nsml_1B_pred:
 	--index_path index.faiss_ \
 	"
 
+ROOT = /home/minjoon
+
+1B_move:
+	python run_index.py \
+	$(ROOT)/dump/76_dev-1B-c move \
+	--fs local \
+	--num_clusters 262144
+
 1B_remove:
 	python remove_doc_id.py \
-	$(PIQA_NFS)/dump/76_dev-1B-c/262144_flat_SQ8/index $(PIQA_NFS)/dump/76_dev-1B-c/pred/counter.json
+	$(ROOT)/dump/76_dev-1B-c/262144_flat_SQ8/index $(ROOT)/dump/76_dev-1B-c/pred/counter.json \
+	--ratio 0.003 \
+
+1B_merge:
+	python run_index.py \
+	$(ROOT)/dump/76_dev-1B-c merge \
+	--fs local \
+	--num_clusters 262144 \
+	--replace
 
 1B_pred:
 	python run_pred.py \
-	$(PIQA_NFS)/data/dev-3.json $(PIQA_NFS)/dump/76_dev-1B-c \
+	$(ROOT)/data/dev-3.json $(ROOT)/dump/76_dev-1B-c \
 	--index_name 262144_flat_SQ8 \
 	--fs local \
 	--top_k 100 \
-	--nprobe 256 \
+	--nprobe 64 \
 	--cuda
+
+1B_eval:
+	python evaluate-recall.py \
+	$(ROOT)/data/dev-3.json $(PIQA_NFS)/dump/76_dev-1B-c/pred/out.json \
+	--scores_dir $(ROOT)/dump/76_dev-1B-c/pred
