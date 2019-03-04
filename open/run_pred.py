@@ -104,6 +104,8 @@ def run_pred(args):
                     num_dummy_zeros=args.num_dummy_zeros)
     else:
         from drqa import retriever
+        # ranker = None
+        # doc_mat = None
         ranker = retriever.get_class('tfidf')(
             args.ranker_path,
             strict=False
