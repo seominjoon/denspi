@@ -34,8 +34,8 @@ def linear_mxq(q_idx, q_val, c_idx, c_val):
 
 class MIPSSparse(MIPS):
     def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para=False,
-                 tfidf_dump_dir=None, sparse_weight=1e-1, ranker=None, doc_mat=None, sparse_type=None):
-        super(MIPSSparse, self).__init__(phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para)
+                 tfidf_dump_dir=None, sparse_weight=1e-1, ranker=None, doc_mat=None, sparse_type=None, cuda=False):
+        super(MIPSSparse, self).__init__(phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para, cuda=cuda)
         assert os.path.isdir(tfidf_dump_dir)
         self.tfidf_dump_paths = sorted([os.path.join(tfidf_dump_dir, name) for name in os.listdir(tfidf_dump_dir) if 'hdf5' in name])
         dump_names = [os.path.splitext(os.path.basename(path))[0] for path in self.tfidf_dump_paths]
@@ -73,10 +73,7 @@ class MIPSSparse(MIPS):
             self.start_index.nprobe = nprobe
             start_scores, I = self.start_index.search(query_start, start_top_k)
 
-            doc_idxs = self.idx2doc_id[I]
-            start_idxs = self.idx2word_id[I]
-            if self.para:
-                para_idxs = self.idx2para_id[I]
+            doc_idxs, para_idxs, start_idxs = self.get_idxs(I)
 
             # Rerank based on sparse + dense (start)
             query_start = np.reshape(np.tile(np.expand_dims(query_start[:,1:], 1), 
@@ -124,11 +121,8 @@ class MIPSSparse(MIPS):
                                     for scores in rerank_scores])
             new_I = np.array([each_I[idxs] for each_I, idxs in zip(I, rerank_idxs)])
 
-            doc_idxs = self.idx2doc_id[new_I]
-            start_idxs = self.idx2word_id[new_I]
-            if self.para:
-                para_idxs = self.idx2para_id[new_I]
-            
+            doc_idxs, para_idxs, start_idxs = self.get_idxs(new_I)
+
             start_scores = np.array([scores[idxs] for scores, idxs in zip(rerank_scores, rerank_idxs)])[:,:out_top_k]
 
         # Closed

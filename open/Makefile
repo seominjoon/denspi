@@ -464,10 +464,37 @@ ROOT = /home/minjoon
 	--index_name 262144_flat_SQ8 \
 	--fs local \
 	--top_k 100 \
+	--nprobe 256 \
+	--cuda
+
+1B_pred_p:
+	python run_pred.py \
+	$(ROOT)/data/dev-3.json $(ROOT)/dump/76_dev-1B-c \
+	--index_name 262144_flat_SQ8 \
 	--nprobe 64 \
+	--start_top_k 1000 \
+	--top_k 100 \
+	--step_size $(STEP_SIZE) \
+	--sparse \
+	--sparse_weight $(SPARSE_WEIGHT) \
+	--sparse_type p \
 	--cuda
 
 1B_eval:
-	python evaluate-recall.py \
-	$(ROOT)/data/dev-3.json $(PIQA_NFS)/dump/76_dev-1B-c/pred/out.json \
-	--scores_dir $(ROOT)/dump/76_dev-1B-c/pred
+	python evaluate_recall.py \
+	$(ROOT)/data/dev-3.json $(ROOT)/dump/76_dev-1B-c/pred/od_262144_flat_SQ8_3.0_100_100_256.json \
+	--scores_dir $(ROOT)/dump/76_dev-1B-c/pred/scores
+
+1B_pred_dp:
+	python run_pred.py \
+	$(ROOT)/data/dev-3.json $(ROOT)/dump/76_dev-1B-c \
+	--index_name 262144_flat_SQ8 \
+	--nprobe 64 \
+	--start_top_k 1000 \
+	--top_k 100 \
+	--step_size $(STEP_SIZE) \
+	--sparse \
+	--sparse_weight $(SPARSE_WEIGHT) \
+	--sparse_type dp \
+	--cuda
+

@@ -114,7 +114,7 @@ def run_pred(args):
 
         mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length,
                           para=args.para, tfidf_dump_dir=args.tfidf_dump_dir, sparse_weight=args.sparse_weight,
-                          ranker=ranker, doc_mat=doc_mat, sparse_type=args.sparse_type)
+                          ranker=ranker, doc_mat=doc_mat, sparse_type=args.sparse_type, cuda=args.cuda)
 
     # recall at k
     cd_results = []
