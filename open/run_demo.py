@@ -4,6 +4,7 @@ import os
 import numpy as np
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import scipy.sparse as sp
 
 from tornado.wsgi import WSGIContainer
 from tornado.httpserver import HTTPServer
@@ -12,6 +13,7 @@ from tornado.ioloop import IOLoop
 from requests_futures.sessions import FuturesSession
 
 from mips import MIPS
+from mips_sparse import MIPSSparse
 
 
 def get_args():
@@ -26,8 +28,18 @@ def get_args():
     parser.add_argument('--api_port', default=9009, type=int)
     parser.add_argument('--max_answer_length', default=20, type=int)
     parser.add_argument('--top_k', default=10, type=int)
+    parser.add_argument('--start_top_k', default=100, type=int)
     parser.add_argument('--nprobe', default=64, type=int)
     parser.add_argument('--para', default=False, action='store_true')
+    parser.add_argument('--sparse', default=False, action='store_true')
+    parser.add_argument('--ranker_path', default='/home/minjoon/data/wikipedia/docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz')
+    parser.add_argument('--doc_mat_path', default='/home/minjoon/data/wikipedia/doc_tfidf.npz')
+    parser.add_argument('--num_dummy_zeros', default=0, type=int)
+
+    # MIPS params
+    parser.add_argument('--sparse_weight', default=1e-1, type=float)
+    parser.add_argument('--sparse_type', default='dp', type=str)
+    parser.add_argument('--cuda', default=False, action='store_true')
     args = parser.parse_args()
     return args
 
@@ -40,8 +52,24 @@ def run_demo(args):
         index_dir = os.path.join(args.dump_dir, args.index_name)
     index_path = os.path.join(index_dir, args.index_path)
     idx2id_path = os.path.join(index_dir, args.idx2id_path)
+    tfidf_dump_dir = os.path.join(args.dump_dir, 'tfidf')
 
-    mips = MIPS(dump_dir, index_path, idx2id_path, args.max_answer_length, para=args.para)
+    if not args.sparse:
+        mips = MIPS(dump_dir, index_path, idx2id_path, args.max_answer_length, para=args.para,
+                    num_dummy_zeros=args.num_dummy_zeros, cuda=args.cuda)
+    else:
+        from drqa import retriever
+        ranker = retriever.get_class('tfidf')(
+            args.ranker_path,
+            strict=False
+        )
+        print('Ranker loaded from {}'.format(args.ranker_path))
+        doc_mat = sp.load_npz(args.doc_mat_path)
+        print('Doc TFIDF matrix loaded {}'.format(doc_mat.shape))
+
+        mips = MIPSSparse(dump_dir, index_path, idx2id_path, args.max_answer_length,
+                          para=args.para, tfidf_dump_dir=tfidf_dump_dir, sparse_weight=args.sparse_weight,
+                          ranker=ranker, doc_mat=doc_mat, sparse_type=args.sparse_type, cuda=args.cuda)
 
     app = Flask(__name__, static_url_path='/static')
 
@@ -53,9 +81,10 @@ def run_demo(args):
     def search(query, top_k, nprobe=64):
         (start, end, span), _ = query2emb(query, args.api_port)()
         phrase_vec = np.concatenate([start, end, span], 1)
-        print(phrase_vec.shape)
-        print(phrase_vec[0, :3])
-        rets = mips.search(phrase_vec, top_k=top_k, nprobe=nprobe)
+        if args.sparse:
+            rets = mips.search(phrase_vec, top_k=top_k, nprobe=nprobe, start_top_k=args.start_top_k, q_texts=[query])
+        else:
+            rets = mips.search(phrase_vec, top_k=top_k, nprobe=nprobe)
         out = rets[0]
         return out
 

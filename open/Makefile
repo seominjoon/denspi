@@ -498,3 +498,22 @@ ROOT = /home/minjoon
 	--sparse_type dp \
 	--cuda
 
+1B_pred_dp_full:
+	python run_pred.py \
+	$(ROOT)/data/dev-v1.1.json $(ROOT)/dump/76_dev-1B-c \
+	--index_name 262144_flat_SQ8 \
+	--nprobe 64 \
+	--start_top_k 1000 \
+	--top_k 100 \
+	--step_size $(STEP_SIZE) \
+	--sparse \
+	--sparse_weight $(SPARSE_WEIGHT) \
+	--sparse_type dp \
+	--cuda
+
+1B_demo:
+	python run_demo.py $(ROOT)/dump/76_dev-1B-c --nprobe 128 --start_top_k 1000 --top_k 10 \
+	--index_name 262144_flat_SQ8 \
+	--cuda \
+	--sparse \
+	--port 8800 \

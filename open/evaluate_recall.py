@@ -126,7 +126,8 @@ def evaluate_recall(args):
             print('%d: %.2f' % (k, score * 100))
     else:
         for k in range(args.k_start, num_answers + 1):
-            print('%d:' % k, json.dumps(evaluate(dataset, predictions, k)))
+            e = evaluate(dataset, predictions, k)
+            print('%d: f1=%.2f, em=%.2f' % (k, e['f1'], e['exact_match']))
 
 
 def main():
