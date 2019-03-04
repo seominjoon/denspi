@@ -21,6 +21,7 @@ def get_args():
     parser.add_argument('--index_name', default='default_index')
     parser.add_argument('--index_path', default='index.faiss')
     parser.add_argument('--idx2id_path', default='idx2id.hdf5')
+    parser.add_argument('--abs_path', default=False, action='store_true')
     parser.add_argument('--port', default=10001, type=int)
     parser.add_argument('--api_port', default=9009, type=int)
     parser.add_argument('--max_answer_length', default=20, type=int)
@@ -33,7 +34,10 @@ def get_args():
 
 def run_demo(args):
     dump_dir = os.path.join(args.dump_dir, args.dump_path)
-    index_dir = os.path.join(args.dump_dir, args.index_name)
+    if args.abs_path:
+        index_dir = args.index_name
+    else:
+        index_dir = os.path.join(args.dump_dir, args.index_name)
     index_path = os.path.join(index_dir, args.index_path)
     idx2id_path = os.path.join(index_dir, args.idx2id_path)
 

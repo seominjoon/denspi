@@ -179,11 +179,9 @@ def add_with_offset(index, data, offset, valids=None):
     index.add_with_ids(data, ids)
 
 
-ignore_ids = ['219522', '506288', '172909']
-
-
 def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path, max_norm, para=False,
-                 num_docs_per_add=1000, num_dummy_zeros=0, cuda=False, fine_quant='SQ8', offset=0, norm_th=999):
+                 num_docs_per_add=1000, num_dummy_zeros=0, cuda=False, fine_quant='SQ8', offset=0, norm_th=999,
+                 ignore_ids=None):
     idx2doc_id = []
     idx2para_id = []
     idx2word_id = []
@@ -237,7 +235,7 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
             starts = []
             valids = []
             for i, (doc_idx, doc_group) in enumerate(tqdm(phrase_dump.items(), desc='adding %d' % di)):
-                if doc_idx in ignore_ids:
+                if ignore_ids is not None and doc_idx in ignore_ids:
                     continue
                 num_vecs = doc_group['start'].shape[0]
                 start = int8_to_float(doc_group['start'][:], doc_group.attrs['offset'],
@@ -388,6 +386,14 @@ def run_index(args):
     if args.stage == 'merge':
         if args.replace or not os.path.exists(args.index_path):
             merge_indexes(args.subindex_dir, args.trained_index_path, args.index_path, args.idx2id_path, args.inv_path)
+
+    if args.stage == 'move':
+        index = faiss.read_index(args.trained_index_path)
+        invlists = faiss.OnDiskInvertedLists(
+            index.nlist, index.code_size,
+            args.inv_path)
+        index.replace_invlists(invlists)
+        faiss.write_index(index, args.index_path)
 
 
 def main():

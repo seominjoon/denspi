@@ -31,7 +31,6 @@ def get_args():
     parser.add_argument('--top_k', default=10, type=int)
     parser.add_argument('--para', default=False, action='store_true')
     parser.add_argument('--sparse', default=False, action='store_true')
-
     parser.add_argument('--no_od', default=False, action='store_true')
     parser.add_argument('--draft', default=False, action='store_true')
     parser.add_argument('--step_size', default=10, type=int)
@@ -57,6 +56,7 @@ def get_args():
     out_name = '%s_%.1f_%d_%d_%d' % (args.index_name, args.sparse_weight, args.start_top_k, args.top_k, args.nprobe)
     args.od_out_path = os.path.join(args.pred_dir, 'od_%s.json' % out_name)
     args.cd_out_path = os.path.join(args.pred_dir, 'cd_%s.json' % out_name)
+    args.counter_path = os.path.join(args.pred_dir, 'counter.json')
 
     return args
 
@@ -95,11 +95,11 @@ def run_pred(args):
 
         query = np.stack(vecs, 0)
         if args.draft:
-            query = query[:100]
+            query = query[:3]
 
     if not args.sparse:
         mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para,
-                    num_dummy_zeros=args.num_dummy_zeros)
+                    num_dummy_zeros=args.num_dummy_zeros, cuda=args.cuda)
     else:
         mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length,
                           para=args.para)
@@ -150,6 +150,11 @@ def run_pred(args):
     print('dumping %s' % args.od_out_path)
     with open(args.od_out_path, 'w') as fp:
         json.dump(top_k_answers, fp)
+
+    from collections import Counter
+    counter = Counter(result['doc_idx'] for each in od_results for result in each)
+    with open(args.counter_path, 'w') as fp:
+        json.dump(counter, fp)
 
 
 def main():

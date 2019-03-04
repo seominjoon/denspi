@@ -330,7 +330,8 @@ t100_pred:
 	$(PIQA_NFS)/data/dev-3.json $(PIQA_NFS)/dump/76_t100 \
 	--index_name 32768_flat_SQ8 \
 	--fs local \
-	--top_k 100
+	--top_k 100 \
+	--cuda
 
 nsml_t100_all:
 	nsml run -d piqa-nfs -g 1 -c 4 -e run_index_pred_eval.py --memory 32G --nfs-output -a " \
@@ -368,15 +369,75 @@ nsml_t100_pred:
 	"
 
 nsml_1B_all:
-	nsml run -d piqa-nfs -g 1 -c 8 -e run_index_pred_eval.py --memory 32G --nfs-output -a " \
+	nsml run -d piqa-nfs -g 1 -c 8 -e run_index_pred_eval.py --memory 64G --nfs-output -a " \
 	dump/76_dev-1B-c $(LOCAL_DATA_PATH) \
 	--fs nfs \
 	--add_all \
 	--step_size 10 \
 	--top_k 100 \
-	--num_clusters 524288 \
+	--hnsw \
+	--num_clusters 262144 \
+	--fine_quant SQ8 \
+	--start_top_k 100 \
+	--nprobe 64 \
+	--cuda \
+	--hnsw \
+	"
+
+nsml_1B_all:
+	nsml run -d piqa-nfs -g 1 -c 8 -e run_index_pred_eval.py --memory 64G --nfs-output -a " \
+	dump/76_dev-1B-c $(LOCAL_DATA_PATH) \
+	--fs nfs \
+	--add_all \
+	--step_size 10 \
+	--top_k 100 \
+	--num_clusters 262144 \
 	--fine_quant SQ8 \
 	--start_top_k 100 \
 	--nprobe 64 \
 	--cuda \
 	"
+
+1B_demo:
+	python run_demo.py $(PIQA_NFS)/dump/76_dev-1B-c --nprobe 128 --top_k 100 --index_name 262144_flat_SQ8
+
+1B_merge:
+	python run_index.py \
+	$(PIQA_NFS)/dump/76_dev-1B-c merge \
+	--fs local \
+	--num_clusters 262144
+
+1B_move:
+	python run_index.py \
+	$(PIQA_NFS)/dump/76_dev-1B-c move \
+	--fs local \
+	--num_clusters 262144
+
+nsml_1B_merge:
+	nsml run -d piqa-nfs -g 0 -c 4 -e run_index.py --memory 24G --nfs-output -a " \
+	dump/76_dev-1B-c merge \
+	--fs nfs \
+	--num_clusters 262144 \
+	"
+
+nsml_1B_pred:
+	nsml run -d piqa-nfs -g 0 -c 4 -e run_pred.py --memory 24G --nfs-output -a " \
+	data/dev-3.json dump/76_dev-1B-c \
+	--index_name 262144_flat_SQ8 \
+	--fs nfs \
+	--top_k 100 \
+	--index_path index.faiss_ \
+	"
+
+1B_remove:
+	python remove_doc_id.py \
+	$(PIQA_NFS)/dump/76_dev-1B-c/262144_flat_SQ8/index $(PIQA_NFS)/dump/76_dev-1B-c/pred/counter.json
+
+1B_pred:
+	python run_pred.py \
+	$(PIQA_NFS)/data/dev-3.json $(PIQA_NFS)/dump/76_dev-1B-c \
+	--index_name 262144_flat_SQ8 \
+	--fs local \
+	--top_k 100 \
+	--nprobe 256 \
+	--cuda

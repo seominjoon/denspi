@@ -8,6 +8,7 @@ from time import time
 import h5py
 import numpy as np
 import faiss
+import torch
 from tqdm import tqdm
 
 
@@ -34,7 +35,7 @@ def overlap(t1, t2, a1, a2, b1, b2):
 
 class MIPS(object):
     def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para=False,
-                 num_dummy_zeros=0):
+                 num_dummy_zeros=0, cuda=False):
         if os.path.isdir(phrase_dump_dir):
             self.phrase_dump_paths = [os.path.join(phrase_dump_dir, name) for name in os.listdir(phrase_dump_dir)]
             dump_names = [os.path.splitext(os.path.basename(path))[0] for path in self.phrase_dump_paths]
@@ -55,6 +56,7 @@ class MIPS(object):
         #     self.idx2word_id = f['word'][:]
 
         self.num_dummy_zeros = num_dummy_zeros
+        self.cuda = cuda
 
     def get_idxs(self, I):
         if self.has_offset:
@@ -139,7 +141,13 @@ class MIPS(object):
             start = np.stack([group['start'][start_idx, :]
                               for group, start_idx in zip(groups, start_idxs)], 0)  # [Q, d]
             start = dequant(groups[0], start)
-            start_scores = np.sum(query_start * start, 1)  # [Q]
+            if self.cuda:
+                cuda0 = torch.device('cuda:0')
+                start = torch.FloatTensor(start).to(cuda0)
+                query_start = torch.FloatTensor(query_start).to(cuda0)
+                start_scores = (query_start * start).sum(1).cpu().numpy()
+            else:
+                start_scores = np.sum(query_start * start, 1)  # [Q]
 
         ends = [group['end'][:] for group in groups]
         spans = [group['span_logits'][:] for group in groups]
@@ -155,7 +163,13 @@ class MIPS(object):
         span = np.stack([[each_span[start_idx, i] for i in range(len(each_end_idxs))]
                          for each_span, start_idx, each_end_idxs in zip(spans, start_idxs, end_idxs)], 0)  # [Q, L]
 
-        end_scores = np.sum(np.expand_dims(query_end, 1) * end, 2)  # [Q, L]
+        if self.cuda:
+            cuda0 = torch.device('cuda:0')
+            end = torch.FloatTensor(end).to(cuda0)
+            query_end = torch.FloatTensor(query_end).to(cuda0)
+            end_scores = (query_end.unsqueeze(1) * end).sum(2).cpu().numpy()
+        else:
+            end_scores = np.sum(np.expand_dims(query_end, 1) * end, 2)  # [Q, L]
         span_scores = query_span_logit * span  # [Q, L]
         scores = np.expand_dims(start_scores, 1) + end_scores + span_scores + end_mask  # [Q, L]
         pred_end_idxs = np.stack([each[idx] for each, idx in zip(end_idxs, np.argmax(scores, 1))], 0)  # [Q]
