@@ -517,3 +517,42 @@ ROOT = /home/minjoon
 	--cuda \
 	--sparse \
 	--port 8800 \
+
+1B_pred_dp_128:
+	python run_pred.py \
+	$(ROOT)/data/dev-3.json $(ROOT)/dump/76_dev-1B-c \
+	--index_name 262144_flat_SQ8 \
+	--nprobe 128 \
+	--start_top_k 1000 \
+	--top_k 100 \
+	--step_size $(STEP_SIZE) \
+	--sparse \
+	--sparse_weight $(SPARSE_WEIGHT) \
+	--sparse_type dp \
+	--cuda
+
+1B_pred_dp_256:
+	python run_pred.py \
+	$(ROOT)/data/dev-3.json $(ROOT)/dump/76_dev-1B-c \
+	--index_name 262144_flat_SQ8 \
+	--nprobe 256 \
+	--start_top_k 1000 \
+	--top_k 100 \
+	--step_size $(STEP_SIZE) \
+	--sparse \
+	--sparse_weight $(SPARSE_WEIGHT) \
+	--sparse_type dp \
+	--cuda
+
+1B_pred_dp_512:
+	python run_pred.py \
+	$(ROOT)/data/dev-3.json $(ROOT)/dump/76_dev-1B-c \
+	--index_name 262144_flat_SQ8 \
+	--nprobe 512 \
+	--start_top_k 1000 \
+	--top_k 100 \
+	--step_size $(STEP_SIZE) \
+	--sparse \
+	--sparse_weight $(SPARSE_WEIGHT) \
+	--sparse_type dp \
+	--cuda
