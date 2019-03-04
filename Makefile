@@ -588,18 +588,28 @@ train_filter:
 dump_lod:
 	python nsml_dump.py --data_name down_20 --load_dir piqateam/piqa-nfs/2440 --num_gpus 10 --mem_size 16
 
+dump_1M:
+	python nsml_dump.py --data_name dev-1M --load_dir piqateam/piqa-nfs/2494 --num_gpus 1 --mem_size 24 --end 6 --no_block
 
 dump_10M:
 	python nsml_dump.py --data_name dev-10M --load_dir piqateam/piqa-nfs/2494 --num_gpus 5 --mem_size 24 --end 51 --no_block
 
 dump_100M:
-	python nsml_dump.py --data_name dev-100M --load_dir piqateam/piqa-nfs/2606 --num_gpus 10 --mem_size 24 --end 508 --no_block
+	python nsml_dump.py --data_name dev-100M-c --load_dir piqateam/piqa-nfs/76 --num_gpus 1 --mem_size 24 --start 51 --end 102 --no_block
 
 dump_100M_:
 	python nsml_dump.py --data_name dev-100M --load_dir piqateam/piqa-nfs/76 --num_gpus 1 --mem_size 24 --start 130 --end 156
 
 dump_30M:
 	python nsml_dump.py --data_name dev-30M --load_dir piqateam/piqa-nfs/76 --num_gpus 10 --mem_size 24 --end 153 --no_block
+
+dump_para:
+	nsml run -d piqa-nfs -g 0 -c 1 -e dump_tfidf.py --memory 24G --nfs-output -a " \
+	dump/76_dev-100M-cc/phrase dump/76_dev-100M-cc/tfidf \
+	--start 5 \
+	--end 6 \
+	--ranker_path data/wikipedia/docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz \
+	--nfs"
 
 dump_10M_c:
 	python nsml_dump.py --data_name dev-10M-c --load_dir piqateam/piqa-nfs/76 --num_gpus 4 --mem_size 32 --end 51

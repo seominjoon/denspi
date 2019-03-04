@@ -1,8 +1,8 @@
 PIQA_NFS = /data_nfs/camist002/user/piqa-nfs
 # DUMP_DIR = $(PIQA_NFS)/index/squad/sparse
 # DUMP_DIR = ~/github/hiqa-private/index/
-LOCAL_DUMP_DIR = dump/76_dev-10M
-# LOCAL_DUMP_DIR = dump/2494_dev-10M
+LOCAL_DUMP_DIR = dump/76_dev-100M-cc
+LOCAL_INDEX_DIR = dump/76_dev-100M-cc
 DUMP_DIR = $(PIQA_NFS)/$(LOCAL_DUMP_DIR)
 # DUMP_DIR = $(PIQA_NFS)/dump/76_dev-10M
 # DUMP_DIR = $(PIQA_NFS)/index/squad/large-qna-1Md
@@ -15,14 +15,16 @@ INDEX_DIR = $(PIQA_NFS)/$(LOCAL_INDEX_DIR)
 LOCAL_DATA_PATH = data/dev-3.json
 DATA_PATH = $(PIQA_NFS)/$(LOCAL_DATA_PATH)
 PARA =
+SPARSE = --sparse
 ADD_ALL = --add_all
 NUM_CLUSTERS = 4096
 HNSW =
 NPROBE = 64
-START_TOP_K = 100
-TOP_K = 10
+START_TOP_K = 1000
+TOP_K = 1000
 STEP_SIZE = 1
-SPARSE_WEIGHT = 3e+0
+SPARSE_WEIGHT = 1e-1
+SPARSE_TYPE = dp
 FINE_QUANT = SQ8
 
 # local
@@ -37,15 +39,15 @@ add:
 
 pred:
 	python run_pred.py $(DATA_PATH) $(DUMP_DIR) \
-	--index_path $(INDEX_DIR)/default_index/index/dump.faiss \
-	--idx2id_path default_index/index/dump.hdf5 \
+	--index_name 32768_flat_SQ8 \
 	--nprobe $(NPROBE) \
 	--top_k $(TOP_K) \
 	--step_size $(STEP_SIZE) \
+	$(SPARSE) \
 	$(PARA) \
-	--sparse \
 	--start_top_k $(START_TOP_K) \
-	--sparse_weight $(SPARSE_WEIGHT)
+	--sparse_weight $(SPARSE_WEIGHT) \
+	--sparse_type $(SPARSE_TYPE)
 
 eval_cd:
 	python ../eval/evaluate-v1.1.py $(DATA_PATH) $(DUMP_DIR)/pred_cd.json
@@ -92,18 +94,18 @@ nsml_add:
 	$(LOCAL_DUMP_DIR) add --fs nfs $(PARA) $(ADD_ALL)"
 
 nsml_pred:
-	nsml run -d piqa-nfs -g 0 -c 4 -e run_pred.py --memory 32G --nfs-output -a " \
+	nsml run -d piqa-nfs -g 0 -c 4 -e run_pred.py --memory 48G --nfs-output -a " \
 	--fs nfs \
-	$(LOCAL_DATA_PATH) $(LOCAL_DUMP_DIR) $(LOCAL_INDEX_DIR) \
-	--index_path default_index/index/dump.faiss \
-	--idx2id_path default_index/index/dump.hdf5 \
+	$(LOCAL_DATA_PATH) $(LOCAL_DUMP_DIR) \
+	--index_name 32768_flat_SQ8 \
 	--nprobe $(NPROBE) \
 	--top_k $(TOP_K) \
-	--sparse \
+	$(SPARSE) \
 	--start_top_k $(START_TOP_K) \
 	--sparse_weight $(SPARSE_WEIGHT) \
 	--step_size $(STEP_SIZE) \
-	$(PARA)"
+	$(PARA) \
+	--sparse_type $(SPARSE_TYPE)"
 
 nsml_all_0:
 	nsml run -d piqa-nfs -g 1 -c 16 -e run_index_pred_eval.py --memory 32G --nfs-output -a " \
