@@ -30,7 +30,7 @@ def run_add_to_index(args):
                 "-d",
                 "piqa-nfs",
                 "-g",
-                "1",
+                "1" if args.cuda else "0",
                 "-c",
                 str(args.num_cpus),
                 "-e",
@@ -39,8 +39,9 @@ def run_add_to_index(args):
                 "%dG" % args.mem_size,
                 "--nfs-output",
                 "-a",
-                "%s add --dump_paths %s --offset %d --num_clusters %d --fs nfs --cuda" % (
-                args.dump_dir, dump_paths, offset_, args.num_clusters)]
+                "%s add --dump_paths %s --offset %d --num_clusters %d --fs nfs %s %s" % (
+                args.dump_dir, dump_paths, offset_, args.num_clusters,
+                '--cuda' if args.cuda else '', '--hnsw' if args.hnsw else '')]
 
     dir_ = os.path.join(args.nfs_dir, args.dump_dir, 'phrase')
     names = os.listdir(dir_)
@@ -88,6 +89,8 @@ def get_args():
     parser.add_argument('--max_num_per_file', default=int(1e8), type=int,
                         help='max num per file for setting up good offsets.')
     parser.add_argument('--compact_offset', default=False, action='store_true')
+    parser.add_argument('--hnsw', default=False, action='store_true')
+    parser.add_argument('--cuda', default=False, action='store_true')
     args = parser.parse_args()
 
     return args

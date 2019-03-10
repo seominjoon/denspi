@@ -1,3 +1,5 @@
+from time import time
+
 from mips import MIPS, int8_to_float, adjust
 from scipy.sparse import vstack
 
@@ -28,16 +30,18 @@ def linear_mxq(q_idx, q_val, c_idx, c_val):
         if idx in q_dict:
             q_dict[idx][1] += val
 
-    total = sum([a[0]*a[1] for a in q_dict.values()])
+    total = sum([a[0] * a[1] for a in q_dict.values()])
     return total
 
 
 class MIPSSparse(MIPS):
     def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para=False,
                  tfidf_dump_dir=None, sparse_weight=1e-1, ranker=None, doc_mat=None, sparse_type=None, cuda=False):
-        super(MIPSSparse, self).__init__(phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para, cuda=cuda)
+        super(MIPSSparse, self).__init__(phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para,
+                                         cuda=cuda)
         assert os.path.isdir(tfidf_dump_dir)
-        self.tfidf_dump_paths = sorted([os.path.join(tfidf_dump_dir, name) for name in os.listdir(tfidf_dump_dir) if 'hdf5' in name])
+        self.tfidf_dump_paths = sorted(
+            [os.path.join(tfidf_dump_dir, name) for name in os.listdir(tfidf_dump_dir) if 'hdf5' in name])
         dump_names = [os.path.splitext(os.path.basename(path))[0] for path in self.tfidf_dump_paths]
         dump_ranges = [list(map(int, name.split('_')[0].split('-'))) for name in dump_names]
         self.tfidf_dumps = [h5py.File(path, 'r') for path in self.tfidf_dump_paths]
@@ -65,56 +69,76 @@ class MIPSSparse(MIPS):
         # Open
         if doc_idxs is None:
             # Search space reduction with Faiss
-            query_start = np.concatenate([np.zeros([query_start.shape[0], 1]).astype(np.float32), 
+            query_start = np.concatenate([np.zeros([query_start.shape[0], 1]).astype(np.float32),
                                           query_start], axis=1)
             if self.num_dummy_zeros > 0:
                 query_start = np.concatenate([query_start, np.zeros([query_start.shape[0], self.num_dummy_zeros],
                                                                     dtype=query_start.dtype)], axis=1)
             self.start_index.nprobe = nprobe
+            t = time()
             start_scores, I = self.start_index.search(query_start, start_top_k)
+            ts = time() - t
+            print('t1:', ts)
 
+            t = time()
             doc_idxs, para_idxs, start_idxs = self.get_idxs(I)
 
             # Rerank based on sparse + dense (start)
-            query_start = np.reshape(np.tile(np.expand_dims(query_start[:,1:], 1), 
-                                     [1, start_top_k, 1]), [-1, query_start[:,1:].shape[1]])
             doc_idxs = np.reshape(doc_idxs, [-1])
             if self.para:
                 para_idxs = np.reshape(para_idxs, [-1])
             start_idxs = np.reshape(start_idxs, [-1])
             groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
+            print('t2:', time() - t)
 
+            t = time()
             if self.para:
                 groups = [group[str(para_idx)] for group, para_idx in zip(groups, para_idxs)]
             else:
                 if 'p' in self.sparse_type:
-                    doc_bounds = [[m.start() for m in re.finditer('\[PAR\]', group.attrs['context'])] for group in groups]
-                    doc_starts = [group['word2char_start'][start_idx].item() for group, start_idx in zip(groups, start_idxs)]
+                    doc_bounds = [[m.start() for m in re.finditer('\[PAR\]', group.attrs['context'])] for group in
+                                  groups]
+                    doc_starts = [group['word2char_start'][start_idx].item() for group, start_idx in
+                                  zip(groups, start_idxs)]
                     para_idxs = [sum([1 if start > bound else 0 for bound in par_bound])
-                                for par_bound, start in zip(doc_bounds, doc_starts)]
+                                 for par_bound, start in zip(doc_bounds, doc_starts)]
+            tf = time() - t
+            print('t3:', tf)
 
             # Get Q vec, dense vec
+            t = time()
             if not len(self.sparse_type) == 0:
                 q_spvecs = vstack([self.ranker.text2spvec(q) for q in q_texts])
             start = np.stack([group['start'][start_idx, :]
                               for group, start_idx in zip(groups, start_idxs)], 0)  # [Q, d]
             start = dequant(groups[0], start)
+            query_start = np.reshape(np.tile(np.expand_dims(query_start[:, 1:], 1),
+                                             [1, start_top_k, 1]), [-1, query_start[:, 1:].shape[1]])
             start_scores = np.sum(query_start * start, 1)  # [Q]
+            print('t4:', time() - t)
 
             # Get doc vec
+            t = time()
             if 'd' in self.sparse_type:
                 doc_spvecs = self.doc_mat[doc_idxs, :]
                 doc_scores = np.squeeze((doc_spvecs * q_spvecs.T).toarray())
                 start_scores += doc_scores * self.sparse_weight
+            td = time() - t
+            print('t5:', td)
 
             # Get par vec
+            t = time()
             if 'p' in self.sparse_type:
                 tfidf_groups = [self.get_tfidf_group(doc_idx) for doc_idx in doc_idxs]
                 tfidf_groups = [group[str(para_idx)] for group, para_idx in zip(tfidf_groups, para_idxs)]
-                par_spvecs = vstack([sp.csr_matrix((data['vals'], data['idxs'], np.array([0, len(data['idxs'])])), shape=(1,self.hash_size))
-                              for data in tfidf_groups])
+                par_spvecs = vstack([sp.csr_matrix((data['vals'], data['idxs'], np.array([0, len(data['idxs'])])),
+                                                   shape=(1, self.hash_size))
+                                     for data in tfidf_groups])
                 par_scores = np.squeeze((par_spvecs * q_spvecs.T).toarray())
                 start_scores += par_scores * self.sparse_weight
+            tp = time() - t
+            print('t6:', tp)
+            t = time()
 
             rerank_scores = np.reshape(start_scores, [-1, start_top_k])
             rerank_idxs = np.array([scores.argsort()[-out_top_k:][::-1]
@@ -123,7 +147,8 @@ class MIPSSparse(MIPS):
 
             doc_idxs, para_idxs, start_idxs = self.get_idxs(new_I)
 
-            start_scores = np.array([scores[idxs] for scores, idxs in zip(rerank_scores, rerank_idxs)])[:,:out_top_k]
+            start_scores = np.array([scores[idxs] for scores, idxs in zip(rerank_scores, rerank_idxs)])[:, :out_top_k]
+            print('t7:', time() - t)
 
         # Closed
         else:
@@ -139,14 +164,18 @@ class MIPSSparse(MIPS):
             para_idxs = np.tile(np.expand_dims(para_idxs, -1), [1, out_top_k])
         return start_scores, doc_idxs, para_idxs, start_idxs
 
-
     # Just added q_sparse / q_input_ids to pass to search_phrase
     def search(self, query, top_k=5, nprobe=64, doc_idxs=None, para_idxs=None, start_top_k=100, q_texts=None):
         num_queries = query.shape[0]
         bs = int((query.shape[1] - 1) / 2)
         query_start = query[:, :bs]
-        start_scores, doc_idxs, para_idxs, start_idxs = self.search_start(query_start, start_top_k=start_top_k, 
-                out_top_k=top_k, nprobe=nprobe, doc_idxs=doc_idxs, para_idxs=para_idxs, q_texts=q_texts)
+        t = time()
+        start_scores, doc_idxs, para_idxs, start_idxs = self.search_start(query_start, start_top_k=start_top_k,
+                                                                          out_top_k=top_k, nprobe=nprobe,
+                                                                          doc_idxs=doc_idxs, para_idxs=para_idxs,
+                                                                          q_texts=q_texts)
+        tss = time() - t
+        print('tss:', tss)
 
         if doc_idxs.shape[1] != top_k:
             print("Warning.. %d only retrieved" % doc_idxs.shape[1])
@@ -160,7 +189,10 @@ class MIPSSparse(MIPS):
         para_idxs = np.reshape(para_idxs, [-1])
         start_idxs = np.reshape(start_idxs, [-1])
 
+        t = time()
         out = self.search_phrase(query, doc_idxs, start_idxs, para_idxs=para_idxs, start_scores=start_scores)
+        tsp = time() - t
+        print('tsp:', tsp)
         new_out = [[] for _ in range(num_queries)]
         for idx, each_out in zip(idxs, out):
             new_out[idx].append(each_out)

@@ -511,11 +511,25 @@ ROOT = /home/minjoon
 	--sparse_type dp \
 	--cuda
 
+1B_pred_demo:
+	python run_pred.py \
+	$(ROOT)/data/dev-3.json $(ROOT)/dump/76_dev-1B-c \
+	--index_name 262144_flat_SQ8 \
+	--nprobe 32 \
+	--start_top_k 100 \
+	--top_k 10 \
+	--step_size $(STEP_SIZE) \
+	--sparse \
+	--sparse_weight $(SPARSE_WEIGHT) \
+	--sparse_type p \
+	--cuda
+
 1B_demo:
-	python run_demo.py $(ROOT)/dump/76_dev-1B-c --nprobe 128 --start_top_k 1000 --top_k 10 \
+	python run_demo.py $(ROOT)/dump/76_dev-1B-c --nprobe 32 --start_top_k 100 --top_k 10 \
 	--index_name 262144_flat_SQ8 \
 	--cuda \
 	--sparse \
+	--sparse_type p \
 	--port 8800 \
 
 1B_pred_dp_128:
@@ -556,3 +570,6 @@ ROOT = /home/minjoon
 	--sparse_weight $(SPARSE_WEIGHT) \
 	--sparse_type dp \
 	--cuda
+
+nsml_1B_add:
+	python nsml_add_to_index.py dump/76_dev-1B-c --num_clusters 524288 --num_cpus 2 --num_gpus 20 --mem_size 30  --hnsw --cuda
