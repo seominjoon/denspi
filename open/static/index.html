@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <meta charset="utf-8">
-<title>Hierarchical Index Demo</title>
+<title>DeSPI</title>
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css">
 <link rel="stylesheet" href="files/style.css">
 <link rel="shortcut icon" href="files/pichu.png">
@@ -13,7 +13,7 @@
 
 <body>
 <nav class="navbar navbar-expand-sm bg-dark navbar-dark">
-    <a class="navbar-brand" href="">Hierarchical Index Demo</a>
+    <a class="navbar-brand" href="">Dense-Sparse Phrase Index Demo</a>
     <ul class="navbar-nav">
         <li class="nav-item"><a class="nav-link" target="_blank" href="#">Home</a>
         </li>
@@ -24,9 +24,11 @@
     </ul>
 </nav>
 <div class="container">
+    <!--
     <div class="mt-4 text-center">
         <img src="files/pichu.png" height="200" class="rounded" alt="pika" title="Ask me anything!"/>
     </div>
+    -->
 
     <div class="input-group mb-1 mt-4">
         <input id="question" type="text" class="form-control" placeholder="Write a question" aria-label="Write a question"
@@ -57,8 +59,9 @@
 <footer class="footer">
     <div class="container">
 			<span class="text-muted">
-				<strong>Real-Time Open-Domain Question Answering through Hierarchical Document-Phrase Index</strong><br/>
-				Designed by <a target="_blank" href="https://antest1.github.io/">Gyeongbok Lee</a>
+				<strong>Real-Time Open-Domain Question Answering on Wikipedia with Dense-Sparse Phrase Index</strong><br/>
+                Minjoon Seo*, Jinhyuk Lee*, Tom Kwiatkowski, Ankur Parikh, Ali Farhadi, Hannaneh Hajishirzi<br/>
+				<!-- Designed by <a target="_blank" href="https://antest1.github.io/">Gyeongbok Lee</a> -->
 			</span>
     </div>
 </footer>
@@ -111,11 +114,12 @@
     function execute(text) {
         $("#ret-time").text("Latency: ");
         var start_time = +new Date();
-        $.get("/api?query=" + encodeURIComponent(text), function (result) {
+        $.get("/api?query=" + encodeURIComponent(text), function (out) {
             var end_time = +new Date();
             var total_latency = end_time - start_time;
-            $("#ret-time").text("Latency: " + total_latency + "ms");
+            $("#ret-time").text("Latency: " + out['time'] + "ms");
             $("#ret-results").empty();
+            result = out['ret']
             for (var i = 0; i < result.length; i++) {
                 $("#ret-results").append("<li class=\"list-group-item\"><div class=\"row\">"
                     + "<div class=\"col-10\">" + highlight(result[i]["context"], result[i]["start_pos"], result[i]["end_pos"]) + "</div>"

@@ -530,7 +530,7 @@ ROOT = /home/minjoon
 	--cuda \
 	--sparse \
 	--sparse_type p \
-	--port 8800 \
+	--port 8100 \
 
 1B_pred_dp_128:
 	python run_pred.py \

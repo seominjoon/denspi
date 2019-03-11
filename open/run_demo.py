@@ -1,5 +1,6 @@
 import argparse
 import os
+from time import time
 
 import numpy as np
 from flask import Flask, request, jsonify
@@ -79,13 +80,15 @@ def run_demo(args):
     emb_session = FuturesSession()
 
     def search(query, top_k, nprobe=64):
+        t0 = time()
         (start, end, span), _ = query2emb(query, args.api_port)()
         phrase_vec = np.concatenate([start, end, span], 1)
         if args.sparse:
             rets = mips.search(phrase_vec, top_k=top_k, nprobe=nprobe, start_top_k=args.start_top_k, q_texts=[query])
         else:
             rets = mips.search(phrase_vec, top_k=top_k, nprobe=nprobe)
-        out = rets[0]
+        t1 = time()
+        out = {'ret': rets[0], 'time': int(1000 * (t1 - t0))}
         return out
 
     def query2emb(query, api_port):
