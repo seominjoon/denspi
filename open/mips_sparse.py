@@ -123,20 +123,12 @@ class MIPSSparse(MIPS):
         par_scores = np.squeeze((par_spvecs * q_spvecs.T).toarray())
         return par_scores
 
-    def get_para_scores_(self, q_spvecs, doc_idxs, para_idxs):
-        tfidf_groups = [self.get_tfidf_group(doc_idx) for doc_idx in doc_idxs]
-        tfidf_groups = [group[str(para_idx)] for group, para_idx in zip(tfidf_groups, para_idxs)]
-        par_spvecs = vstack([sp.csr_matrix((data['vals'], data['idxs'], np.array([0, len(data['idxs'])])),
-                                           shape=(1, self.hash_size))
-                             for data in tfidf_groups])
-        par_scores = np.squeeze((par_spvecs * q_spvecs.T).toarray())
-        return par_scores
-
     def get_para_scores(self, q_spvecs, doc_idxs, para_idxs):
         tfidf_groups = [self.get_tfidf_group(doc_idx) for doc_idx in doc_idxs]
         tfidf_groups = [group[str(para_idx)] for group, para_idx in zip(tfidf_groups, para_idxs)]
-        data_list = [data['vals'] for data in tfidf_groups]
-        idxs_list = [data['idxs'] for data in tfidf_groups]
+        data_list = [data['vals'][:] for data in tfidf_groups]
+        idxs_list = [data['idxs'][:] for data in tfidf_groups]
+        t0 = time()
         par_scores = sparse_slice_ip_from_raw(q_spvecs, data_list, idxs_list)
         return par_scores
 
