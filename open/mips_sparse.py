@@ -1,3 +1,6 @@
+from collections import defaultdict
+
+import scipy
 from time import time
 
 from mips import MIPS, int8_to_float, adjust
@@ -34,6 +37,48 @@ def linear_mxq(q_idx, q_val, c_idx, c_val):
     return total
 
 
+# Efficient batch inner product after slicing
+def sparse_slice_ip_from_raw(q_mat, c_data_list, c_indices_list):
+    out = []
+    for q_i, (c_data, c_indices) in enumerate(zip(c_data_list, c_indices_list)):
+        c_map = {c_ii: c_d for c_ii, c_d in zip(c_indices, c_data)}
+
+        if q_mat.shape[0] == len(c_data_list):
+            q_data = q_mat.data[q_mat.indptr[q_i]:q_mat.indptr[q_i + 1]]
+            q_indices = q_mat.indices[q_mat.indptr[q_i]:q_mat.indptr[q_i + 1]]
+        elif q_mat.shape[0] == 1:
+            q_data = q_mat.data[q_mat.indptr[0]:q_mat.indptr[1]]
+            q_indices = q_mat.indices[q_mat.indptr[0]:q_mat.indptr[1]]
+        else:
+            raise Exception('Dimension mismatch: %d != %d' % (q_mat.shape[0], len(c_data_list)))
+
+        ip = sum((c_map[q_ii] * q_d if q_ii in c_map else 0.0) for q_ii, q_d in zip(q_indices, q_data))
+        out.append(ip)
+    return np.array(out)
+
+
+# Efficient batch inner product after slicing
+def sparse_slice_ip(q_mat, c_mat, idxs):
+    out = []
+    for q_i, c_i in enumerate(idxs):
+        c_data = c_mat.data[c_mat.indptr[c_i]:c_mat.indptr[c_i + 1]]
+        c_indices = c_mat.indices[c_mat.indptr[c_i]:c_mat.indptr[c_i + 1]]
+        c_map = {c_ii: c_d for c_ii, c_d in zip(c_indices, c_data)}
+
+        if q_mat.shape[0] == len(idxs):
+            q_data = q_mat.data[q_mat.indptr[q_i]:q_mat.indptr[q_i + 1]]
+            q_indices = q_mat.indices[q_mat.indptr[q_i]:q_mat.indptr[q_i + 1]]
+        elif q_mat.shape[0] == 1:
+            q_data = q_mat.data[q_mat.indptr[0]:q_mat.indptr[1]]
+            q_indices = q_mat.indices[q_mat.indptr[0]:q_mat.indptr[1]]
+        else:
+            raise Exception('Dimension mismatch: %d != %d' % (q_mat.shape[0], c_mat.shape[0]))
+
+        ip = sum((c_map[q_ii] * q_d if q_ii in c_map else 0.0) for q_ii, q_d in zip(q_indices, q_data))
+        out.append(ip)
+    return np.array(out)
+
+
 class MIPSSparse(MIPS):
     def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para=False,
                  tfidf_dump_dir=None, sparse_weight=1e-1, ranker=None, doc_mat=None, sparse_type=None, cuda=False):
@@ -59,6 +104,41 @@ class MIPSSparse(MIPS):
             if dump_range[0] * 1000 <= int(doc_idx) < dump_range[1] * 1000:
                 return dump[str(doc_idx)]
         raise ValueError('%d not found in dump list' % int(doc_idx))
+
+    def get_doc_scores_(self, q_spvecs, doc_idxs):
+        doc_spvecs = self.doc_mat[doc_idxs, :]
+        doc_scores = np.squeeze((doc_spvecs * q_spvecs.T).toarray())
+        return doc_scores
+
+    def get_doc_scores(self, q_spvecs, doc_idxs):
+        scores = sparse_slice_ip(q_spvecs, self.doc_mat, doc_idxs)
+        return scores
+
+    def get_para_scores_(self, q_spvecs, doc_idxs, para_idxs):
+        tfidf_groups = [self.get_tfidf_group(doc_idx) for doc_idx in doc_idxs]
+        tfidf_groups = [group[str(para_idx)] for group, para_idx in zip(tfidf_groups, para_idxs)]
+        par_spvecs = vstack([sp.csr_matrix((data['vals'], data['idxs'], np.array([0, len(data['idxs'])])),
+                                           shape=(1, self.hash_size))
+                             for data in tfidf_groups])
+        par_scores = np.squeeze((par_spvecs * q_spvecs.T).toarray())
+        return par_scores
+
+    def get_para_scores_(self, q_spvecs, doc_idxs, para_idxs):
+        tfidf_groups = [self.get_tfidf_group(doc_idx) for doc_idx in doc_idxs]
+        tfidf_groups = [group[str(para_idx)] for group, para_idx in zip(tfidf_groups, para_idxs)]
+        par_spvecs = vstack([sp.csr_matrix((data['vals'], data['idxs'], np.array([0, len(data['idxs'])])),
+                                           shape=(1, self.hash_size))
+                             for data in tfidf_groups])
+        par_scores = np.squeeze((par_spvecs * q_spvecs.T).toarray())
+        return par_scores
+
+    def get_para_scores(self, q_spvecs, doc_idxs, para_idxs):
+        tfidf_groups = [self.get_tfidf_group(doc_idx) for doc_idx in doc_idxs]
+        tfidf_groups = [group[str(para_idx)] for group, para_idx in zip(tfidf_groups, para_idxs)]
+        data_list = [data['vals'] for data in tfidf_groups]
+        idxs_list = [data['idxs'] for data in tfidf_groups]
+        par_scores = sparse_slice_ip_from_raw(q_spvecs, data_list, idxs_list)
+        return par_scores
 
     def search_start(self, query_start, doc_idxs=None, para_idxs=None,
                      start_top_k=100, out_top_k=5, nprobe=16, q_texts=None):
@@ -120,8 +200,7 @@ class MIPSSparse(MIPS):
             # Get doc vec
             t = time()
             if 'd' in self.sparse_type:
-                doc_spvecs = self.doc_mat[doc_idxs, :]
-                doc_scores = np.squeeze((doc_spvecs * q_spvecs.T).toarray())
+                doc_scores = self.get_doc_scores(q_spvecs, doc_idxs)
                 start_scores += doc_scores * self.sparse_weight
             td = time() - t
             print('t5:', td)
@@ -129,12 +208,7 @@ class MIPSSparse(MIPS):
             # Get par vec
             t = time()
             if 'p' in self.sparse_type:
-                tfidf_groups = [self.get_tfidf_group(doc_idx) for doc_idx in doc_idxs]
-                tfidf_groups = [group[str(para_idx)] for group, para_idx in zip(tfidf_groups, para_idxs)]
-                par_spvecs = vstack([sp.csr_matrix((data['vals'], data['idxs'], np.array([0, len(data['idxs'])])),
-                                                   shape=(1, self.hash_size))
-                                     for data in tfidf_groups])
-                par_scores = np.squeeze((par_spvecs * q_spvecs.T).toarray())
+                par_scores = self.get_para_scores(q_spvecs, doc_idxs, para_idxs)
                 start_scores += par_scores * self.sparse_weight
             tp = time() - t
             print('t6:', tp)
