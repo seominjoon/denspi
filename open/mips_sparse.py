@@ -143,12 +143,17 @@ class MIPSSparse(MIPS):
             # Search space reduction with Faiss
             query_start = np.concatenate([np.zeros([query_start.shape[0], 1]).astype(np.float32),
                                           query_start], axis=1)
+
+            if not len(self.sparse_type) == 0:
+                q_spvecs = vstack([self.ranker.text2spvec(q) for q in q_texts])
+
             if self.num_dummy_zeros > 0:
                 query_start = np.concatenate([query_start, np.zeros([query_start.shape[0], self.num_dummy_zeros],
                                                                     dtype=query_start.dtype)], axis=1)
             self.start_index.nprobe = nprobe
             t = time()
             start_scores, I = self.start_index.search(query_start, start_top_k)
+            start_scores *= -0.5  # rescaling for l2 -> ip
             ts = time() - t
             print('t1:', ts)
 
@@ -176,18 +181,6 @@ class MIPSSparse(MIPS):
                                  for par_bound, start in zip(doc_bounds, doc_starts)]
             tf = time() - t
             print('t3:', tf)
-
-            # Get Q vec, dense vec
-            t = time()
-            if not len(self.sparse_type) == 0:
-                q_spvecs = vstack([self.ranker.text2spvec(q) for q in q_texts])
-            start = np.stack([group['start'][start_idx, :]
-                              for group, start_idx in zip(groups, start_idxs)], 0)  # [Q, d]
-            start = dequant(groups[0], start)
-            query_start = np.reshape(np.tile(np.expand_dims(query_start[:, 1:], 1),
-                                             [1, start_top_k, 1]), [-1, query_start[:, 1:].shape[1]])
-            start_scores = np.sum(query_start * start, 1)  # [Q]
-            print('t4:', time() - t)
 
             # Get doc vec
             t = time()
