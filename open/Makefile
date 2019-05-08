@@ -1,6 +1,6 @@
 PIQA_NFS = /data_nfs/camist002/user/piqa-nfs
 # DUMP_DIR = $(PIQA_NFS)/index/squad/sparse
-# DUMP_DIR = ~/github/hiqa-private/index/
+# DUMP_DIR = ~/github/despi/index/
 LOCAL_DUMP_DIR = dump/76_dev-100M-cc
 LOCAL_INDEX_DIR = dump/76_dev-100M-cc
 DUMP_DIR = $(PIQA_NFS)/$(LOCAL_DUMP_DIR)
@@ -537,7 +537,7 @@ ROOT = /home/minjoon
 	--index_name 262144_flat_SQ8 \
 	--sparse \
 	--cuda \
-	--sparse_type d \
+	--sparse_type p \
 	--port 8101 \
 
 1B_pred_dp_128:

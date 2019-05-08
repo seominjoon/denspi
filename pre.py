@@ -1,9 +1,11 @@
 import collections
 import json
 import logging
+import random
 
 import six
 from tqdm import tqdm
+import copy
 
 import tokenization
 from post import _improve_answer_span, _check_is_max_context
@@ -527,9 +529,83 @@ def context_to_tokens_and_offset(context, tokenizer=None):
         new_pos = context.find(token, cur_pos)
         # set previous word's offset
         assert cur_pos >= 0, "cannot find `%s` in `%s`" % (token, context)
-        char_to_word_offset.extend([max(0, word_pos-1)] * (new_pos - cur_pos))
+        char_to_word_offset.extend([max(0, word_pos - 1)] * (new_pos - cur_pos))
         assert context[len(char_to_word_offset)] == token[0]
         char_to_word_offset.extend([word_pos] * len(token))
         cur_pos = new_pos + len(token)
     return doc_tokens, char_to_word_offset
 
+
+def inject_noise(input_ids, input_mask,
+                 clamp=False, clamp_prob=0.5, min_len=0, max_len=300, pad=0,
+                 replace=False, replace_prob=0.3, unk_prob=0.1, vocab_size=30522, unk=100, min_id=999,
+                 shuffle=False, shuffle_prob=0.2):
+    input_ids = input_ids[:]
+    input_mask = input_mask[:]
+    if clamp and random.random() < clamp_prob:
+        len_ = sum(input_mask) - 2
+        new_len = random.choice(range(min_len, max_len + 1))
+        if new_len < len_:
+            input_ids[new_len + 1] = input_ids[len_ + 1]
+            for i in range(new_len + 2, len(input_ids)):
+                input_ids[i] = pad
+                input_mask[i] = 0
+
+    len_ = sum(input_mask) - 2
+    if replace:
+        for i in range(1, len_ + 1):
+            if random.random() < replace_prob:
+                if random.random() < unk_prob:
+                    new_id = unk
+                else:
+                    new_id = random.choice(range(min_id, vocab_size))
+                input_ids[i] = new_id
+
+    if shuffle:
+        for i in range(1, len_ + 1):
+            if random.random() < shuffle_prob:
+                new_id = random.choice(input_ids[1:len_ + 1])
+                input_ids[i] = new_id
+
+    return input_ids, input_mask
+
+
+def inject_noise_to_features(features,
+                             clamp=False, clamp_prob=0.5, min_len=0, max_len=300, pad=0,
+                             replace=False, replace_prob=0.3, unk_prob=0.2, vocab_size=30522, unk=100, min_id=999,
+                             shuffle=False, shuffle_prob=0.2):
+    features = copy.deepcopy(features)
+    input_ids = features.input_ids
+    input_mask = features.input_mask
+    if clamp and random.random() < clamp_prob:
+        len_ = sum(input_mask) - 2
+        new_len = random.choice(range(min_len, max_len + 1))
+        if new_len < len_:
+            input_ids[new_len + 1] = input_ids[len_ + 1]
+            for i in range(new_len + 2, len(input_ids)):
+                input_ids[i] = pad
+                input_mask[i] = 0
+
+    len_ = sum(input_mask) - 2
+    if replace:
+        for i in range(1, len_ + 1):
+            if random.random() < replace_prob:
+                if random.random() < unk_prob:
+                    new_id = unk
+                else:
+                    new_id = random.choice(range(min_id, vocab_size))
+                input_ids[i] = new_id
+
+    if shuffle:
+        for i in range(1, len_ + 1):
+            if random.random() < shuffle_prob:
+                new_id = random.choice(input_ids[1:len_ + 1])
+                input_ids[i] = new_id
+
+    return features
+
+
+def inject_noise_to_features_list(features_list, noise_prob=0.5, **kwargs):
+    out = [inject_noise_to_features(features, **kwargs) if features.start_position < 0 and random.random() < noise_prob
+           else features for features in features_list]
+    return out

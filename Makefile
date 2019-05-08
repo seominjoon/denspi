@@ -10,7 +10,7 @@ dl:
 	--do_index \
 	--do_serve \
 	--num_train_epochs 1 \
-	--draft_num_examples 1 \
+	--draft_num_examples 100 \
 	--train_batch_size 1 \
 	--predict_batch_size 1 \
 	--draft \
@@ -69,7 +69,7 @@ train_base_qna_127:
 	--do_eval"
 
 train_base_qna_511:
-	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 24G --nfs-output -a " \
 	--fs nfs \
 	--bert_model_option 'base_uncased' \
 	--train_file train-v1.1-qna-1-1.json \
@@ -235,7 +235,7 @@ train_qna_511:
 	--do_eval"
 
 train_qna_961:
-	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 24G --nfs-output -a " \
+	nsml run -d piqa-nfs -g 4 -c 1 -e run_piqa.py --memory 24G --nfs-output -a " \
 	--fs nfs \
 	--train_file train-v1.1-qna-1-1.json \
 	--train_batch_size 18 \

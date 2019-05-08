@@ -40,7 +40,7 @@ from bert import BertConfig
 from optimization import BERTAdam
 from phrase import BertPhraseModel
 from pre import convert_examples_to_features, read_squad_examples, convert_documents_to_features, \
-    convert_questions_to_features, SquadExample
+    convert_questions_to_features, SquadExample, inject_noise_to_features_list
 from post import write_predictions, write_hdf5, get_question_results as get_question_results_, \
     convert_question_features_to_dataloader, write_question_results
 from serve import serve
@@ -370,6 +370,12 @@ def main():
             doc_stride=args.doc_stride,
             max_query_length=args.max_query_length,
             is_training=True)
+
+        train_features = inject_noise_to_features_list(train_features,
+                                                       clamp=True,
+                                                       replace=True,
+                                                       shuffle=True)
+
         logger.info("***** Running training *****")
         logger.info("  Num orig examples = %d", len(train_examples))
         logger.info("  Num split examples = %d", len(train_features))
