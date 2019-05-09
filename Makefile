@@ -272,8 +272,8 @@ eval_961:
 	--fs nfs \
 	--phrase_size 961 \
 	--do_load \
-	--load_dir piqateam/piqa-nfs/76 \
-	--iteration 1 \
+	--load_dir piqateam/piqa-nfs/2883 \
+	--iteration 3 \
 	--do_predict \
 	--do_eval"
 
