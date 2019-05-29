@@ -527,10 +527,9 @@ ROOT = /home/minjoon
 1B_demo:
 	python run_demo.py $(ROOT)/dump/76_dev-1B-c --nprobe 256 --start_top_k 1000 --top_k 10 \
 	--index_name 262144_flat_SQ8 \
-	--cuda \
 	--sparse \
 	--sparse_type dp \
-	--port 8100 \
+	--port 5900 \
 
 1B_demo_fast:
 	python run_demo.py $(ROOT)/dump/76_dev-1B-c --nprobe 32 --start_top_k 100 --top_k 10 \

@@ -7,9 +7,8 @@ source $HOME/.bashrc
 
 conda create -n despi python=3.6
 conda activate despi
-conda install faiss-cpu pytorch -c pytorch
+conda install faiss-cpu numpy==1.16.1 -c pytorch
 conda install -c cyclus java-jdk
-pip install -r requirements.txt
 
 # DrQA stuff
 git clone https://github.com/facebookresearch/DrQA.git
@@ -18,8 +17,8 @@ cd DrQA; pip install -r requirements.txt; python setup.py develop
 export CLASSPATH=$CLASSPATH:data/corenlp/*
 cd ..
 
+pip install -r requirements.txt
 pip install -r open/requirements.txt
-pip install numpy==1.16.1
 
 # make 1B_serve
 # cd open; make 1B_demo
