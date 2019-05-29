@@ -3,8 +3,9 @@ sudo apt-get install -y git bzip2 unzip build-essential tmux
 
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -P /tmp
 bash /tmp/Miniconda3-latest-Linux-x86_64.sh
-conda create -n despi python=3.6
+source $HOME/.bashrc
 
+conda create -n despi python=3.6
 conda activate despi
 conda install faiss-cpu pytorch -c pytorch
 conda install -c cyclus java-jdk
