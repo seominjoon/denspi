@@ -7,7 +7,7 @@ source $HOME/.bashrc
 
 conda create -n despi python=3.6
 conda activate despi
-conda install faiss-cpu -c pytorch
+conda install faiss-cpu pytorch -c pytorch
 conda install -c cyclus java-jdk
 pip install -r requirements.txt
 

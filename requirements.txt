@@ -1,5 +1,5 @@
 torch>=1.0
-numpy==1.16.1
+numpy
 tqdm
 six
 flask
