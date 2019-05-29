@@ -1,4 +1,7 @@
-numpy
+numpy==1.16.1
 tqdm
 h5py
 requests_futures
+scipy
+drqa
+torch

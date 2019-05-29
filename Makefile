@@ -574,14 +574,14 @@ train:
 train_filter:
 	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 24G --nfs-output -a " \
 	--fs nfs \
-	--train_file train-v1.1-qnad.json \
+	--train_file train-v1.1-qna-1-1.json \
 	--train_batch_size 18 \
 	--phrase_size 961 \
 	--do_train_filter \
 	--do_predict \
 	--do_eval \
 	--num_train_epochs 1 \
-	--load_dir piqateam/piqa-nfs/64 \
+	--load_dir piqateam/piqa-nfs/2883 \
 	--filter_threshold -2 \
 	--iteration 3"
 
@@ -621,7 +621,7 @@ dump_100M_cp:
 	python nsml_dump.py --data_name dev-100M-cp --load_dir piqateam/piqa-nfs/76 --num_gpus 4 --num_cpus 2 --mem_size 16 --end 104 --para
 
 dump_1B_c:
-	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 20 --mem_size 24 --start 3500 --end 5076 --para
+	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/2906 --num_gpus 20 --mem_size 24 --start 0 --end 5076 --para
 
 dump_1B_c_s:
 	python nsml_dump.py --data_name dev-1B-c --load_dir piqateam/piqa-nfs/76 --num_gpus 8 --mem_size 24 --start 4290 --end 4369 --para

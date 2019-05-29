@@ -155,7 +155,7 @@ class MIPSSparse(MIPS):
             start_scores, I = self.start_index.search(query_start, start_top_k)
             start_scores *= -0.5  # rescaling for l2 -> ip
             ts = time() - t
-            print('t1:', ts)
+            print('on-disk index search:', ts)
 
             t = time()
             doc_idxs, para_idxs, start_idxs = self.get_idxs(I)
@@ -166,7 +166,7 @@ class MIPSSparse(MIPS):
                 para_idxs = np.reshape(para_idxs, [-1])
             start_idxs = np.reshape(start_idxs, [-1])
             groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
-            print('t2:', time() - t)
+            print('load doc-level dumps:', time() - t)
 
             t = time()
             if self.para:
@@ -180,7 +180,7 @@ class MIPSSparse(MIPS):
                     para_idxs = [sum([1 if start > bound else 0 for bound in par_bound])
                                  for par_bound, start in zip(doc_bounds, doc_starts)]
             tf = time() - t
-            print('t3:', tf)
+            print('load para-level metadata:', tf)
 
             # Get doc vec
             t = time()
@@ -188,7 +188,7 @@ class MIPSSparse(MIPS):
                 doc_scores = self.get_doc_scores(q_spvecs, doc_idxs)
                 start_scores += doc_scores * self.sparse_weight
             td = time() - t
-            print('t5:', td)
+            print('compute doc scores:', td)
 
             # Get par vec
             t = time()
@@ -196,7 +196,7 @@ class MIPSSparse(MIPS):
                 par_scores = self.get_para_scores(q_spvecs, doc_idxs, para_idxs)
                 start_scores += par_scores * self.sparse_weight
             tp = time() - t
-            print('t6:', tp)
+            print('load para vecs and compute para scores:', tp)
             t = time()
 
             rerank_scores = np.reshape(start_scores, [-1, start_top_k])
@@ -234,7 +234,7 @@ class MIPSSparse(MIPS):
                                                                           doc_idxs=doc_idxs, para_idxs=para_idxs,
                                                                           q_texts=q_texts)
         tss = time() - t
-        print('tss:', tss)
+        print('1000 to 10:', tss)
 
         if doc_idxs.shape[1] != top_k:
             print("Warning.. %d only retrieved" % doc_idxs.shape[1])
@@ -251,7 +251,7 @@ class MIPSSparse(MIPS):
         t = time()
         out = self.search_phrase(query, doc_idxs, start_idxs, para_idxs=para_idxs, start_scores=start_scores)
         tsp = time() - t
-        print('tsp:', tsp)
+        print('get top-10 answers:', tsp)
         new_out = [[] for _ in range(num_queries)]
         for idx, each_out in zip(idxs, out):
             new_out[idx].append(each_out)
