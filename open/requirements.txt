@@ -1,4 +1,4 @@
-numpy==1.16.1
+numpy
 tqdm
 h5py
 requests_futures

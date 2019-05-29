@@ -19,6 +19,7 @@ export CLASSPATH=$CLASSPATH:data/corenlp/*
 cd ..
 
 pip install -r open/requirements.txt
+pip install numpy==1.16.1
 
 # make 1B_serve
 # cd open; make 1B_demo
