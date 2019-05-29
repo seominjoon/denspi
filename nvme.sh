@@ -9,8 +9,7 @@ echo UUID=`sudo blkid -s UUID -o value /dev/md0` /mnt/disks/nvme ext4 discard,de
 cat /etc/fstab
 
 gcloud init
-cd /mnt/disks/nvme/
-gsutil cp -r gs://despi-0-1/DeSPI/* .
+gsutil cp -r gs://despi-0-1/DeSPI/* /mnt/disks/nvme/
 
 ln -s /mnt/disks/nvme/dump /home/minjoon/dump
 ln -s /mnt/disks/nvme/data /home/minjoon/data
