@@ -159,7 +159,7 @@ class MIPSSparse(MIPS):
 
             t = time()
             doc_idxs, para_idxs, start_idxs = self.get_idxs(I)
-            print('unique # docs: %d' % len(set(doc_idxs)))
+            print('unique # docs: %d' % len(set(doc_idxs.tolist())))
 
             # Rerank based on sparse + dense (start)
             doc_idxs = np.reshape(doc_idxs, [-1])
