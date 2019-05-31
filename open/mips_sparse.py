@@ -1,4 +1,5 @@
 from collections import defaultdict
+from multiprocessing.pool import Pool
 
 import scipy
 from time import time
@@ -166,7 +167,10 @@ class MIPSSparse(MIPS):
             if self.para:
                 para_idxs = np.reshape(para_idxs, [-1])
             start_idxs = np.reshape(start_idxs, [-1])
-            groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
+            # groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
+
+            with Pool(processes=16) as pool:
+                groups = pool.map(self.get_doc_group, doc_idxs)
             print('load doc-level dumps:', time() - t)
 
             t = time()
