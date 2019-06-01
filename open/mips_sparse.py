@@ -170,7 +170,7 @@ class MIPSSparse(MIPS):
             #     groups = pool.map(self.get_doc_group, doc_idxs)
 
             def get_sparse_scores(input_):
-                doc_idxs_, para_idxs, start_scores_ = input_
+                doc_idxs_, para_idxs_, start_scores_ = input_
                 groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs_]
 
                 if self.para:
@@ -196,7 +196,10 @@ class MIPSSparse(MIPS):
                 return start_scores_
 
             doc_idxs_list = [doc_idxs[i:i+1] for i in range(len(doc_idxs))]
-            para_idxs_list = [para_idxs[i:i+1] for i in range(len(para_idxs))]
+            if self.para:
+                para_idxs_list = [para_idxs[i:i+1] for i in range(len(para_idxs))]
+            else:
+                para_idxs_list = [None for _ in doc_idxs]
             start_scores_list = [start_scores[i:i+1] for i in range(len(start_scores))]
             input__ = zip(doc_idxs_list, para_idxs_list, start_scores_list)
 
