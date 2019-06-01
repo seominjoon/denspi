@@ -158,7 +158,6 @@ class MIPSSparse(MIPS):
             ts = time() - t
             print('on-disk index search:', ts)
 
-            t = time()
             doc_idxs, para_idxs, start_idxs = self.get_idxs(I)
             print('unique # docs: %d' % len(set(doc_idxs.flatten().tolist())))
 
@@ -167,42 +166,43 @@ class MIPSSparse(MIPS):
             if self.para:
                 para_idxs = np.reshape(para_idxs, [-1])
             start_idxs = np.reshape(start_idxs, [-1])
-            # groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
+            # with ThreadPool(processes=8) as pool:
+            #     groups = pool.map(self.get_doc_group, doc_idxs)
 
-            with ThreadPool(processes=16) as pool:
-                groups = pool.map(self.get_doc_group, doc_idxs)
-            print('load doc-level dumps:', time() - t)
+            def get_sparse_scores(input_):
+                doc_idxs_, para_idxs, start_scores_ = input_
+                groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs_]
 
-            t = time()
-            if self.para:
-                groups = [group[str(para_idx)] for group, para_idx in zip(groups, para_idxs)]
-            else:
+                if self.para:
+                    groups = [group[str(para_idx)] for group, para_idx in zip(groups, para_idxs_)]
+                else:
+                    if 'p' in self.sparse_type:
+                        doc_bounds = [[m.start() for m in re.finditer('\[PAR\]', group.attrs['context'])] for group in
+                                      groups]
+                        doc_starts = [group['word2char_start'][start_idx].item() for group, start_idx in
+                                      zip(groups, start_idxs)]
+                        para_idxs_ = [sum([1 if start > bound else 0 for bound in par_bound])
+                                      for par_bound, start in zip(doc_bounds, doc_starts)]
+
+                # Get doc vec
+                if 'd' in self.sparse_type:
+                    doc_scores = self.get_doc_scores(q_spvecs, doc_idxs_)
+                    start_scores_ += doc_scores * self.sparse_weight
+
+                # Get par vec
                 if 'p' in self.sparse_type:
-                    doc_bounds = [[m.start() for m in re.finditer('\[PAR\]', group.attrs['context'])] for group in
-                                  groups]
-                    doc_starts = [group['word2char_start'][start_idx].item() for group, start_idx in
-                                  zip(groups, start_idxs)]
-                    para_idxs = [sum([1 if start > bound else 0 for bound in par_bound])
-                                 for par_bound, start in zip(doc_bounds, doc_starts)]
-            tf = time() - t
-            print('load para-level metadata:', tf)
+                    par_scores = self.get_para_scores(q_spvecs, doc_idxs_, para_idxs_)
+                    start_scores_ += par_scores * self.sparse_weight
+                return start_scores_
 
-            # Get doc vec
-            t = time()
-            if 'd' in self.sparse_type:
-                doc_scores = self.get_doc_scores(q_spvecs, doc_idxs)
-                start_scores += doc_scores * self.sparse_weight
-            td = time() - t
-            print('compute doc scores:', td)
+            doc_idxs_list = [doc_idxs[i:i+1] for i in range(len(doc_idxs))]
+            para_idxs_list = [para_idxs[i:i+1] for i in range(len(para_idxs))]
+            start_scores_list = [start_scores[i:i+1] for i in range(len(start_scores))]
+            input__ = zip(doc_idxs_list, para_idxs_list, start_scores_list)
 
-            # Get par vec
-            t = time()
-            if 'p' in self.sparse_type:
-                par_scores = self.get_para_scores(q_spvecs, doc_idxs, para_idxs)
-                start_scores += par_scores * self.sparse_weight
-            tp = time() - t
-            print('load para vecs and compute para scores:', tp)
-            t = time()
+            with ThreadPool(processes=8) as pool:
+                start_scores = pool.map(get_sparse_scores, input__)
+                start_scores = np.array([each[0] for each in start_scores])
 
             rerank_scores = np.reshape(start_scores, [-1, start_top_k])
             rerank_idxs = np.array([scores.argsort()[-out_top_k:][::-1]
