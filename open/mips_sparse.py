@@ -187,9 +187,11 @@ class MIPSSparse(MIPS):
 
                 out = 0
                 # Get doc vec
+                td = time()
                 if 'd' in self.sparse_type:
                     doc_scores = self.get_doc_scores(q_spvecs, doc_idxs_)
                     out += doc_scores * self.sparse_weight
+                print('doc score compute: %.3f' % (time() - td))
 
                 # Get par vec
                 if 'p' in self.sparse_type:
