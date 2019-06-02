@@ -203,7 +203,7 @@ class MIPSSparse(MIPS):
             start_scores_list = [start_scores[i:i+1] for i in range(len(start_scores))]
             input__ = zip(doc_idxs_list, para_idxs_list, start_scores_list)
 
-            with ThreadPool(processes=8) as pool:
+            with ThreadPool(processes=16) as pool:
                 start_scores = pool.map(get_sparse_scores, input__)
                 start_scores = np.array([each[0] for each in start_scores])
 
