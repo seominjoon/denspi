@@ -159,6 +159,7 @@ class MIPSSparse(MIPS):
             print('on-disk index search:', ts)
 
             doc_idxs, para_idxs, start_idxs = self.get_idxs(I)
+            print('get idxs:', time() - t)
             print('unique # docs: %d' % len(set(doc_idxs.flatten().tolist())))
 
             # Rerank based on sparse + dense (start)
