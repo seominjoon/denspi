@@ -187,11 +187,9 @@ class MIPSSparse(MIPS):
 
                 out = 0
                 # Get doc vec
-                td = time()
                 if 'd' in self.sparse_type:
                     doc_scores = self.get_doc_scores(q_spvecs, doc_idxs_)
                     out += doc_scores * self.sparse_weight
-                print('doc score compute: %.3f' % (time() - td))
 
                 # Get par vec
                 if 'p' in self.sparse_type:
@@ -214,6 +212,7 @@ class MIPSSparse(MIPS):
                 start_scores += out
             """
             start_scores += get_sparse_scores([doc_idxs, None, None])
+            print('doc score compute: %.3f' % (time() - t))
 
             rerank_scores = np.reshape(start_scores, [-1, start_top_k])
             rerank_idxs = np.array([scores.argsort()[-out_top_k:][::-1]
@@ -222,7 +221,7 @@ class MIPSSparse(MIPS):
             doc_idxs, para_idxs, start_idxs = self.get_idxs(new_I)
 
             start_scores = np.array([scores[idxs] for scores, idxs in zip(rerank_scores, rerank_idxs)])[:, :out_top_k]
-            print('t7:', time() - t)
+            print('reranking:', time() - t)
 
         # Closed
         else:
