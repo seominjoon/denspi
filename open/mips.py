@@ -48,7 +48,7 @@ class MIPS(object):
 
         print('reading %s' % start_index_path)
         self.start_index = faiss.read_index(start_index_path)
-        self.idx_f = h5py.File(idx2id_path, 'r', driver='core', backing_store=False)
+        self.idx_f = self.load_idx_f(idx2id_path)
         self.has_offset = not 'doc' in self.idx_f
         # with h5py.File(idx2id_path, 'r') as f:
         #     self.idx2doc_id = f['doc'][:]
@@ -57,6 +57,21 @@ class MIPS(object):
 
         self.num_dummy_zeros = num_dummy_zeros
         self.cuda = cuda
+
+    def load_idx_f(self, idx2id_path):
+        idx_f = {}
+        types = ['doc', 'word']
+        if self.para:
+            types.append('para')
+        with h5py.File(idx2id_path, 'r', driver='core', backing_store=False) as f:
+            for key in tqdm(f, desc='loading idx2id'):
+                idx_f_cur = {}
+                for type_ in types:
+                    idx_f_cur[type_] = f[key][type_][:]
+                idx_f[key] = idx_f_cur
+            return idx_f
+
+
 
     def get_idxs(self, I):
         if self.has_offset:
