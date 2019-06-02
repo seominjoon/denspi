@@ -197,6 +197,7 @@ class MIPSSparse(MIPS):
                     out += par_scores * self.sparse_weight
                 return out
 
+            """
             doc_idxs_list = [doc_idxs[i:i+1] for i in range(len(doc_idxs))]
             if self.para:
                 para_idxs_list = [para_idxs[i:i+1] for i in range(len(para_idxs))]
@@ -209,6 +210,8 @@ class MIPSSparse(MIPS):
                 out = pool.map(get_sparse_scores, input__)
                 out = np.array([each[0] for each in out])
                 start_scores += out
+            """
+            start_scores += get_sparse_scores([doc_idxs, None, None])
 
             rerank_scores = np.reshape(start_scores, [-1, start_top_k])
             rerank_idxs = np.array([scores.argsort()[-out_top_k:][::-1]
