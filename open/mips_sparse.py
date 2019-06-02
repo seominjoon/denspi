@@ -170,7 +170,7 @@ class MIPSSparse(MIPS):
             #     groups = pool.map(self.get_doc_group, doc_idxs)
 
             def get_sparse_scores(input_):
-                doc_idxs_, para_idxs_ = input_
+                doc_idxs_, para_idxs_, start_idxs_ = input_
                 groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs_]
 
                 if self.para:
@@ -180,7 +180,7 @@ class MIPSSparse(MIPS):
                         doc_bounds = [[m.start() for m in re.finditer('\[PAR\]', group.attrs['context'])] for group in
                                       groups]
                         doc_starts = [group['word2char_start'][start_idx].item() for group, start_idx in
-                                      zip(groups, start_idxs)]
+                                      zip(groups, start_idxs_)]
                         para_idxs_ = [sum([1 if start > bound else 0 for bound in par_bound])
                                       for par_bound, start in zip(doc_bounds, doc_starts)]
 
@@ -201,7 +201,8 @@ class MIPSSparse(MIPS):
                 para_idxs_list = [para_idxs[i:i+1] for i in range(len(para_idxs))]
             else:
                 para_idxs_list = [None for _ in doc_idxs]
-            input__ = zip(doc_idxs_list, para_idxs_list)
+            start_idxs_list = [start_idxs[i:i+1] for i in range(len(start_idxs))]
+            input__ = zip(doc_idxs_list, para_idxs_list, start_idxs_list)
 
             with ThreadPool(processes=16) as pool:
                 out = pool.map(get_sparse_scores, input__)
