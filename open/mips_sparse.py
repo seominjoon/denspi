@@ -170,7 +170,7 @@ class MIPSSparse(MIPS):
             #     groups = pool.map(self.get_doc_group, doc_idxs)
 
             def get_sparse_scores(input_):
-                doc_idxs_, para_idxs_, start_scores_ = input_
+                doc_idxs_, para_idxs_ = input_
                 groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs_]
 
                 if self.para:
@@ -184,28 +184,29 @@ class MIPSSparse(MIPS):
                         para_idxs_ = [sum([1 if start > bound else 0 for bound in par_bound])
                                       for par_bound, start in zip(doc_bounds, doc_starts)]
 
+                out = 0
                 # Get doc vec
                 if 'd' in self.sparse_type:
                     doc_scores = self.get_doc_scores(q_spvecs, doc_idxs_)
-                    start_scores_ += doc_scores * self.sparse_weight
+                    out += doc_scores * self.sparse_weight
 
                 # Get par vec
                 if 'p' in self.sparse_type:
                     par_scores = self.get_para_scores(q_spvecs, doc_idxs_, para_idxs_)
-                    start_scores_ += par_scores * self.sparse_weight
-                return start_scores_
+                    out += par_scores * self.sparse_weight
+                return out
 
             doc_idxs_list = [doc_idxs[i:i+1] for i in range(len(doc_idxs))]
             if self.para:
                 para_idxs_list = [para_idxs[i:i+1] for i in range(len(para_idxs))]
             else:
                 para_idxs_list = [None for _ in doc_idxs]
-            start_scores_list = [start_scores[i:i+1] for i in range(len(start_scores))]
-            input__ = zip(doc_idxs_list, para_idxs_list, start_scores_list)
+            input__ = zip(doc_idxs_list, para_idxs_list)
 
             with ThreadPool(processes=16) as pool:
-                start_scores = pool.map(get_sparse_scores, input__)
-                start_scores = np.array([each[0] for each in start_scores])
+                out = pool.map(get_sparse_scores, input__)
+                out = np.array([each[0] for each in out])
+                start_scores += out
 
             rerank_scores = np.reshape(start_scores, [-1, start_top_k])
             rerank_idxs = np.array([scores.argsort()[-out_top_k:][::-1]
