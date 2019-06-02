@@ -48,7 +48,7 @@ class MIPS(object):
 
         print('reading %s' % start_index_path)
         self.start_index = faiss.read_index(start_index_path)
-        self.idx_f = h5py.File(idx2id_path, 'r')
+        self.idx_f = h5py.File(idx2id_path, 'r', driver='core', backing_store=False)
         self.has_offset = not 'doc' in self.idx_f
         # with h5py.File(idx2id_path, 'r') as f:
         #     self.idx2doc_id = f['doc'][:]

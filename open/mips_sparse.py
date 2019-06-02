@@ -219,7 +219,6 @@ class MIPSSparse(MIPS):
             rerank_idxs = np.array([scores.argsort()[-out_top_k:][::-1]
                                     for scores in rerank_scores])
             new_I = np.array([each_I[idxs] for each_I, idxs in zip(I, rerank_idxs)])
-
             doc_idxs, para_idxs, start_idxs = self.get_idxs(new_I)
 
             start_scores = np.array([scores[idxs] for scores, idxs in zip(rerank_scores, rerank_idxs)])[:, :out_top_k]
