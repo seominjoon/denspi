@@ -171,12 +171,13 @@ class MIPSSparse(MIPS):
 
             def get_sparse_scores(input_):
                 doc_idxs_, para_idxs_, start_idxs_ = input_
-                groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs_]
 
                 if self.para:
+                    groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs_]
                     groups = [group[str(para_idx)] for group, para_idx in zip(groups, para_idxs_)]
                 else:
                     if 'p' in self.sparse_type:
+                        groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs_]
                         doc_bounds = [[m.start() for m in re.finditer('\[PAR\]', group.attrs['context'])] for group in
                                       groups]
                         doc_starts = [group['word2char_start'][start_idx].item() for group, start_idx in
