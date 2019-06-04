@@ -43,7 +43,7 @@ def get_args():
     parser.add_argument('--max_norm_cf', default=1.3, type=float)
     parser.add_argument('--norm_th', default=999, type=float)
     parser.add_argument('--para', default=False, action='store_true')
-    parser.add_argument('--doc_sample_ratio', default=0.2, type=float)
+    parser.add_argument('--doc_sample_ratio', default=0.1, type=float)
     parser.add_argument('--vec_sample_ratio', default=0.2, type=float)
 
     parser.add_argument('--fs', default='local')

@@ -78,14 +78,14 @@ def run_add_to_index(args):
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('dump_dir')
-    parser.add_argument('--num_cpus', default=2, type=int)
+    parser.add_argument('--dump_dir', default='dump/76_dev-1B-c')
+    parser.add_argument('--num_cpus', default=4, type=int)
     parser.add_argument('--num_gpus', default=20, type=int)
-    parser.add_argument('--mem_size', default=24, type=int, help='mem size in GB')
+    parser.add_argument('--mem_size', default=32, type=int, help='mem size in GB')
     parser.add_argument('--num_clusters', default=4096, type=int)
     parser.add_argument('--para', default=False, action='store_true')
     parser.add_argument('--draft', default=False, action='store_true')
-    parser.add_argument('--nfs_dir', default='/data_nfs/camist002/user/piqa-nfs/')
+    parser.add_argument('--nfs_dir', default='/data_nfs/camist002/')
     parser.add_argument('--max_num_per_file', default=int(1e8), type=int,
                         help='max num per file for setting up good offsets.')
     parser.add_argument('--compact_offset', default=False, action='store_true')

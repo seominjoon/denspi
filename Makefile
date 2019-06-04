@@ -120,7 +120,7 @@ dump_base:
 	--iteration 1"
 
 dump_base_qna:
-	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	nsml run -d piqa-nfs -g 0 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
 	--bert_model_option 'base_uncased' \
 	--do_embed_question \
@@ -341,7 +341,7 @@ dump_na_961:
 	--iteration 3"
 
 dump_qna_961:
-	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	nsml run -d piqa-nfs -g 0 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nfs \
 	--do_embed_question \
 	--do_index \

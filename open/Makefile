@@ -1,7 +1,8 @@
-PIQA_NFS = /data_nfs/camist002/user/piqa-nfs
+# PIQA_NFS = /data_nfs/camist002/user/piqa-nfs
+PIQA_NFS = /home/minjoon
 # DUMP_DIR = $(PIQA_NFS)/index/squad/sparse
 # DUMP_DIR = ~/github/despi/index/
-LOCAL_DUMP_DIR = dump/76_dev-100M-cc
+LOCAL_DUMP_DIR = dump/76_dev-1B-c
 LOCAL_INDEX_DIR = dump/76_dev-100M-cc
 DUMP_DIR = $(PIQA_NFS)/$(LOCAL_DUMP_DIR)
 # DUMP_DIR = $(PIQA_NFS)/dump/76_dev-10M
@@ -17,8 +18,8 @@ DATA_PATH = $(PIQA_NFS)/$(LOCAL_DATA_PATH)
 PARA =
 SPARSE = --sparse
 ADD_ALL = --add_all
-NUM_CLUSTERS = 4096
-HNSW =
+NUM_CLUSTERS = 1048576
+HNSW = --hnsw
 NPROBE = 64
 START_TOP_K = 1000
 TOP_K = 1000
@@ -26,13 +27,14 @@ STEP_SIZE = 1
 SPARSE_WEIGHT = 1e-1
 SPARSE_TYPE = dp
 FINE_QUANT = SQ8
+CUDA = --cuda
 
 # local
 coarse:
-	python run_index.py $(DUMP_DIR) coarse $(PARA) --num_clusters $(NUM_CLUSTERS) $(HNSW)
+	python run_index.py $(DUMP_DIR) coarse $(PARA) --num_clusters $(NUM_CLUSTERS) $(HNSW) $(CUDA)
 
 fine:
-	python run_index.py $(DUMP_DIR) fine $(PARA)
+	python run_index.py $(DUMP_DIR) fine $(PARA) --num_clusters $(NUM_CLUSTERS) $(HNSW) $(CUDA) --doc_sample_ratio 0.05 --vec_sample_ratio 0.05
 
 add:
 	python run_index.py $(DUMP_DIR) add $(PARA) $(ADD_ALL)
@@ -216,7 +218,7 @@ nsml_pred_10M:
 	"
 
 nsml_add_1B:
-	python nsml_add_to_index.py dump/76_dev-1B-c --num_clusters 262144
+	python nsml_add_to_index.py dump/76_dev-1B-c --num_clusters 1048576 --hnsw $(HNSW)
 
 nsml_add_1B_18:
 	nsml run -d piqa-nfs -g 1 -c 2 -e run_index.py --memory 24G --nfs-output -a " \
@@ -579,4 +581,4 @@ ROOT = /home/minjoon
 	--cuda
 
 nsml_1B_add:
-	python nsml_add_to_index.py dump/76_dev-1B-c --num_clusters 524288 --num_cpus 2 --num_gpus 20 --mem_size 30  --hnsw --cuda
+	python nsml_add_to_index.py --num_clusters 1048576 --num_cpus 4 --num_gpus 20 --mem_size 40  --hnsw --cuda
