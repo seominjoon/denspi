@@ -30,11 +30,6 @@ FINE_QUANT = SQ8
 CUDA = --cuda
 
 # local
-coarse:
-	python run_index.py $(DUMP_DIR) coarse $(PARA) --num_clusters $(NUM_CLUSTERS) $(HNSW) $(CUDA)
-
-fine:
-	python run_index.py $(DUMP_DIR) fine $(PARA) --num_clusters $(NUM_CLUSTERS) $(HNSW) $(CUDA) --doc_sample_ratio 0.05 --vec_sample_ratio 0.05
 
 add:
 	python run_index.py $(DUMP_DIR) add $(PARA) $(ADD_ALL)
@@ -448,22 +443,12 @@ ROOT = /home/minjoon
 	--fs local \
 	--num_clusters 262144
 
-1B_remove:
-	python remove_doc_id.py \
-	$(ROOT)/dump/76_dev-1B-c/262144_flat_SQ8/index $(ROOT)/dump/76_dev-1B-c/pred/counter.json \
-	--ratio 0.003 \
 
-1B_merge:
-	python run_index.py \
-	$(ROOT)/dump/76_dev-1B-c merge \
-	--fs local \
-	--num_clusters 262144 \
-	--replace
 
 1B_pred:
 	python run_pred.py \
 	$(ROOT)/data/dev-3.json $(ROOT)/dump/76_dev-1B-c \
-	--index_name 262144_flat_SQ8 \
+	--index_name 1048576_hnsw_SQ8 \
 	--fs local \
 	--top_k 100 \
 	--nprobe 256 \
@@ -481,11 +466,6 @@ ROOT = /home/minjoon
 	--sparse_weight $(SPARSE_WEIGHT) \
 	--sparse_type p \
 	--cuda
-
-1B_eval:
-	python evaluate_recall.py \
-	$(ROOT)/data/dev-3.json $(ROOT)/dump/76_dev-1B-c/pred/od_262144_flat_SQ8_3.0_100_100_256.json \
-	--scores_dir $(ROOT)/dump/76_dev-1B-c/pred/scores
 
 1B_pred_dp:
 	python run_pred.py \
@@ -526,21 +506,6 @@ ROOT = /home/minjoon
 	--sparse_type p \
 	--cuda
 
-1B_demo:
-	python run_demo.py $(ROOT)/dump/76_dev-1B-c --nprobe 256 --start_top_k 1000 --top_k 10 \
-	--index_name 262144_flat_SQ8 \
-	--sparse \
-	--sparse_type dp \
-	--port 5900 \
-
-1B_demo_fast:
-	python run_demo.py $(ROOT)/dump/76_dev-1B-c --nprobe 32 --start_top_k 100 --top_k 10 \
-	--index_name 262144_flat_SQ8 \
-	--sparse \
-	--cuda \
-	--sparse_type p \
-	--port 8101 \
-
 1B_pred_dp_128:
 	python run_pred.py \
 	$(ROOT)/data/dev-3.json $(ROOT)/dump/76_dev-1B-c \
@@ -567,18 +532,87 @@ ROOT = /home/minjoon
 	--sparse_type dp \
 	--cuda
 
-1B_pred_dp_512:
-	python run_pred.py \
-	$(ROOT)/data/dev-3.json $(ROOT)/dump/76_dev-1B-c \
-	--index_name 262144_flat_SQ8 \
-	--nprobe 512 \
-	--start_top_k 1000 \
-	--top_k 100 \
-	--step_size $(STEP_SIZE) \
-	--sparse \
-	--sparse_weight $(SPARSE_WEIGHT) \
-	--sparse_type dp \
-	--cuda
+# ############
 
-nsml_1B_add:
-	python nsml_add_to_index.py --num_clusters 1048576 --num_cpus 4 --num_gpus 20 --mem_size 40  --hnsw --cuda
+ROOT = /home/minjoon
+LOCAL_DUMP_DIR = dump/76_dev-1B-c
+DUMP_DIR = $(ROOT)/$(LOCAL_DUMP_DIR)
+LOCAL_DATA_PATH = data/dev-3.json
+DATA_PATH = $(PIQA_NFS)/$(LOCAL_DATA_PATH)
+PARA =
+SPARSE = --sparse
+NUM_CLUSTERS = 1048576
+HNSW = --hnsw
+QUANT_TYPE = hnsw
+NPROBE = 256
+START_TOP_K = 1000
+TOP_K = 10
+STEP_SIZE = 1
+SPARSE_WEIGHT = 0.1
+SPARSE_TYPE = dp
+FINE_QUANT = SQ8
+CUDA = --cuda
+REMOVE_RATIO = 0.03
+INDEX_NAME = $(NUM_CLUSTERS)_$(QUANT_TYPE)_$(FINE_QUANT)
+PRED_NAME = $(SPARSE_TYPE)_$(SPARSE_WEIGHT)_$(START_TOP_K)_$(TOP_K)_$(NPROBE)
+
+# Once the phrase dump is ready:
+
+coarse:
+	python run_index.py $(DUMP_DIR) coarse $(PARA) --num_clusters $(NUM_CLUSTERS) $(HNSW) $(CUDA)
+
+fine:
+	python run_index.py $(DUMP_DIR) fine $(PARA) --num_clusters $(NUM_CLUSTERS) $(HNSW) $(CUDA) --doc_sample_ratio 0.05 --vec_sample_ratio 0.05
+
+
+nsml_add:
+	python nsml_add_to_index.py --num_clusters $(NUM_CLUSTERS) --num_cpus 4 --num_gpus 20 --mem_size 40  $(HNSW) $(CUDA)
+
+
+# routines
+# remove: only if looping (second time)
+remove:
+	python remove_doc_id.py \
+	$(DUMP_DIR)/$(INDEX_NAME)/index $(DUMP_DIR)/predictions/counter.json \
+	--ratio $(REMOVE_RATIO) \
+
+merge:
+	python run_index.py \
+	$(DUMP_DIR) merge \
+	--fs local \
+	--num_clusters $(NUM_CLUSTERS) \
+	--replace \
+	$(HNSW)
+
+pred:
+	python run_pred.py \
+	$(ROOT)/data/dev-3.json $(DUMP_DIR) \
+	--index_name $(INDEX_NAME) \
+	--nprobe $(NPROBE) \
+	--start_top_k $(START_TOP_K) \
+	--top_k $(TOP_K) \
+	--step_size $(STEP_SIZE) \
+	$(SPARSE) \
+	--sparse_weight $(SPARSE_WEIGHT) \
+	--sparse_type $(SPARSE_TYPE)
+
+
+eval:
+	python evaluate_recall.py \
+	$(ROOT)/data/dev-3.json $(DUMP_DIR)/predictions/od_$(INDEX_NAME)_$(PRED_NAME).json \
+	--scores_dir $(DUMP_DIR)/predictions/scores \
+	--do_f1
+
+loop:
+	make remove merge pred eval
+
+
+# When the index is ready, host demo
+demo:
+	python run_demo.py $(DUMP_DIR) --nprobe $(NPROBE) --start_top_k $(START_TOP_K) --top_k $(TOP_K) \
+	--index_name $(NUM_CLUSTERS)_$(QUANT_TYPE)_$(FINE_QUANT) \
+	$(SPARSE) \
+	$(CUDA) \
+	--sparse_type $(SPARSE_TYPE) \
+	--port 5900 \
+

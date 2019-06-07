@@ -212,7 +212,7 @@ class MIPSSparse(MIPS):
                 out = np.array([each[0] for each in out])
                 start_scores += out
             """
-            start_scores += get_sparse_scores([doc_idxs, None, None])
+            start_scores += get_sparse_scores([doc_idxs, None, start_idxs])
             print('doc score compute: %.3f' % (time() - t))
 
             rerank_scores = np.reshape(start_scores, [-1, start_top_k])
