@@ -4,6 +4,8 @@ from multiprocessing.pool import ThreadPool
 import scipy
 from time import time
 
+from tqdm import tqdm
+
 from mips import MIPS, int8_to_float, adjust
 from scipy.sparse import vstack
 
@@ -82,7 +84,7 @@ def sparse_slice_ip(q_mat, c_mat, idxs):
 
 class MIPSSparse(MIPS):
     def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para=False,
-                 tfidf_dump_dir=None, sparse_weight=1e-1, ranker=None, doc_mat=None, sparse_type=None, cuda=False):
+                 tfidf_dump_dir=None, sparse_weight=1e-1, text2spvec=None, doc_mat=None, sparse_type=None, cuda=False):
         super(MIPSSparse, self).__init__(phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para,
                                          cuda=cuda)
         assert os.path.isdir(tfidf_dump_dir)
@@ -93,10 +95,29 @@ class MIPSSparse(MIPS):
         self.tfidf_dumps = [h5py.File(path, 'r') for path in self.tfidf_dump_paths]
         assert dump_ranges == self.dump_ranges
         self.sparse_weight = sparse_weight
-        self.ranker = ranker
+        if text2spvec is None:
+            text2spvec = dummy_text2spvec
+        self.text2spvec = text2spvec
+        if doc_mat is None:
+            doc_mat = get_dummy_doc_mat()
         self.doc_mat = doc_mat
         self.hash_size = self.doc_mat.shape[1]
         self.sparse_type = sparse_type
+        self.num_docs_list = []
+
+    def load_tfidf(self):
+        new_tfidf_dumps = []
+        for tfidf_dump_path in tqdm(self.tfidf_dump_paths, desc='load tfidf'):
+            with h5py.File(tfidf_dump_path, 'r', driver='core', backing_store=False) as tfidf_dump:
+                new_tfidf_dump = {}
+                for doc_key, doc_val in tfidf_dump.items():
+                    new_tfidf_dump[doc_key] = {}
+                    for para_key, para_val in doc_val.items():
+                        new_tfidf_dump[doc_key][para_key] = {}
+                        for key, val in para_val.items():
+                            new_tfidf_dump[doc_key][para_key][key] = val[:]
+                new_tfidf_dumps.append(new_tfidf_dump)
+        self.tfidf_dumps = new_tfidf_dumps
 
     def get_tfidf_group(self, doc_idx):
         if len(self.tfidf_dumps) == 1:
@@ -124,17 +145,30 @@ class MIPSSparse(MIPS):
         par_scores = np.squeeze((par_spvecs * q_spvecs.T).toarray())
         return par_scores
 
-    def get_para_scores(self, q_spvecs, doc_idxs, para_idxs):
+    def get_para_scores(self, q_spvecs, doc_idxs, para_idxs=None, start_idxs=None):
+        if para_idxs is None:
+            if self.para:
+                groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
+                groups = [group[str(para_idx)] for group, para_idx in zip(groups, para_idxs)]
+            else:
+                if 'p' in self.sparse_type:
+                    groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
+                    doc_bounds = [[m.start() for m in re.finditer('\[PAR\]', group.attrs['context'])] for group in
+                                  groups]
+                    doc_starts = [group['word2char_start'][start_idx].item() for group, start_idx in
+                                  zip(groups, start_idxs)]
+                    para_idxs = [sum([1 if start > bound else 0 for bound in par_bound])
+                                 for par_bound, start in zip(doc_bounds, doc_starts)]
         tfidf_groups = [self.get_tfidf_group(doc_idx) for doc_idx in doc_idxs]
         tfidf_groups = [group[str(para_idx)] for group, para_idx in zip(tfidf_groups, para_idxs)]
         data_list = [data['vals'][:] for data in tfidf_groups]
         idxs_list = [data['idxs'][:] for data in tfidf_groups]
-        t0 = time()
         par_scores = sparse_slice_ip_from_raw(q_spvecs, data_list, idxs_list)
         return par_scores
 
     def search_start(self, query_start, doc_idxs=None, para_idxs=None,
                      start_top_k=100, out_top_k=5, nprobe=16, q_texts=None):
+        mid_top_k = 100
         # doc_idxs = [Q], para_idxs = [Q]
         assert self.start_index is not None
         query_start = query_start.astype(np.float32)
@@ -146,7 +180,7 @@ class MIPSSparse(MIPS):
                                           query_start], axis=1)
 
             if not len(self.sparse_type) == 0:
-                q_spvecs = vstack([self.ranker.text2spvec(q) for q in q_texts])
+                q_spvecs = vstack([self.text2spvec(q) for q in q_texts])
 
             if self.num_dummy_zeros > 0:
                 query_start = np.concatenate([query_start, np.zeros([query_start.shape[0], self.num_dummy_zeros],
@@ -160,43 +194,19 @@ class MIPSSparse(MIPS):
 
             doc_idxs, para_idxs, start_idxs = self.get_idxs(I)
             print('get idxs:', time() - t)
-            print('unique # docs: %d' % len(set(doc_idxs.flatten().tolist())))
+            num_docs = len(set(doc_idxs.flatten().tolist()))
+            self.num_docs_list.append(num_docs)
+            print('unique # docs: %d' % num_docs)
+            print('avg unique # docs: %.2f' % (sum(self.num_docs_list) / len(self.num_docs_list)))
 
             # Rerank based on sparse + dense (start)
             doc_idxs = np.reshape(doc_idxs, [-1])
             if self.para:
                 para_idxs = np.reshape(para_idxs, [-1])
             start_idxs = np.reshape(start_idxs, [-1])
+            start_scores = np.reshape(start_scores, [-1])
             # with ThreadPool(processes=8) as pool:
             #     groups = pool.map(self.get_doc_group, doc_idxs)
-
-            def get_sparse_scores(input_):
-                doc_idxs_, para_idxs_, start_idxs_ = input_
-
-                if self.para:
-                    groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs_]
-                    groups = [group[str(para_idx)] for group, para_idx in zip(groups, para_idxs_)]
-                else:
-                    if 'p' in self.sparse_type:
-                        groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs_]
-                        doc_bounds = [[m.start() for m in re.finditer('\[PAR\]', group.attrs['context'])] for group in
-                                      groups]
-                        doc_starts = [group['word2char_start'][start_idx].item() for group, start_idx in
-                                      zip(groups, start_idxs_)]
-                        para_idxs_ = [sum([1 if start > bound else 0 for bound in par_bound])
-                                      for par_bound, start in zip(doc_bounds, doc_starts)]
-
-                out = 0
-                # Get doc vec
-                if 'd' in self.sparse_type:
-                    doc_scores = self.get_doc_scores(q_spvecs, doc_idxs_)
-                    out += doc_scores * self.sparse_weight
-
-                # Get par vec
-                if 'p' in self.sparse_type:
-                    par_scores = self.get_para_scores(q_spvecs, doc_idxs_, para_idxs_)
-                    out += par_scores * self.sparse_weight
-                return out
 
             """
             doc_idxs_list = [doc_idxs[i:i+1] for i in range(len(doc_idxs))]
@@ -212,7 +222,8 @@ class MIPSSparse(MIPS):
                 out = np.array([each[0] for each in out])
                 start_scores += out
             """
-            start_scores += get_sparse_scores([doc_idxs, None, start_idxs])
+            start_scores += self.sparse_weight * self.get_doc_scores(q_spvecs, doc_idxs)
+            start_scores += self.sparse_weight * self.get_para_scores(q_spvecs, doc_idxs, start_idxs=start_idxs)
             print('doc score compute: %.3f' % (time() - t))
 
             rerank_scores = np.reshape(start_scores, [-1, start_top_k])
@@ -220,7 +231,6 @@ class MIPSSparse(MIPS):
                                     for scores in rerank_scores])
             new_I = np.array([each_I[idxs] for each_I, idxs in zip(I, rerank_idxs)])
             doc_idxs, para_idxs, start_idxs = self.get_idxs(new_I)
-
             start_scores = np.array([scores[idxs] for scores, idxs in zip(rerank_scores, rerank_idxs)])[:, :out_top_k]
             print('reranking:', time() - t)
 
@@ -274,3 +284,11 @@ class MIPSSparse(MIPS):
             new_out[i] = sorted(new_out[i], key=lambda each_out: -each_out['score'])
 
         return new_out
+
+
+def dummy_text2spvec(text):
+    return sp.coo_matrix(([0.0], [[0], [0]]), shape=(1, 99999999)).tocsr()
+
+
+def get_dummy_doc_mat():
+    return sp.coo_matrix(([0.0], [[0], [0]]), shape=(9999999, 99999999)).tocsr()

@@ -381,7 +381,8 @@ def run_index(args):
                     os.makedirs(args.subindex_dir)
             add_to_index(dump_paths, args.trained_index_path, args.index_path, args.idx2id_path,
                          max_norm=max_norm, para=args.para, num_dummy_zeros=args.num_dummy_zeros, cuda=args.cuda,
-                         num_docs_per_add=args.num_docs_per_add, offset=args.offset, norm_th=args.norm_th)
+                         num_docs_per_add=args.num_docs_per_add, offset=args.offset, norm_th=args.norm_th,
+                         fine_quant=args.fine_quant)
 
     if args.stage == 'merge':
         if args.replace or not os.path.exists(args.index_path):

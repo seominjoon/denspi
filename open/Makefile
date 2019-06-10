@@ -594,7 +594,8 @@ pred:
 	--step_size $(STEP_SIZE) \
 	$(SPARSE) \
 	--sparse_weight $(SPARSE_WEIGHT) \
-	--sparse_type $(SPARSE_TYPE)
+	--sparse_type $(SPARSE_TYPE) \
+	--draft
 
 
 eval:

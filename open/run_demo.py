@@ -70,7 +70,7 @@ def run_demo(args):
 
         mips = MIPSSparse(dump_dir, index_path, idx2id_path, args.max_answer_length,
                           para=args.para, tfidf_dump_dir=tfidf_dump_dir, sparse_weight=args.sparse_weight,
-                          ranker=ranker, doc_mat=doc_mat, sparse_type=args.sparse_type, cuda=args.cuda)
+                          text2spvec=ranker.text2spvec, doc_mat=doc_mat, sparse_type=args.sparse_type, cuda=args.cuda)
 
     app = Flask(__name__, static_url_path='/static')
 
