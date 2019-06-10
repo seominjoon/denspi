@@ -546,6 +546,7 @@ HNSW = --hnsw
 QUANT_TYPE = hnsw
 NPROBE = 256
 START_TOP_K = 1000
+MID_TOP_K = 100
 TOP_K = 10
 STEP_SIZE = 1
 SPARSE_WEIGHT = 0.1
@@ -590,6 +591,7 @@ pred:
 	--index_name $(INDEX_NAME) \
 	--nprobe $(NPROBE) \
 	--start_top_k $(START_TOP_K) \
+	--mid_top_k $(MID_TOP_K) \
 	--top_k $(TOP_K) \
 	--step_size $(STEP_SIZE) \
 	$(SPARSE) \
@@ -609,7 +611,8 @@ loop:
 
 # When the index is ready, host demo
 demo:
-	python run_demo.py $(DUMP_DIR) --nprobe $(NPROBE) --start_top_k $(START_TOP_K) --top_k $(TOP_K) \
+	python run_demo.py $(DUMP_DIR) --nprobe $(NPROBE) \
+	--start_top_k $(START_TOP_K) --mid_top_k $(MID_TOP_K) --top_k $(TOP_K) \
 	--index_name $(NUM_CLUSTERS)_$(QUANT_TYPE)_$(FINE_QUANT) \
 	$(SPARSE) \
 	$(CUDA) \

@@ -26,8 +26,9 @@ def get_args():
 
     # MIPS params
     parser.add_argument('--sparse_weight', default=1e-1, type=float)
-    parser.add_argument('--start_top_k', default=100, type=int)
-    parser.add_argument('--nprobe', default=64, type=int)
+    parser.add_argument('--start_top_k', default=1000, type=int)
+    parser.add_argument('--mid_top_k', default=100, type=int)
+    parser.add_argument('--nprobe', default=256, type=int)
     parser.add_argument('--sparse_type', default='dp', type=str)
 
     # stable MIPS params
@@ -143,7 +144,7 @@ def run_pred(args):
             if not args.sparse:
                 each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe)
             else:
-                each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe, 
+                each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe, mid_top_k=args.mid_top_k,
                                            start_top_k=args.start_top_k, q_texts=each_q_text)
             od_results.extend(each_results)
         if i % 10 == 0:

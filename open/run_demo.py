@@ -29,7 +29,8 @@ def get_args():
     parser.add_argument('--api_port', default=9009, type=int)
     parser.add_argument('--max_answer_length', default=20, type=int)
     parser.add_argument('--top_k', default=10, type=int)
-    parser.add_argument('--start_top_k', default=100, type=int)
+    parser.add_argument('--start_top_k', default=1000, type=int)
+    parser.add_argument('--mid_top_k', default=100, type=int)
     parser.add_argument('--nprobe', default=64, type=int)
     parser.add_argument('--para', default=False, action='store_true')
     parser.add_argument('--sparse', default=False, action='store_true')
@@ -84,7 +85,8 @@ def run_demo(args):
         (start, end, span), _ = query2emb(query, args.api_port)()
         phrase_vec = np.concatenate([start, end, span], 1)
         if args.sparse:
-            rets = mips.search(phrase_vec, top_k=top_k, nprobe=nprobe, start_top_k=args.start_top_k, q_texts=[query])
+            rets = mips.search(phrase_vec, top_k=top_k, nprobe=nprobe, start_top_k=args.start_top_k,
+                               mid_top_k=args.mid_top_k, q_texts=[query])
         else:
             rets = mips.search(phrase_vec, top_k=top_k, nprobe=nprobe)
         t1 = time()

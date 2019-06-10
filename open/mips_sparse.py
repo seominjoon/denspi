@@ -167,8 +167,7 @@ class MIPSSparse(MIPS):
         return par_scores
 
     def search_start(self, query_start, doc_idxs=None, para_idxs=None,
-                     start_top_k=100, out_top_k=5, nprobe=16, q_texts=None):
-        mid_top_k = 100
+                     start_top_k=100, mid_top_k=20, out_top_k=5, nprobe=16, q_texts=None):
         # doc_idxs = [Q], para_idxs = [Q]
         assert self.start_index is not None
         query_start = query_start.astype(np.float32)
@@ -210,11 +209,11 @@ class MIPSSparse(MIPS):
             print('doc score compute: %.3f' % (time() - t))
 
             rerank_scores = np.reshape(start_scores, [-1, start_top_k])
-            rerank_idxs = np.array([scores.argsort()[-out_top_k:][::-1]
+            rerank_idxs = np.array([scores.argsort()[-mid_top_k:][::-1]
                                     for scores in rerank_scores])
             new_I = np.array([each_I[idxs] for each_I, idxs in zip(I, rerank_idxs)])
             doc_idxs, para_idxs, start_idxs = self.get_idxs(new_I)
-            start_scores = np.array([scores[idxs] for scores, idxs in zip(rerank_scores, rerank_idxs)])[:, :out_top_k]
+            start_scores = np.array([scores[idxs] for scores, idxs in zip(rerank_scores, rerank_idxs)])[:, :mid_top_k]
             print('reranking:', time() - t)
 
             # para reranking
@@ -225,17 +224,12 @@ class MIPSSparse(MIPS):
             start_scores = np.reshape(start_scores, [-1])
             start_scores += self.sparse_weight * self.get_para_scores(q_spvecs, doc_idxs, start_idxs=start_idxs)
 
-            rerank_scores = np.reshape(start_scores, [-1, out_top_k])
+            rerank_scores = np.reshape(start_scores, [-1, mid_top_k])
             rerank_idxs = np.array([scores.argsort()[-out_top_k:][::-1]
                                     for scores in rerank_scores])
             new_I = np.array([each_I[idxs] for each_I, idxs in zip(new_I, rerank_idxs)])
             doc_idxs, para_idxs, start_idxs = self.get_idxs(new_I)
-            print('start scores:', start_scores)
-            print('rerank scores:', rerank_scores)
-            print('rerank idxs:', rerank_idxs)
-            print('dps:', doc_idxs, para_idxs, start_idxs)
             start_scores = np.array([scores[idxs] for scores, idxs in zip(rerank_scores, rerank_idxs)])[:, :out_top_k]
-            print('start scores:', start_scores)
 
         # Closed
         else:
@@ -252,14 +246,19 @@ class MIPSSparse(MIPS):
         return start_scores, doc_idxs, para_idxs, start_idxs
 
     # Just added q_sparse / q_input_ids to pass to search_phrase
-    def search(self, query, top_k=5, nprobe=64, doc_idxs=None, para_idxs=None, start_top_k=100, q_texts=None):
+    def search(self, query, top_k=10, nprobe=256, doc_idxs=None, para_idxs=None, start_top_k=1000, mid_top_k=100,
+               q_texts=None):
         num_queries = query.shape[0]
         bs = int((query.shape[1] - 1) / 2)
         query_start = query[:, :bs]
         t = time()
-        start_scores, doc_idxs, para_idxs, start_idxs = self.search_start(query_start, start_top_k=start_top_k,
-                                                                          out_top_k=top_k, nprobe=nprobe,
-                                                                          doc_idxs=doc_idxs, para_idxs=para_idxs,
+        start_scores, doc_idxs, para_idxs, start_idxs = self.search_start(query_start,
+                                                                          start_top_k=start_top_k,
+                                                                          mid_top_k=mid_top_k,
+                                                                          out_top_k=top_k,
+                                                                          nprobe=nprobe,
+                                                                          doc_idxs=doc_idxs,
+                                                                          para_idxs=para_idxs,
                                                                           q_texts=q_texts)
         tss = time() - t
         print('1000 to 10:', tss)
