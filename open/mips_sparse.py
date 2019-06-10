@@ -205,25 +205,8 @@ class MIPSSparse(MIPS):
                 para_idxs = np.reshape(para_idxs, [-1])
             start_idxs = np.reshape(start_idxs, [-1])
             start_scores = np.reshape(start_scores, [-1])
-            # with ThreadPool(processes=8) as pool:
-            #     groups = pool.map(self.get_doc_group, doc_idxs)
 
-            """
-            doc_idxs_list = [doc_idxs[i:i+1] for i in range(len(doc_idxs))]
-            if self.para:
-                para_idxs_list = [para_idxs[i:i+1] for i in range(len(para_idxs))]
-            else:
-                para_idxs_list = [None for _ in doc_idxs]
-            start_idxs_list = [start_idxs[i:i+1] for i in range(len(start_idxs))]
-            input__ = zip(doc_idxs_list, para_idxs_list, start_idxs_list)
-
-            with ThreadPool(processes=16) as pool:
-                out = pool.map(get_sparse_scores, input__)
-                out = np.array([each[0] for each in out])
-                start_scores += out
-            """
             start_scores += self.sparse_weight * self.get_doc_scores(q_spvecs, doc_idxs)
-            start_scores += self.sparse_weight * self.get_para_scores(q_spvecs, doc_idxs, start_idxs=start_idxs)
             print('doc score compute: %.3f' % (time() - t))
 
             rerank_scores = np.reshape(start_scores, [-1, start_top_k])
@@ -233,6 +216,26 @@ class MIPSSparse(MIPS):
             doc_idxs, para_idxs, start_idxs = self.get_idxs(new_I)
             start_scores = np.array([scores[idxs] for scores, idxs in zip(rerank_scores, rerank_idxs)])[:, :out_top_k]
             print('reranking:', time() - t)
+
+            # para reranking
+            doc_idxs = np.reshape(doc_idxs, [-1])
+            if self.para:
+                para_idxs = np.reshape(para_idxs, [-1])
+            start_idxs = np.reshape(start_idxs, [-1])
+            start_scores = np.reshape(start_scores, [-1])
+            start_scores += self.sparse_weight * self.get_para_scores(q_spvecs, doc_idxs, start_idxs=start_idxs)
+
+            rerank_scores = np.reshape(start_scores, [-1, out_top_k])
+            rerank_idxs = np.array([scores.argsort()[-out_top_k:][::-1]
+                                    for scores in rerank_scores])
+            new_I = np.array([each_I[idxs] for each_I, idxs in zip(new_I, rerank_idxs)])
+            doc_idxs, para_idxs, start_idxs = self.get_idxs(new_I)
+            print('start scores:', start_scores)
+            print('rerank scores:', rerank_scores)
+            print('rerank idxs:', rerank_idxs)
+            print('dps:', doc_idxs, para_idxs, start_idxs)
+            start_scores = np.array([scores[idxs] for scores, idxs in zip(rerank_scores, rerank_idxs)])[:, :out_top_k]
+            print('start scores:', start_scores)
 
         # Closed
         else:
