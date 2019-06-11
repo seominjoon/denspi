@@ -42,6 +42,8 @@ def get_args():
     parser.add_argument('--fs', default='local')
     parser.add_argument('--num_dummy_zeros', default=0, type=int)
     parser.add_argument('--cuda', default=False, action='store_true')
+
+    parser.add_argument('--filter', default=False, action='store_true')
     args = parser.parse_args()
 
     if args.fs == 'nfs':
@@ -145,7 +147,7 @@ def run_pred(args):
                 each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe)
             else:
                 each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe, mid_top_k=args.mid_top_k,
-                                           start_top_k=args.start_top_k, q_texts=each_q_text)
+                                           start_top_k=args.start_top_k, q_texts=each_q_text, filter_=args.filter)
             od_results.extend(each_results)
         if i % 10 == 0:
             print('%d/%d' % (i+1, len(is_)))

@@ -6,7 +6,7 @@ from time import time
 
 from tqdm import tqdm
 
-from mips import MIPS, int8_to_float, adjust
+from mips import MIPS, int8_to_float, adjust, filter_results
 from scipy.sparse import vstack
 
 import scipy.sparse as sp
@@ -247,7 +247,7 @@ class MIPSSparse(MIPS):
 
     # Just added q_sparse / q_input_ids to pass to search_phrase
     def search(self, query, top_k=10, nprobe=256, doc_idxs=None, para_idxs=None, start_top_k=1000, mid_top_k=100,
-               q_texts=None):
+               q_texts=None, filter_=False):
         num_queries = query.shape[0]
         bs = int((query.shape[1] - 1) / 2)
         query_start = query[:, :bs]
@@ -284,6 +284,9 @@ class MIPSSparse(MIPS):
             new_out[idx].append(each_out)
         for i in range(len(new_out)):
             new_out[i] = sorted(new_out[i], key=lambda each_out: -each_out['score'])
+
+        if filter_:
+            new_out = [filter_results(results) for results in new_out]
 
         return new_out
 

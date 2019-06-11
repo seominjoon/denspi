@@ -42,6 +42,8 @@ def get_args():
     parser.add_argument('--sparse_weight', default=1e-1, type=float)
     parser.add_argument('--sparse_type', default='dp', type=str)
     parser.add_argument('--cuda', default=False, action='store_true')
+
+    parser.add_argument('--filter', default=False, action='store_true')
     args = parser.parse_args()
     return args
 
@@ -86,7 +88,7 @@ def run_demo(args):
         phrase_vec = np.concatenate([start, end, span], 1)
         if args.sparse:
             rets = mips.search(phrase_vec, top_k=top_k, nprobe=nprobe, start_top_k=args.start_top_k,
-                               mid_top_k=args.mid_top_k, q_texts=[query])
+                               mid_top_k=args.mid_top_k, q_texts=[query], filter_=args.filter)
         else:
             rets = mips.search(phrase_vec, top_k=top_k, nprobe=nprobe)
         t1 = time()

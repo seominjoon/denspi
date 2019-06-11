@@ -556,6 +556,7 @@ CUDA = --cuda
 REMOVE_RATIO = 0.03
 INDEX_NAME = $(NUM_CLUSTERS)_$(QUANT_TYPE)_$(FINE_QUANT)
 PRED_NAME = $(SPARSE_TYPE)_$(SPARSE_WEIGHT)_$(START_TOP_K)_$(TOP_K)_$(NPROBE)
+FILTER = --filter
 
 # Once the phrase dump is ready:
 
@@ -596,7 +597,8 @@ pred:
 	--step_size $(STEP_SIZE) \
 	$(SPARSE) \
 	--sparse_weight $(SPARSE_WEIGHT) \
-	--sparse_type $(SPARSE_TYPE)
+	--sparse_type $(SPARSE_TYPE) \
+	$(FILTER)
 
 
 eval:
@@ -617,5 +619,6 @@ demo:
 	$(SPARSE) \
 	$(CUDA) \
 	--sparse_type $(SPARSE_TYPE) \
-	--port 5900 \
+	--port 8100 \
+	$(FILTER)
 

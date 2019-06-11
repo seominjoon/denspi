@@ -2,7 +2,7 @@ import argparse
 import json
 import os
 import random
-from collections import namedtuple
+from collections import namedtuple, Counter
 from time import time
 
 import h5py
@@ -33,11 +33,16 @@ def overlap(t1, t2, a1, a2, b1, b2):
     return True
 
 
+def filter_results(results):
+    return [result for result in results if Counter(result['context'])['?'] <= 0]
+
+
 class MIPS(object):
     def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para=False,
                  num_dummy_zeros=0, cuda=False):
         if os.path.isdir(phrase_dump_dir):
-            self.phrase_dump_paths = sorted([os.path.join(phrase_dump_dir, name) for name in os.listdir(phrase_dump_dir) if 'hdf5' in name])
+            self.phrase_dump_paths = sorted(
+                [os.path.join(phrase_dump_dir, name) for name in os.listdir(phrase_dump_dir) if 'hdf5' in name])
             dump_names = [os.path.splitext(os.path.basename(path))[0] for path in self.phrase_dump_paths]
             self.dump_ranges = [list(map(int, name.split('-'))) for name in dump_names]
         else:
@@ -71,16 +76,17 @@ class MIPS(object):
                 idx_f[key] = idx_f_cur
             return idx_f
 
-
-
     def get_idxs(self, I):
         if self.has_offset:
             offsets = (I / 1e8).astype(np.int64) * int(1e8)
             idxs = I % int(1e8)
-            doc = np.array([[self.idx_f[str(offset)]['doc'][idx] for offset, idx in zip(oo, ii)] for oo, ii in zip(offsets, idxs)])
-            word = np.array([[self.idx_f[str(offset)]['word'][idx] for offset, idx in zip(oo, ii)] for oo, ii in zip(offsets, idxs)])
+            doc = np.array(
+                [[self.idx_f[str(offset)]['doc'][idx] for offset, idx in zip(oo, ii)] for oo, ii in zip(offsets, idxs)])
+            word = np.array([[self.idx_f[str(offset)]['word'][idx] for offset, idx in zip(oo, ii)] for oo, ii in
+                             zip(offsets, idxs)])
             if self.para:
-                para = np.array([[self.idx_f[str(offset)]['para'][idx] for offset, idx in zip(oo, ii)] for oo, ii in zip(offsets, idxs)])
+                para = np.array([[self.idx_f[str(offset)]['para'][idx] for offset, idx in zip(oo, ii)] for oo, ii in
+                                 zip(offsets, idxs)])
             else:
                 para = None
         else:
@@ -208,7 +214,7 @@ class MIPS(object):
 
         return out
 
-    def search(self, query, top_k=5, nprobe=64, doc_idxs=None, para_idxs=None):
+    def search(self, query, top_k=5, nprobe=64, doc_idxs=None, para_idxs=None, filter_=False):
         num_queries = query.shape[0]
         bs = int((query.shape[1] - 1) / 2)
         query_start = query[:, :bs]
