@@ -544,7 +544,7 @@ SPARSE = --sparse
 NUM_CLUSTERS = 1048576
 HNSW = --hnsw
 QUANT_TYPE = hnsw
-NPROBE = 256
+NPROBE = 64
 START_TOP_K = 1000
 MID_TOP_K = 100
 TOP_K = 10
@@ -557,6 +557,8 @@ REMOVE_RATIO = 0.03
 INDEX_NAME = $(NUM_CLUSTERS)_$(QUANT_TYPE)_$(FINE_QUANT)
 PRED_NAME = $(SPARSE_TYPE)_$(SPARSE_WEIGHT)_$(START_TOP_K)_$(TOP_K)_$(NPROBE)
 FILTER = --filter
+DOC_TOP_K = 5
+SEARCH_STRATEGY = dense_first
 
 # Once the phrase dump is ready:
 
@@ -598,7 +600,9 @@ pred:
 	$(SPARSE) \
 	--sparse_weight $(SPARSE_WEIGHT) \
 	--sparse_type $(SPARSE_TYPE) \
-	$(FILTER)
+	$(FILTER) \
+	--search_strategy $(SEARCH_STRATEGY) \
+	--doc_top_k $(DOC_TOP_K)
 
 
 eval:

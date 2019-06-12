@@ -44,6 +44,8 @@ def get_args():
     parser.add_argument('--cuda', default=False, action='store_true')
 
     parser.add_argument('--filter', default=False, action='store_true')
+    parser.add_argument('--search_strategy', default='dense_first')
+    parser.add_argument('--doc_top_k', default=5, type=int)
     args = parser.parse_args()
 
     if args.fs == 'nfs':
@@ -106,22 +108,10 @@ def run_pred(args):
         mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para,
                     num_dummy_zeros=args.num_dummy_zeros, cuda=args.cuda)
     else:
-        from drqa import retriever
-        if args.draft:
-            text2spvec, doc_mat = None, None
-        else:
-            ranker = retriever.get_class('tfidf')(
-                args.ranker_path,
-                strict=False
-            )
-            text2spvec = ranker.text2spvec
-            print('Ranker loaded from {}'.format(args.ranker_path))
-            doc_mat = sp.load_npz(args.doc_mat_path)
-            print('Doc TFIDF matrix loaded {}'.format(doc_mat.shape))
-
-        mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length,
+        mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.ranker_path,
+                          args.max_answer_length,
                           para=args.para, tfidf_dump_dir=args.tfidf_dump_dir, sparse_weight=args.sparse_weight,
-                          text2spvec=text2spvec, doc_mat=doc_mat, sparse_type=args.sparse_type, cuda=args.cuda)
+                          sparse_type=args.sparse_type, cuda=args.cuda)
 
     # recall at k
     cd_results = []
@@ -147,7 +137,9 @@ def run_pred(args):
                 each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe)
             else:
                 each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe, mid_top_k=args.mid_top_k,
-                                           start_top_k=args.start_top_k, q_texts=each_q_text, filter_=args.filter)
+                                           start_top_k=args.start_top_k, q_texts=each_q_text, filter_=args.filter,
+                                           search_strategy=args.search_strategy,
+                                           doc_top_k=args.doc_top_k)
             od_results.extend(each_results)
         if i % 10 == 0:
             print('%d/%d' % (i+1, len(is_)))
@@ -170,6 +162,13 @@ def run_pred(args):
     counter = Counter(result['doc_idx'] for each in od_results for result in each)
     with open(args.counter_path, 'w') as fp:
         json.dump(counter, fp)
+
+
+def load_sparse_csr(filename):
+    loader = np.load(filename)
+    matrix = sp.csr_matrix((loader['data'], loader['indices'],
+                            loader['indptr']), shape=loader['shape'])
+    return matrix, loader['metadata'].item(0) if 'metadata' in loader else None
 
 
 def main():

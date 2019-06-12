@@ -108,6 +108,8 @@ class MIPS(object):
             return self.phrase_dumps[0][str(doc_idx)]
         for dump_range, dump in zip(self.dump_ranges, self.phrase_dumps):
             if dump_range[0] * 1000 <= int(doc_idx) < dump_range[1] * 1000:
+                if str(doc_idx) not in dump:
+                    raise ValueError('%d not found in dump list' % int(doc_idx))
                 return dump[str(doc_idx)]
         raise ValueError('%d not found in dump list' % int(doc_idx))
 
