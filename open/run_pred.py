@@ -63,6 +63,7 @@ def get_args():
     args.index_path = os.path.join(args.index_dir, args.index_path)
     args.question_dump_path = os.path.join(args.dump_dir, args.question_dump_path)
     args.idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
+    args.max_norm_path = os.path.join(args.index_dir, 'max_norm.json')
 
     args.pred_dir = os.path.join(args.dump_dir, args.pred_dir)
     out_name = '%s_%s_%.1f_%d_%d_%d' % (args.index_name, args.sparse_type, args.sparse_weight, args.start_top_k,
@@ -111,7 +112,7 @@ def run_pred(args):
         mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.ranker_path,
                           args.max_answer_length,
                           para=args.para, tfidf_dump_dir=args.tfidf_dump_dir, sparse_weight=args.sparse_weight,
-                          sparse_type=args.sparse_type, cuda=args.cuda)
+                          sparse_type=args.sparse_type, cuda=args.cuda, max_norm_path=args.max_norm_path)
 
     # recall at k
     cd_results = []
@@ -141,8 +142,6 @@ def run_pred(args):
                                            search_strategy=args.search_strategy,
                                            doc_top_k=args.doc_top_k)
             od_results.extend(each_results)
-        if i % 10 == 0:
-            print('%d/%d' % (i+1, len(is_)))
 
     top_k_answers = {query_id: [result['answer'] for result in each_results]
                      for (_, _, query_id, _), each_results in zip(pairs, od_results)}

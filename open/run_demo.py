@@ -35,7 +35,6 @@ def get_args():
     parser.add_argument('--para', default=False, action='store_true')
     parser.add_argument('--sparse', default=False, action='store_true')
     parser.add_argument('--ranker_path', default='/home/minjoon/data/wikipedia/docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz')
-    parser.add_argument('--doc_mat_path', default='/home/minjoon/data/wikipedia/doc_tfidf.npz')
     parser.add_argument('--num_dummy_zeros', default=0, type=int)
 
     # MIPS params
@@ -62,18 +61,9 @@ def run_demo(args):
         mips = MIPS(dump_dir, index_path, idx2id_path, args.max_answer_length, para=args.para,
                     num_dummy_zeros=args.num_dummy_zeros, cuda=args.cuda)
     else:
-        from drqa import retriever
-        ranker = retriever.get_class('tfidf')(
-            args.ranker_path,
-            strict=False
-        )
-        print('Ranker loaded from {}'.format(args.ranker_path))
-        doc_mat = sp.load_npz(args.doc_mat_path)
-        print('Doc TFIDF matrix loaded {}'.format(doc_mat.shape))
-
-        mips = MIPSSparse(dump_dir, index_path, idx2id_path, args.max_answer_length,
+        mips = MIPSSparse(dump_dir, index_path, idx2id_path, args.ranker_path, args.max_answer_length,
                           para=args.para, tfidf_dump_dir=tfidf_dump_dir, sparse_weight=args.sparse_weight,
-                          text2spvec=ranker.text2spvec, doc_mat=doc_mat, sparse_type=args.sparse_type, cuda=args.cuda)
+                          sparse_type=args.sparse_type, cuda=args.cuda)
 
     app = Flask(__name__, static_url_path='/static')
 

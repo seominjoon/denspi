@@ -557,8 +557,8 @@ REMOVE_RATIO = 0.03
 INDEX_NAME = $(NUM_CLUSTERS)_$(QUANT_TYPE)_$(FINE_QUANT)
 PRED_NAME = $(SPARSE_TYPE)_$(SPARSE_WEIGHT)_$(START_TOP_K)_$(TOP_K)_$(NPROBE)
 FILTER = --filter
-DOC_TOP_K = 5
-SEARCH_STRATEGY = dense_first
+DOC_TOP_K = 10
+SEARCH_STRATEGY = hybrid
 
 # Once the phrase dump is ready:
 
@@ -626,3 +626,66 @@ demo:
 	--port 8100 \
 	$(FILTER)
 
+pred_5:
+	python run_pred.py \
+	$(ROOT)/data/dev-3.json $(DUMP_DIR) \
+	--index_name $(INDEX_NAME) \
+	--nprobe $(NPROBE) \
+	--start_top_k $(START_TOP_K) \
+	--mid_top_k $(MID_TOP_K) \
+	--top_k $(TOP_K) \
+	--step_size $(STEP_SIZE) \
+	$(SPARSE) \
+	--sparse_weight $(SPARSE_WEIGHT) \
+	--sparse_type $(SPARSE_TYPE) \
+	$(FILTER) \
+	--search_strategy $(SEARCH_STRATEGY) \
+	--doc_top_k 5
+
+pred_10:
+	python run_pred.py \
+	$(ROOT)/data/dev-3.json $(DUMP_DIR) \
+	--index_name $(INDEX_NAME) \
+	--nprobe $(NPROBE) \
+	--start_top_k $(START_TOP_K) \
+	--mid_top_k $(MID_TOP_K) \
+	--top_k $(TOP_K) \
+	--step_size $(STEP_SIZE) \
+	$(SPARSE) \
+	--sparse_weight $(SPARSE_WEIGHT) \
+	--sparse_type $(SPARSE_TYPE) \
+	$(FILTER) \
+	--search_strategy $(SEARCH_STRATEGY) \
+	--doc_top_k 10
+
+pred_30:
+	python run_pred.py \
+	$(ROOT)/data/dev-3.json $(DUMP_DIR) \
+	--index_name $(INDEX_NAME) \
+	--nprobe $(NPROBE) \
+	--start_top_k $(START_TOP_K) \
+	--mid_top_k $(MID_TOP_K) \
+	--top_k $(TOP_K) \
+	--step_size $(STEP_SIZE) \
+	$(SPARSE) \
+	--sparse_weight $(SPARSE_WEIGHT) \
+	--sparse_type $(SPARSE_TYPE) \
+	$(FILTER) \
+	--search_strategy $(SEARCH_STRATEGY) \
+	--doc_top_k 30
+
+pred_50:
+	python run_pred.py \
+	$(ROOT)/data/dev-3.json $(DUMP_DIR) \
+	--index_name $(INDEX_NAME) \
+	--nprobe $(NPROBE) \
+	--start_top_k $(START_TOP_K) \
+	--mid_top_k $(MID_TOP_K) \
+	--top_k $(TOP_K) \
+	--step_size $(STEP_SIZE) \
+	$(SPARSE) \
+	--sparse_weight $(SPARSE_WEIGHT) \
+	--sparse_type $(SPARSE_TYPE) \
+	$(FILTER) \
+	--search_strategy $(SEARCH_STRATEGY) \
+	--doc_top_k 50

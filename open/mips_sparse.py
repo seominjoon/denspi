@@ -1,3 +1,4 @@
+import json
 from collections import defaultdict
 from multiprocessing.pool import ThreadPool
 
@@ -17,28 +18,18 @@ import h5py
 import re
 
 
+def scale_l2_to_ip(l2_scores, max_norm=None, query_norm=None):
+    # sqrt(m^2 - q^2 - 2qx) -> m^2 - q^2 - 2qx -> qx - 0.5 (q^2 - m^2)
+    if max_norm is None:
+        return -0.5 * l2_scores
+    assert query_norm is not None
+    return -0.5 * (l2_scores - query_norm ** 2 - max_norm ** 2)
+
+
 def dequant(group, input_):
     if 'offset' in group.attrs:
         return int8_to_float(input_, group.attrs['offset'], group.attrs['scale'])
     return input_
-
-
-def linear_mxq(q_idx, q_val, c_idx, c_val):
-    q_dict = {}
-    for idx, val in zip(q_idx, q_val):
-        if val <= 0:
-            continue
-        if idx not in q_dict:
-            q_dict[idx] = [val, 0.0]
-        else:
-            q_dict[idx][0] += val
-
-    for idx, val in zip(c_idx, c_val):
-        if idx in q_dict:
-            q_dict[idx][1] += val
-
-    total = sum([a[0] * a[1] for a in q_dict.values()])
-    return total
 
 
 # Efficient batch inner product after slicing
@@ -61,31 +52,10 @@ def sparse_slice_ip_from_raw(q_mat, c_data_list, c_indices_list):
     return np.array(out)
 
 
-# Efficient batch inner product after slicing
-def sparse_slice_ip(q_mat, c_mat, idxs):
-    out = []
-    for q_i, c_i in enumerate(idxs):
-        c_data = c_mat.data[c_mat.indptr[c_i]:c_mat.indptr[c_i + 1]]
-        c_indices = c_mat.indices[c_mat.indptr[c_i]:c_mat.indptr[c_i + 1]]
-        c_map = {c_ii: c_d for c_ii, c_d in zip(c_indices, c_data)}
-
-        if q_mat.shape[0] == len(idxs):
-            q_data = q_mat.data[q_mat.indptr[q_i]:q_mat.indptr[q_i + 1]]
-            q_indices = q_mat.indices[q_mat.indptr[q_i]:q_mat.indptr[q_i + 1]]
-        elif q_mat.shape[0] == 1:
-            q_data = q_mat.data[q_mat.indptr[0]:q_mat.indptr[1]]
-            q_indices = q_mat.indices[q_mat.indptr[0]:q_mat.indptr[1]]
-        else:
-            raise Exception('Dimension mismatch: %d != %d' % (q_mat.shape[0], c_mat.shape[0]))
-
-        ip = sum((c_map[q_ii] * q_d if q_ii in c_map else 0.0) for q_ii, q_d in zip(q_indices, q_data))
-        out.append(ip)
-    return np.array(out)
-
-
 class MIPSSparse(MIPS):
     def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, ranker_path, max_answer_length, para=False,
-                 tfidf_dump_dir=None, sparse_weight=1e-1, sparse_type=None, cuda=False):
+                 tfidf_dump_dir=None, sparse_weight=1e-1, sparse_type=None, cuda=False,
+                 max_norm_path=None):
         super(MIPSSparse, self).__init__(phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para,
                                          cuda=cuda)
         assert os.path.isdir(tfidf_dump_dir)
@@ -100,6 +70,11 @@ class MIPSSparse(MIPS):
         # self.hash_size = self.doc_mat.shape[1]
         self.sparse_type = sparse_type
         self.num_docs_list = []
+        if max_norm_path is None:
+            self.max_norm = None
+        else:
+            with open(max_norm_path, 'r') as fp:
+                self.max_norm = json.load(fp)
 
     def load_tfidf(self):
         new_tfidf_dumps = []
@@ -123,13 +98,6 @@ class MIPSSparse(MIPS):
                 return dump[str(doc_idx)]
         raise ValueError('%d not found in dump list' % int(doc_idx))
 
-    def get_doc_scores(self, doc_idxs, q_spvecs=None, all_doc_scores=None):
-        if all_doc_scores is None:
-            scores = sparse_slice_ip(q_spvecs, self.ranker.doc_mat.T, doc_idxs)
-        else:
-            scores = all_doc_scores[doc_idxs]
-        return scores
-
     def get_para_scores(self, q_spvecs, doc_idxs, para_idxs=None, start_idxs=None):
         if para_idxs is None:
             if self.para:
@@ -151,7 +119,7 @@ class MIPSSparse(MIPS):
         par_scores = sparse_slice_ip_from_raw(q_spvecs, data_list, idxs_list)
         return par_scores
 
-    def search_dense(self, query_start, start_top_k, nprobe, q_spvecs=None, all_doc_scores=None):
+    def search_dense(self, query_start, start_top_k, nprobe, all_doc_scores):
         # Search space reduction with Faiss
         query_start = np.concatenate([np.zeros([query_start.shape[0], 1]).astype(np.float32),
                                       query_start], axis=1)
@@ -161,17 +129,18 @@ class MIPSSparse(MIPS):
         self.start_index.nprobe = nprobe
         t = time()
         start_scores, I = self.start_index.search(query_start, start_top_k)
-        start_scores *= -0.5  # rescaling for l2 -> ip
+        query_norm = np.linalg.norm(np.squeeze(query_start), ord=2)
+        start_scores = scale_l2_to_ip(start_scores, max_norm=self.max_norm, query_norm=query_norm)
         ts = time() - t
-        print('on-disk index search:', ts)
+        # print('on-disk index search:', ts)
 
         doc_idxs, para_idxs, start_idxs = self.get_idxs(I)
-        print('get idxs:', time() - t)
+        # print('get idxs:', time() - t)
 
         num_docs = len(set(doc_idxs.flatten().tolist()))
         self.num_docs_list.append(num_docs)
-        print('unique # docs: %d' % num_docs)
-        print('avg unique # docs: %.2f' % (sum(self.num_docs_list) / len(self.num_docs_list)))
+        # print('unique # docs: %d' % num_docs)
+        # print('avg unique # docs: %.2f' % (sum(self.num_docs_list) / len(self.num_docs_list)))
 
         # Rerank based on sparse + dense (start)
         doc_idxs = np.reshape(doc_idxs, [-1])
@@ -180,9 +149,7 @@ class MIPSSparse(MIPS):
         start_idxs = np.reshape(start_idxs, [-1])
         start_scores = np.reshape(start_scores, [-1])
 
-        start_scores += self.sparse_weight * self.get_doc_scores(doc_idxs,
-                                                                 q_spvecs=q_spvecs,
-                                                                 all_doc_scores=all_doc_scores)
+        start_scores += self.sparse_weight * all_doc_scores[doc_idxs]
 
         # for now, assume 1D
         doc_idxs = np.squeeze(doc_idxs)
@@ -206,6 +173,7 @@ class MIPSSparse(MIPS):
                 continue
             start = dequant(doc_group, doc_group['start'][:])
             cur_scores = np.sum(query_start * start, 1)
+            print(np.min(cur_scores), np.mean(cur_scores), np.max(cur_scores))
             for i, cur_score in enumerate(cur_scores):
                 doc_idxs.append(doc_idx)
                 start_idxs.append(i)
@@ -233,14 +201,14 @@ class MIPSSparse(MIPS):
                 (doc_idxs, para_idxs, start_idxs), start_scores = self.search_dense(query_start,
                                                                                     start_top_k,
                                                                                     nprobe,
-                                                                                    all_doc_scores=doc_scores)
+                                                                                    doc_scores)
             elif search_strategy == 'sparse_first':
                 (doc_idxs, start_idxs), start_scores = self.search_sparse(query_start, doc_scores, doc_top_k)
             elif search_strategy == 'hybrid':
                 (doc_idxs, para_idxs, start_idxs), start_scores = self.search_dense(query_start,
                                                                                     start_top_k,
                                                                                     nprobe,
-                                                                                    q_spvecs=q_spvecs)
+                                                                                    doc_scores)
                 (doc_idxs_, start_idxs_), start_scores_ = self.search_sparse(query_start, doc_scores, doc_top_k)
                 doc_idxs = np.concatenate([doc_idxs, doc_idxs_], -1)
                 start_idxs = np.concatenate([start_idxs, start_idxs_], -1)
@@ -286,7 +254,6 @@ class MIPSSparse(MIPS):
             para_idxs = np.tile(np.expand_dims(para_idxs, -1), [1, out_top_k])
         return start_scores, doc_idxs, para_idxs, start_idxs
 
-    # Just added q_sparse / q_input_ids to pass to search_phrase
     def search(self, query, top_k=10, nprobe=256, doc_idxs=None, para_idxs=None, start_top_k=1000, mid_top_k=100,
                q_texts=None, filter_=False, search_strategy='dense_first', doc_top_k=5):
         num_queries = query.shape[0]
