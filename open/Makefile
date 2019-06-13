@@ -623,37 +623,8 @@ demo:
 	$(SPARSE) \
 	$(CUDA) \
 	--sparse_type $(SPARSE_TYPE) \
+	$(FILTER) \
+	--search_strategy $(SEARCH_STRATEGY) \
+	--doc_top_k $(DOC_TOP_K) \
 	--port 8100 \
-	$(FILTER)
 
-pred_1:
-	python run_pred.py \
-	$(ROOT)/data/dev-3.json $(DUMP_DIR) \
-	--index_name $(INDEX_NAME) \
-	--nprobe $(NPROBE) \
-	--start_top_k $(START_TOP_K) \
-	--mid_top_k $(MID_TOP_K) \
-	--top_k $(TOP_K) \
-	--step_size $(STEP_SIZE) \
-	$(SPARSE) \
-	--sparse_weight 0.01 \
-	--sparse_type $(SPARSE_TYPE) \
-	$(FILTER) \
-	--search_strategy $(SEARCH_STRATEGY) \
-	--doc_top_k $(DOC_TOP_K)
-
-pred_5:
-	python run_pred.py \
-	$(ROOT)/data/dev-3.json $(DUMP_DIR) \
-	--index_name $(INDEX_NAME) \
-	--nprobe $(NPROBE) \
-	--start_top_k $(START_TOP_K) \
-	--mid_top_k $(MID_TOP_K) \
-	--top_k $(TOP_K) \
-	--step_size $(STEP_SIZE) \
-	$(SPARSE) \
-	--sparse_weight 0.05 \
-	--sparse_type $(SPARSE_TYPE) \
-	$(FILTER) \
-	--search_strategy $(SEARCH_STRATEGY) \
-	--doc_top_k $(DOC_TOP_K)

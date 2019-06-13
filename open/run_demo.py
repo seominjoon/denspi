@@ -43,6 +43,8 @@ def get_args():
     parser.add_argument('--cuda', default=False, action='store_true')
 
     parser.add_argument('--filter', default=False, action='store_true')
+    parser.add_argument('--search_strategy', default='dense_first')
+    parser.add_argument('--doc_top_k', default=5, type=int)
     args = parser.parse_args()
     return args
 
@@ -56,6 +58,7 @@ def run_demo(args):
     index_path = os.path.join(index_dir, args.index_path)
     idx2id_path = os.path.join(index_dir, args.idx2id_path)
     tfidf_dump_dir = os.path.join(args.dump_dir, 'tfidf')
+    max_norm_path = os.path.join(index_dir, 'max_norm.json')
 
     if not args.sparse:
         mips = MIPS(dump_dir, index_path, idx2id_path, args.max_answer_length, para=args.para,
@@ -63,7 +66,7 @@ def run_demo(args):
     else:
         mips = MIPSSparse(dump_dir, index_path, idx2id_path, args.ranker_path, args.max_answer_length,
                           para=args.para, tfidf_dump_dir=tfidf_dump_dir, sparse_weight=args.sparse_weight,
-                          sparse_type=args.sparse_type, cuda=args.cuda)
+                          sparse_type=args.sparse_type, cuda=args.cuda, max_norm_path=max_norm_path)
 
     app = Flask(__name__, static_url_path='/static')
 
@@ -72,13 +75,14 @@ def run_demo(args):
 
     emb_session = FuturesSession()
 
-    def search(query, top_k, nprobe=64):
+    def search(query, top_k, nprobe=64, search_strategy='dense_first', doc_top_k=5):
         t0 = time()
         (start, end, span), _ = query2emb(query, args.api_port)()
         phrase_vec = np.concatenate([start, end, span], 1)
         if args.sparse:
             rets = mips.search(phrase_vec, top_k=top_k, nprobe=nprobe, start_top_k=args.start_top_k,
-                               mid_top_k=args.mid_top_k, q_texts=[query], filter_=args.filter)
+                               mid_top_k=args.mid_top_k, q_texts=[query], filter_=args.filter,
+                               search_strategy=search_strategy, doc_top_k=doc_top_k)
         else:
             rets = mips.search(phrase_vec, top_k=top_k, nprobe=nprobe)
         t1 = time()
@@ -108,7 +112,7 @@ def run_demo(args):
     @app.route('/api', methods=['GET'])
     def api():
         query = request.args['query']
-        out = search(query, args.top_k, args.nprobe)
+        out = search(query, args.top_k, args.nprobe, search_strategy=args.search_strategy, doc_top_k=args.doc_top_k)
         return jsonify(out)
 
     print('Starting server at %d' % args.port)
