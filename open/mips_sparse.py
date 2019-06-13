@@ -1,25 +1,21 @@
 import json
-from collections import defaultdict
-from multiprocessing.pool import ThreadPool
-
-import scipy
 from time import time
 
-from drqa.retriever import TfidfDocRanker
-from tqdm import tqdm
-
-from mips import MIPS, int8_to_float, adjust, filter_results
-from scipy.sparse import vstack
-
-import scipy.sparse as sp
 import numpy as np
 import os
 import h5py
 import re
+from drqa.retriever import TfidfDocRanker
+
+from mips import MIPS, int8_to_float, filter_results
+from scipy.sparse import vstack
 
 
 def scale_l2_to_ip(l2_scores, max_norm=None, query_norm=None):
-    # sqrt(m^2 - q^2 - 2qx) -> m^2 - q^2 - 2qx -> qx - 0.5 (q^2 - m^2)
+    """
+    sqrt(m^2 + q^2 - 2qx) -> m^2 + q^2 - 2qx -> qx - 0.5 (q^2 + m^2)
+    Note that faiss index returns squared euclidean distance, so no need to square it again.
+    """
     if max_norm is None:
         return -0.5 * l2_scores
     assert query_norm is not None
@@ -32,8 +28,10 @@ def dequant(group, input_):
     return input_
 
 
-# Efficient batch inner product after slicing
 def sparse_slice_ip_from_raw(q_mat, c_data_list, c_indices_list):
+    """
+    Efficient batch inner product after slicing
+    """
     out = []
     for q_i, (c_data, c_indices) in enumerate(zip(c_data_list, c_indices_list)):
         c_map = {c_ii: c_d for c_ii, c_d in zip(c_indices, c_data)}
@@ -66,8 +64,8 @@ class MIPSSparse(MIPS):
         self.tfidf_dumps = [h5py.File(path, 'r') for path in self.tfidf_dump_paths]
         assert dump_ranges == self.dump_ranges
         self.sparse_weight = sparse_weight
+        print('reading tfidf ranker at %s' % ranker_path)
         self.ranker = TfidfDocRanker(ranker_path)
-        # self.hash_size = self.doc_mat.shape[1]
         self.sparse_type = sparse_type
         self.num_docs_list = []
         if max_norm_path is None:
@@ -75,20 +73,6 @@ class MIPSSparse(MIPS):
         else:
             with open(max_norm_path, 'r') as fp:
                 self.max_norm = json.load(fp)
-
-    def load_tfidf(self):
-        new_tfidf_dumps = []
-        for tfidf_dump_path in tqdm(self.tfidf_dump_paths, desc='load tfidf'):
-            with h5py.File(tfidf_dump_path, 'r', driver='core', backing_store=False) as tfidf_dump:
-                new_tfidf_dump = {}
-                for doc_key, doc_val in tfidf_dump.items():
-                    new_tfidf_dump[doc_key] = {}
-                    for para_key, para_val in doc_val.items():
-                        new_tfidf_dump[doc_key][para_key] = {}
-                        for key, val in para_val.items():
-                            new_tfidf_dump[doc_key][para_key][key] = val[:]
-                new_tfidf_dumps.append(new_tfidf_dump)
-        self.tfidf_dumps = new_tfidf_dumps
 
     def get_tfidf_group(self, doc_idx):
         if len(self.tfidf_dumps) == 1:
@@ -173,7 +157,6 @@ class MIPSSparse(MIPS):
                 continue
             start = dequant(doc_group, doc_group['start'][:])
             cur_scores = np.sum(query_start * start, 1)
-            print(np.min(cur_scores), np.mean(cur_scores), np.max(cur_scores))
             for i, cur_score in enumerate(cur_scores):
                 doc_idxs.append(doc_idx)
                 start_idxs.append(i)
@@ -293,11 +276,3 @@ class MIPSSparse(MIPS):
             new_out = [filter_results(results) for results in new_out]
 
         return new_out
-
-
-def dummy_text2spvec(text):
-    return sp.coo_matrix(([0.0], [[0], [0]]), shape=(1, 99999999)).tocsr()
-
-
-def get_dummy_doc_mat():
-    return sp.coo_matrix(([0.0], [[0], [0]]), shape=(9999999, 99999999)).tocsr()

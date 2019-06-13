@@ -66,7 +66,7 @@ def get_args():
     args.max_norm_path = os.path.join(args.index_dir, 'max_norm.json')
 
     args.pred_dir = os.path.join(args.dump_dir, args.pred_dir)
-    out_name = '%s_%s_%.1f_%d_%d_%d' % (args.index_name, args.sparse_type, args.sparse_weight, args.start_top_k,
+    out_name = '%s_%s_%.2f_%d_%d_%d' % (args.index_name, args.sparse_type, args.sparse_weight, args.start_top_k,
                                         args.top_k, args.nprobe)
     args.od_out_path = os.path.join(args.pred_dir, 'od_%s.json' % out_name)
     args.cd_out_path = os.path.join(args.pred_dir, 'cd_%s.json' % out_name)

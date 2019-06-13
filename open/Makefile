@@ -537,19 +537,19 @@ ROOT = /home/minjoon
 ROOT = /home/minjoon
 LOCAL_DUMP_DIR = dump/76_dev-1B-c
 DUMP_DIR = $(ROOT)/$(LOCAL_DUMP_DIR)
-LOCAL_DATA_PATH = data/dev-3.json
-DATA_PATH = $(PIQA_NFS)/$(LOCAL_DATA_PATH)
+LOCAL_DATA_PATH = $(ROOT)/data/dev-3.json
+LOCAL_DATA_PATH = $(ROOT)/data/dev-v1.1.json
 PARA =
 SPARSE = --sparse
 NUM_CLUSTERS = 1048576
 HNSW = --hnsw
 QUANT_TYPE = hnsw
-NPROBE = 64
+NPROBE = 512
 START_TOP_K = 1000
 MID_TOP_K = 100
 TOP_K = 10
 STEP_SIZE = 1
-SPARSE_WEIGHT = 0.1
+SPARSE_WEIGHT = 0.05
 SPARSE_TYPE = dp
 FINE_QUANT = SQ8
 CUDA = --cuda
@@ -557,8 +557,8 @@ REMOVE_RATIO = 0.03
 INDEX_NAME = $(NUM_CLUSTERS)_$(QUANT_TYPE)_$(FINE_QUANT)
 PRED_NAME = $(SPARSE_TYPE)_$(SPARSE_WEIGHT)_$(START_TOP_K)_$(TOP_K)_$(NPROBE)
 FILTER = --filter
-DOC_TOP_K = 10
-SEARCH_STRATEGY = hybrid
+DOC_TOP_K = 5
+SEARCH_STRATEGY = dense_first
 
 # Once the phrase dump is ready:
 
@@ -590,7 +590,7 @@ merge:
 
 pred:
 	python run_pred.py \
-	$(ROOT)/data/dev-3.json $(DUMP_DIR) \
+	$(LOCAL_DATA_PATH) $(DUMP_DIR) \
 	--index_name $(INDEX_NAME) \
 	--nprobe $(NPROBE) \
 	--start_top_k $(START_TOP_K) \
@@ -607,7 +607,7 @@ pred:
 
 eval:
 	python evaluate_recall.py \
-	$(ROOT)/data/dev-3.json $(DUMP_DIR)/predictions/od_$(INDEX_NAME)_$(PRED_NAME).json \
+	$(LOCAL_DATA_PATH) $(DUMP_DIR)/predictions/od_$(INDEX_NAME)_$(PRED_NAME).json \
 	--scores_dir $(DUMP_DIR)/predictions/scores \
 	--do_f1
 
@@ -626,6 +626,22 @@ demo:
 	--port 8100 \
 	$(FILTER)
 
+pred_1:
+	python run_pred.py \
+	$(ROOT)/data/dev-3.json $(DUMP_DIR) \
+	--index_name $(INDEX_NAME) \
+	--nprobe $(NPROBE) \
+	--start_top_k $(START_TOP_K) \
+	--mid_top_k $(MID_TOP_K) \
+	--top_k $(TOP_K) \
+	--step_size $(STEP_SIZE) \
+	$(SPARSE) \
+	--sparse_weight 0.01 \
+	--sparse_type $(SPARSE_TYPE) \
+	$(FILTER) \
+	--search_strategy $(SEARCH_STRATEGY) \
+	--doc_top_k $(DOC_TOP_K)
+
 pred_5:
 	python run_pred.py \
 	$(ROOT)/data/dev-3.json $(DUMP_DIR) \
@@ -636,56 +652,8 @@ pred_5:
 	--top_k $(TOP_K) \
 	--step_size $(STEP_SIZE) \
 	$(SPARSE) \
-	--sparse_weight $(SPARSE_WEIGHT) \
+	--sparse_weight 0.05 \
 	--sparse_type $(SPARSE_TYPE) \
 	$(FILTER) \
 	--search_strategy $(SEARCH_STRATEGY) \
-	--doc_top_k 5
-
-pred_10:
-	python run_pred.py \
-	$(ROOT)/data/dev-3.json $(DUMP_DIR) \
-	--index_name $(INDEX_NAME) \
-	--nprobe $(NPROBE) \
-	--start_top_k $(START_TOP_K) \
-	--mid_top_k $(MID_TOP_K) \
-	--top_k $(TOP_K) \
-	--step_size $(STEP_SIZE) \
-	$(SPARSE) \
-	--sparse_weight $(SPARSE_WEIGHT) \
-	--sparse_type $(SPARSE_TYPE) \
-	$(FILTER) \
-	--search_strategy $(SEARCH_STRATEGY) \
-	--doc_top_k 10
-
-pred_30:
-	python run_pred.py \
-	$(ROOT)/data/dev-3.json $(DUMP_DIR) \
-	--index_name $(INDEX_NAME) \
-	--nprobe $(NPROBE) \
-	--start_top_k $(START_TOP_K) \
-	--mid_top_k $(MID_TOP_K) \
-	--top_k $(TOP_K) \
-	--step_size $(STEP_SIZE) \
-	$(SPARSE) \
-	--sparse_weight $(SPARSE_WEIGHT) \
-	--sparse_type $(SPARSE_TYPE) \
-	$(FILTER) \
-	--search_strategy $(SEARCH_STRATEGY) \
-	--doc_top_k 30
-
-pred_50:
-	python run_pred.py \
-	$(ROOT)/data/dev-3.json $(DUMP_DIR) \
-	--index_name $(INDEX_NAME) \
-	--nprobe $(NPROBE) \
-	--start_top_k $(START_TOP_K) \
-	--mid_top_k $(MID_TOP_K) \
-	--top_k $(TOP_K) \
-	--step_size $(STEP_SIZE) \
-	$(SPARSE) \
-	--sparse_weight $(SPARSE_WEIGHT) \
-	--sparse_type $(SPARSE_TYPE) \
-	$(FILTER) \
-	--search_strategy $(SEARCH_STRATEGY) \
-	--doc_top_k 50
+	--doc_top_k $(DOC_TOP_K)
