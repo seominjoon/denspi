@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <meta charset="utf-8">
-<title>DeSPI</title>
+<title>DenSPI</title>
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css">
 <link rel="stylesheet" href="files/style.css">
 <link rel="shortcut icon" href="files/pichu.png">
@@ -15,23 +15,39 @@
 <nav class="navbar navbar-expand-sm bg-dark navbar-dark">
     <a class="navbar-brand" href="">Dense-Sparse Phrase Index Demo</a>
     <ul class="navbar-nav">
-        <li class="nav-item"><a class="nav-link" target="_blank" href="#">Home</a>
+        <li class="nav-item"><a class="nav-link" target="_blank" href="https://nlp.cs.washington.edu/denspi">Home</a>
         </li>
-        <li class="nav-item"><a class="nav-link" target="_blank" href="#">Paper</a>
+        <li class="nav-item"><a class="nav-link" target="_blank">Paper</a>
         </li>
-        <li class="nav-item"><a class="nav-link" target="_blank" href="#">GitHub</a>
+        <li class="nav-item"><a class="nav-link" target="_blank">GitHub</a>
         </li>
     </ul>
 </nav>
-<div class="container">
+<div class="container" id="container">
     <!--
     <div class="mt-4 text-center">
         <img src="files/pichu.png" height="200" class="rounded" alt="pika" title="Ask me anything!"/>
     </div>
     -->
+    <!-- Default inline 1-->
 
     <div class="input-group mb-1 mt-4">
-        <input id="question" type="text" class="form-control" placeholder="Write a question" aria-label="Write a question"
+        <div class="input-group-prepend">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-toggle="dropdown"
+                    aria-haspopup="true" aria-expanded="false">Examples
+            </button>
+            <div class="dropdown-menu" id="examples">
+                <!--
+                <a class="dropdown-item" href="#">Another action</a>
+                <a class="dropdown-item" href="#">Something else here</a>
+                <div role="separator" class="dropdown-divider"></div>
+                <a class="dropdown-item" href="#">Separated link</a>
+                -->
+            </div>
+        </div>
+
+        <input id="question" type="text" class="form-control" placeholder="Write a question"
+               aria-label="Write a question"
                autofocus>
         <div class="input-group-append">
             <button id="search" class="btn btn-secondary" type="button">
@@ -50,6 +66,25 @@
             Wikipedia EN (Dec 2016 dump)
         </div>
     </div>
+
+
+    <div class="custom-control custom-radio custom-control-inline">
+        <input type="radio" class="custom-control-input strat" id="dense_first" name="inlineDefaultRadiosExample" checked>
+        <label class="custom-control-label" for="dense_first">Dense-First Search</label>
+    </div>
+
+    <!-- Default inline 2-->
+    <div class="custom-control custom-radio custom-control-inline">
+        <input type="radio" class="custom-control-input strat" id="sparse_first" name="inlineDefaultRadiosExample">
+        <label class="custom-control-label" for="sparse_first">Sparse-First Search</label>
+    </div>
+
+    <!-- Default inline 3-->
+    <div class="custom-control custom-radio custom-control-inline">
+        <input type="radio" class="custom-control-input strat" id="hybrid" name="inlineDefaultRadiosExample">
+        <label class="custom-control-label" for="hybrid">Hybrid</label>
+    </div>
+
     <hr/>
 
     <div class="card">
@@ -57,6 +92,7 @@
             <li class="list-group-item"></li>
         </ul>
     </div>
+
 </div>
 
 <footer class="footer">
@@ -64,7 +100,7 @@
 			<span class="text-muted">
 				<strong>Real-Time Open-Domain Question Answering on Wikipedia with Dense-Sparse Phrase Index</strong><br/>
                 Minjoon Seo*, Jinhyuk Lee*, Tom Kwiatkowski, Ankur Parikh, Ali Farhadi, Hannaneh Hajishirzi<br/>
-				<!-- Designed by <a target="_blank" href="https://antest1.github.io/">Gyeongbok Lee</a> -->
+                <!-- Designed by <a target="_blank" href="https://antest1.github.io/">Gyeongbok Lee</a> -->
 			</span>
     </div>
 </footer>
@@ -110,14 +146,21 @@
     function highlight(text, start, end) {
         new_text = text.split("");
         new_text[start] = "<strong>" + new_text[start];
-        new_text[end-1] = new_text[end-1] + "</strong>";
+        new_text[end - 1] = new_text[end - 1] + "</strong>";
         return new_text.join("");
     }
 
     function execute(text) {
         $("#ret-time").text("Latency: ");
         var start_time = +new Date();
-        $.get("/api?query=" + encodeURIComponent(text), function (out) {
+        if ($('#dense_first').is(':checked')) {
+            var strat = "dense_first";
+        } else if ($('#sparse_first').is(':checked')) {
+            var strat = "sparse_first";
+        } else if ($('#hybrid').is(':checked')) {
+            var strat = "hybrid";
+        }
+        $.get("/api?strat=" + strat + "&query=" + encodeURIComponent(text), function (out) {
             var end_time = +new Date();
             var total_latency = end_time - start_time;
             $("#ret-time").text("Latency: " + out['time'] + "ms");
@@ -131,6 +174,23 @@
             }
         });
     }
+
+    $.getJSON("/get_examples", function (examples) {
+        for (let example of examples) {
+            $('#examples').append("<a class=\"dropdown-item\" href=\"#\">" + example + "</a>");
+        }
+    });
+
+    $("#container").on("click", ".dropdown-item", function (event) {
+        $('#question').val($(event.target).text());
+        $('#question').focus();
+    });
+
+    $(".strat").click(function() {
+        $('#question').focus();
+    });
+
+
 </script>
 
 </body>

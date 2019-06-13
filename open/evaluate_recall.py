@@ -129,7 +129,7 @@ def evaluate_recall(args):
         for k, score in scores:
             print('%d: %.2f' % (k, score * 100))
     else:
-        for k in range(args.k_start, num_answers + 1):
+        for k in range(args.k_start, 11):
             e = evaluate(dataset, predictions, k)
             print('%d: f1=%.2f, em=%.2f' % (k, e['f1'], e['exact_match']))
 

@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 from time import time
 
@@ -34,7 +35,8 @@ def get_args():
     parser.add_argument('--nprobe', default=64, type=int)
     parser.add_argument('--para', default=False, action='store_true')
     parser.add_argument('--sparse', default=False, action='store_true')
-    parser.add_argument('--ranker_path', default='/home/minjoon/data/wikipedia/docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz')
+    parser.add_argument('--ranker_path',
+                        default='/home/minjoon/data/wikipedia/docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz')
     parser.add_argument('--num_dummy_zeros', default=0, type=int)
 
     # MIPS params
@@ -45,6 +47,8 @@ def get_args():
     parser.add_argument('--filter', default=False, action='store_true')
     parser.add_argument('--search_strategy', default='dense_first')
     parser.add_argument('--doc_top_k', default=5, type=int)
+
+    parser.add_argument('--examples_path', default='static/examples.txt')
     args = parser.parse_args()
     return args
 
@@ -112,13 +116,25 @@ def run_demo(args):
     @app.route('/api', methods=['GET'])
     def api():
         query = request.args['query']
-        out = search(query, args.top_k, args.nprobe, search_strategy=args.search_strategy, doc_top_k=args.doc_top_k)
+        strat = request.args['strat']
+        out = search(query,
+                     args.top_k,
+                     args.nprobe,
+                     search_strategy=strat,
+                     doc_top_k=args.doc_top_k)
         return jsonify(out)
+
+    @app.route('/get_examples', methods=['GET'])
+    def get_examples():
+        with open(args.examples_path, 'r') as fp:
+            examples = [line.strip() for line in fp.readlines()]
+        return jsonify(examples)
 
     print('Starting server at %d' % args.port)
     http_server = HTTPServer(WSGIContainer(app))
     http_server.listen(args.port)
     IOLoop.instance().start()
+
 
 
 def main():

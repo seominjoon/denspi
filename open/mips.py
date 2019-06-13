@@ -34,7 +34,15 @@ def overlap(t1, t2, a1, a2, b1, b2):
 
 
 def filter_results(results):
-    return [result for result in results if Counter(result['context'])['?'] <= 0]
+    out = []
+    for result in results:
+        c = Counter(result['context'])
+        if c['?'] > 0:
+            continue
+        if c['!'] > 5:
+            continue
+        out.append(result)
+    return out
 
 
 class MIPS(object):
