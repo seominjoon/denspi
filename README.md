@@ -70,8 +70,8 @@ pip install -r open/requirements.txt
 Note that this will give you an error if you don't have `faiss` and `DrQA` already installed.
 
 
-#### C. Dump
-Dump files are currently provided through Google Cloud Storage under bucket `denspi`,
+#### C. Download
+Model and dump files are currently provided through Google Cloud Storage under bucket `denspi`,
  so first make sure that you have installed `gsutil` ([link](https://cloud.google.com/storage/docs/gsutil_install)).
 You will then need to download four directories.
 1. Create `$ROOT_DIR` and cd to it:
@@ -90,7 +90,7 @@ gsutil cp -r gs://denspi/v1-0/bert .
 ```
 gsutil cp -r gs://denspi/v1-0/wikipedia .
 ```
-5. You will need to download the entire dump (including index). **Warning**: this will take up 1.5 TB!
+5. You will need to download the entire phrase index dump. **Warning**: this will take up 1.5 TB!
 ```
 gsutil cp -r gs://denspi/v1-0/dump .
 ```
