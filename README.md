@@ -1,7 +1,12 @@
-# DenSPI
+# Dense-Sparse Phrase Index (DenSPI)
+
+
 This is the official source code for 
 [Real-Time Open-Domain Question Answering with Dense-Sparse Phrase Index](https://arxiv.org/abs/1906.05807),
 to appear at ACL 2019.
+Check out our [Live Demo](https://nlp.cs.washington.edu/denspi).
+
+![teaser](teaser.png)
 
 Bibtex:
 ```
@@ -13,9 +18,9 @@ Bibtex:
 }
 ```
 
-While the entire codebase is here, please understand that it still **requires a substantial work on documentation**.
+While the entire codebase is here, please understand that it still **requires substantial work on documentation**.
 As of now, we only have instructions for hosting your own demo with the pre-dumped index and pre-trained model that we provide.
-Please stay tuned for how to start from scratch (though you are more than welcome to look into our messy code).
+Please stay tuned for how to start from scratch (though you are more than welcome to look into our undocumented code).
 
 
 ## Demo
@@ -86,6 +91,7 @@ Serve API on port `$API_PORT`:
 ```
 python run_piqa.py --do_serve --load_dir $MODEL_DIR --metadata_dir $BERT_DIR --do_load --parallel --port $API_PORT
 ```
+This lets you to perform GET request on `$API_PORT` to obtain the embedding of the question in json format.
 
 
 Serve the demo on `$DEMO_PORT`:
