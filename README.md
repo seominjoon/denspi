@@ -6,7 +6,7 @@ This is the official code for
 to appear at ACL 2019.
 Check out our [Live Demo](https://nlp.cs.washington.edu/denspi).
 
-![teaser](teaser.png)
+![teaser](figs/teaser.png)
 
 BibTeX:
 ```
@@ -27,7 +27,7 @@ Please stay tuned for the full documentation including how to start from scratch
 ## Demo
 This section will let you host the demo that looks like:
 
-![demo](demo.png)
+![demo](figs/demo.png)
  
 on your machine.
 You can also try it out [here](https://nlp.cs.washington.edu/denspi).
