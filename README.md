@@ -1,14 +1,14 @@
 # Dense-Sparse Phrase Index (DenSPI)
 
 
-This is the official source code for 
+This is the official code for 
 [Real-Time Open-Domain Question Answering with Dense-Sparse Phrase Index](https://arxiv.org/abs/1906.05807),
 to appear at ACL 2019.
 Check out our [Live Demo](https://nlp.cs.washington.edu/denspi).
 
 ![teaser](teaser.png)
 
-Bibtex:
+BibTeX:
 ```
 @inproceedings{denspi,
   title={Real-Time Open-Domain Question Answering with Dense-Sparse Phrase Index},
