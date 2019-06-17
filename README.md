@@ -24,8 +24,12 @@ Please stay tuned for how to start from scratch (though you are more than welcom
 
 
 ## Demo
-This section will let you host the demo that looks like [this](https://nlp.cs.washington.edu/denspi)
+This section will let you host the demo that looks like:
+
+![demo](demo.png)
+ 
 on your machine.
+You can also try it out [here](https://nlp.cs.washington.edu/denspi).
 You will need to download ~1.5 TB of files, but once you have them, it will take less than a minute to start serving.
 
 ### Prerequisites
