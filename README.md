@@ -20,7 +20,8 @@ BibTeX:
 
 While the entire codebase is here, please understand that it still **requires substantial work on documentation**.
 As of now, we only have instructions for hosting your own demo with the pre-dumped index and pre-trained model that we provide.
-Please stay tuned for how to start from scratch (though you are more than welcome to look into our undocumented code).
+Please stay tuned for the full documentation including how to start from scratch 
+(though you are more than welcome to look into our undocumented code).
 
 
 ## Demo
@@ -49,38 +50,42 @@ This directory's file is for hosting a (PyTorch-based) server that maps the inpu
 In this tutorial, we will simply install both in the same environment.
 
 1. Make sure you are using `python=3.6` through Conda.
-2. Before installing them, first make sure that you have installed `DrQA`. 
+2. First, manually install `faiss` with `conda`:
+```
+conda install faiss-cpu=1.5.2 -c pytorch
+```
+3. Before installing with pip, make sure that you have installed `DrQA`. 
 Visit [here](https://github.com/facebookresearch/DrQA) for instructions.
-3. Then install both requirement files:
+4. Then install both requirement files:
 ```
 pip install -r requirements.txt
 pip install -r open/requirements.txt
-```
-4. Then you will need to manually install `faiss` with `conda`:
-```
-conda install faiss-cpu=1.5.2 -c pytorch
 ```
 
 
 #### Download
 Dump files are currently provided through Google Cloud Storage under bucket `denspi`,
  so first make sure that you have installed `gsutil` ([link](https://cloud.google.com/storage/docs/gsutil_install)).
-You will then need to download four directories: 
-1. You will need the model files (`$MODEL_DIR` is your choice)
+You will then need to download four directories.
+1. Create `$ROOT_DIR` and move to it:
 ```
-gsutil cp -r gs://denspi/v1-0/model $MODEL_DIR
+mkdir $ROOT_DIR; mv $ROOT_DIR
+```
+2. You will need the model files.
+```
+gsutil cp -r gs://denspi/v1-0/model .
 ``` 
-2. You will need BERT-related files. 
+3. You will need BERT-related files. 
 ```
-gsutil cp -r gs://denspi/v1-0/bert $BERT_DIR
+gsutil cp -r gs://denspi/v1-0/bert .
 ```
-3. You will need `wikipedia` that contains tfidf information from DrQA. 
+4. You will need tfidf-related information from DrQA. 
 ```
-gsutil cp -r gs://denspi/v1-0/wikipedia $WIKIPEDIA_DIR
+gsutil cp -r gs://denspi/v1-0/wikipedia .
 ```
-4. You will need to download the dump (including index). Warning: this is 1.5 TB!
+5. You will need to download the dump (including index). **Warning**: this will take up 1.5 TB!
 ```
-gsutil cp -r gs://denspi/v1-0/dump $DUMP_DIR
+gsutil cp -r gs://denspi/v1-0/dump .
 ```
 
 You can also choose to download all at once via
@@ -93,18 +98,21 @@ gsutil cp -r gs://denspi/v1-0 $ROOT_DIR
 
 Serve API on port `$API_PORT`:
 ```
-python run_piqa.py --do_serve --load_dir $MODEL_DIR --metadata_dir $BERT_DIR --do_load --parallel --port $API_PORT
+python run_piqa.py --do_serve --load_dir $ROOT_DIR/model --metadata_dir $ROOT_DIR/bert --do_load --parallel --port $API_PORT
 ```
-This lets you to perform GET request on `$API_PORT` to obtain the embedding of the question in json format.
+This lets you to perform GET request on `$API_PORT` to obtain the embedding of the question in json (list) format.
 
 
 Serve the demo on `$DEMO_PORT`:
 ```
-python run_demo.py $DUMP_DIR $WIKIPEDIA_DIR --api_port $API_PORT --port $DEMO_PORT
+python run_demo.py $ROOT_DIR/dump $ROOT_DIR/wikipedia --api_port $API_PORT --port $DEMO_PORT
 ```
 
 Demo will be served in ~1 minute.
 
+
+## Questions?
+Please use Github Issues or email [Minjoon Seo](http://seominjoon.github.io/) (soeminjoon@gmail.com).
 
 ## Acknowledgment
 Our code makes a heavy use of [faiss](https://github.com/facebookresearch/faiss), 
