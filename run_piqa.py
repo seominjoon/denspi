@@ -53,7 +53,7 @@ def main():
     parser.add_argument('--pause', type=int, default=0)
     parser.add_argument('--iteration', type=str, default='1')
     parser.add_argument('--fs', type=str, default='local',
-                        help='File system: local|nsml|nfs|nfs_nsml. `nfs_nsml` uses nfs as input and nsml as output')
+                        help='must be `local`. Do not change.')
 
     # Data paths
     parser.add_argument('--data_dir', default='data/', type=str)
@@ -213,30 +213,6 @@ def main():
                     load_fn(path, **kwargs)
 
         processor = Processor(args.load_dir)
-    elif args.fs == 'nfs':
-        import nsml
-        from nsml import NSML_NFS_OUTPUT
-        args.data_dir = os.path.join(NSML_NFS_OUTPUT, args.data_dir)
-        args.metadata_dir = os.path.join(NSML_NFS_OUTPUT, args.metadata_dir)
-        # args.load_dir should be the session name
-        processor = nsml
-        args.output_dir = os.path.join(NSML_NFS_OUTPUT, args.output_dir)
-    elif args.fs == 'nsml':
-        import nsml
-        from nsml import DATASET_PATH
-        args.data_dir = os.path.join(DATASET_PATH, 'train')
-        args.metadata_dir = os.path.join(DATASET_PATH, 'train')
-        # args.load_dir should be the session name
-        processor = nsml
-        # args.output_dir is local, so no change
-    elif args.fs == 'nsml_nfs':
-        import nsml
-        from nsml import NSML_NFS_OUTPUT
-        args.data_dir = os.path.join(NSML_NFS_OUTPUT, args.data_dir)
-        args.metadata_dir = os.path.join(NSML_NFS_OUTPUT, args.metadata_dir)
-        # args.load_dir should be the session name
-        processor = nsml
-        # args.output_dir is local, so no change
     else:
         raise ValueError(args.fs)
 

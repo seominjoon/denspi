@@ -46,7 +46,7 @@ def get_args():
     parser.add_argument('--doc_sample_ratio', default=0.1, type=float)
     parser.add_argument('--vec_sample_ratio', default=0.2, type=float)
 
-    parser.add_argument('--fs', default='local')
+    parser.add_argument('--fs', default='local', help='Must be `local`. Do not change.')
     parser.add_argument('--cuda', default=False, action='store_true')
     parser.add_argument('--num_dummy_zeros', default=0, type=int)
     parser.add_argument('--replace', default=False, action='store_true')
@@ -56,12 +56,6 @@ def get_args():
 
     coarse = 'hnsw' if args.hnsw else 'flat'
     args.index_name = '%d_%s_%s' % (args.num_clusters, coarse, args.fine_quant)
-
-    if args.fs == 'nfs':
-        from nsml import NSML_NFS_OUTPUT
-        args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
-    elif args.fs == 'nsml':
-        pass
 
     args.index_dir = os.path.join(args.dump_dir, args.index_name)
 
