@@ -119,9 +119,6 @@ python run_demo.py $ROOT_DIR/dump $ROOT_DIR/wikipedia --api_port $API_PORT --por
 Demo will be served in ~1 minute.
 
 
-## Questions?
-Please use Github Issues or email [Minjoon Seo](http://seominjoon.github.io/) (soeminjoon@gmail.com).
-
 ## Acknowledgment
 Our code makes a heavy use of [faiss](https://github.com/facebookresearch/faiss), 
 [DrQA](https://github.com/facebookresearch/DrQA) and [BERT](https://github.com/google-research/bert), in particular,
