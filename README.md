@@ -112,7 +112,8 @@ This lets you to perform GET request on `$API_PORT` to obtain the embedding of t
 
 Serve the demo on `$DEMO_PORT`:
 ```
-python open/run_demo.py $ROOT_DIR/dump $ROOT_DIR/wikipedia --api_port $API_PORT --port $DEMO_PORT
+cd open/
+python run_demo.py $ROOT_DIR/dump $ROOT_DIR/wikipedia --api_port $API_PORT --port $DEMO_PORT
 ```
 
 Demo will be served in ~1 minute.
