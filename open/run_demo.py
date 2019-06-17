@@ -124,7 +124,6 @@ def run_demo(args):
     IOLoop.instance().start()
 
 
-
 def main():
     args = get_args()
     run_demo(args)

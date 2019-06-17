@@ -13,7 +13,6 @@ from drqa.retriever import utils
 
 logger = logging.getLogger(__name__)
 
-
 RANKER_PATH = os.path.join(
     os.path.expanduser('~'),
     'github/DrQA/data/wikipedia/docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz'
@@ -69,9 +68,9 @@ def dump_tfidf(ranker, dumps, names, args):
                     print('%s exists; replacing' % doc_id)
                     del f[doc_id]
                 dg = f.create_group(doc_id)
-                doc = phrase_dump[doc_id] 
+                doc = phrase_dump[doc_id]
                 paras = [k.strip() for k in doc.attrs['context'].split('[PAR]')]
-                para_data = [ranker.text2spvec(para, data_val=True) for para in paras] 
+                para_data = [ranker.text2spvec(para, data_val=True) for para in paras]
                 for p_idx, data in enumerate(para_data):
                     if str(p_idx) in dg:
                         print('%s exists; replacing' % str(p_idx))
@@ -84,7 +83,6 @@ def dump_tfidf(ranker, dumps, names, args):
                         print('Exception occured {} {}'.format(str(e), data))
                         pdg.create_dataset('vals', data=[0])
                         pdg.create_dataset('idxs', data=[0])
-                        
 
 
 def get_args():
@@ -106,7 +104,8 @@ def main():
         args.out_dir = os.path.join(NSML_NFS_OUTPUT, args.out_dir)
         args.ranker_path = os.path.join(NSML_NFS_OUTPUT, args.ranker_path)
     assert os.path.isdir(args.dump_dir)
-    dump_paths = sorted([os.path.join(args.dump_dir, name) for name in os.listdir(args.dump_dir) if 'hdf5' in name])[args.start:args.end]
+    dump_paths = sorted([os.path.join(args.dump_dir, name) for name in os.listdir(args.dump_dir) if 'hdf5' in name])[
+                 args.start:args.end]
     print(dump_paths)
     dump_names = [os.path.splitext(os.path.basename(path))[0] for path in dump_paths]
     dump_ranges = [list(map(int, name.split('-'))) for name in dump_names]
@@ -117,7 +116,7 @@ def main():
         tfidf_path=args.ranker_path,
         strict=False
     )
-    
+
     print('Ranker shape {} from {}'.format(ranker.doc_mat.shape, args.ranker_path))
     # new_mat = ranker.doc_mat.T.tocsr()
     # sp.save_npz('doc_tfidf.npz', new_mat)

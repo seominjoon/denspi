@@ -1,10 +1,22 @@
+# coding=utf-8
+# Copyright 2018 The Google AI Language Team Authors, The HugginFace Inc. team and University of Washington.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import collections
-import io
 import json
 import logging
-from multiprocessing import Queue, Pool
+from multiprocessing import Queue
 from multiprocessing.pool import ThreadPool
-from tempfile import TemporaryFile
 from threading import Thread
 
 import numpy as np
@@ -278,7 +290,8 @@ def write_hdf5(all_examples, all_features, all_results,
         with ThreadPool(2) as pool:
             items = []
             for item in iter(inqueue_.get, None):
-                args = list(item[:3]) + [max_answer_length, do_lower_case, verbose_logging] + [item[3], filter_threshold]
+                args = list(item[:3]) + [max_answer_length, do_lower_case, verbose_logging] + [item[3],
+                                                                                               filter_threshold]
                 items.append(args)
                 if len(items) < 16:
                     continue

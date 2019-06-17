@@ -122,7 +122,7 @@ def run_pred(args):
     for i in tqdm(is_):
         each_query = query[i:i + step_size]
         if args.sparse:
-            each_q_text = q_texts[i:i+step_size]
+            each_q_text = q_texts[i:i + step_size]
 
         if args.no_od:
             doc_idxs, para_idxs, _, _ = zip(*pairs[i:i + step_size])

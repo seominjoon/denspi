@@ -40,8 +40,8 @@ def run_add_to_index(args):
                 "--nfs-output",
                 "-a",
                 "%s add --dump_paths %s --offset %d --num_clusters %d --fs nfs %s %s" % (
-                args.dump_dir, dump_paths, offset_, args.num_clusters,
-                '--cuda' if args.cuda else '', '--hnsw' if args.hnsw else '')]
+                    args.dump_dir, dump_paths, offset_, args.num_clusters,
+                    '--cuda' if args.cuda else '', '--hnsw' if args.hnsw else '')]
 
     dir_ = os.path.join(args.nfs_dir, args.dump_dir, 'phrase')
     names = os.listdir(dir_)
