@@ -25,7 +25,7 @@ Please stay tuned for the full documentation including how to start from scratch
 
 
 ## Demo
-This section will let you host the demo that looks like:
+This section will let you host the demo that looks like
 
 ![demo](figs/demo.png)
  
@@ -40,6 +40,12 @@ You will need to download ~1.5 TB of files, but once you have them, it will take
 - RAM: at least 32GB needed.
 - Storage: at least 2TB of SSD needed.
 - GPUs: not needed.
+
+If you are using Google Cloud 
+(our demo is also being hosted on Google Cloud, with 24 vCPUs, 128 GB RAM, and 6 local SSDs),
+we highly recommend using [local SSD](https://cloud.google.com/compute/docs/disks/local-ssd), 
+which is not only cheaper but also better for low-latency applications (at the cost of persistency).
+
 
 
 #### Environment
@@ -61,15 +67,16 @@ Visit [here](https://github.com/facebookresearch/DrQA) for instructions.
 pip install -r requirements.txt
 pip install -r open/requirements.txt
 ```
+Note that this will give you an error if you don't have `faiss` and `DrQA` already installed.
 
 
 #### Download
 Dump files are currently provided through Google Cloud Storage under bucket `denspi`,
  so first make sure that you have installed `gsutil` ([link](https://cloud.google.com/storage/docs/gsutil_install)).
 You will then need to download four directories.
-1. Create `$ROOT_DIR` and move to it:
+1. Create `$ROOT_DIR` and cd to it:
 ```
-mkdir $ROOT_DIR; mv $ROOT_DIR
+mkdir $ROOT_DIR; cd $ROOT_DIR
 ```
 2. You will need the model files.
 ```
@@ -83,7 +90,7 @@ gsutil cp -r gs://denspi/v1-0/bert .
 ```
 gsutil cp -r gs://denspi/v1-0/wikipedia .
 ```
-5. You will need to download the dump (including index). **Warning**: this will take up 1.5 TB!
+5. You will need to download the entire dump (including index). **Warning**: this will take up 1.5 TB!
 ```
 gsutil cp -r gs://denspi/v1-0/dump .
 ```
@@ -105,7 +112,7 @@ This lets you to perform GET request on `$API_PORT` to obtain the embedding of t
 
 Serve the demo on `$DEMO_PORT`:
 ```
-python run_demo.py $ROOT_DIR/dump $ROOT_DIR/wikipedia --api_port $API_PORT --port $DEMO_PORT
+python open/run_demo.py $ROOT_DIR/dump $ROOT_DIR/wikipedia --api_port $API_PORT --port $DEMO_PORT
 ```
 
 Demo will be served in ~1 minute.
