@@ -35,7 +35,7 @@ You will need to download ~1.5 TB of files, but once you have them, it will take
 
 ### Prerequisites
 
-#### Hardware
+#### A. Hardware
 - CPUs: at least 4 cores recommended.
 - RAM: at least 32GB needed.
 - Storage: at least 2TB of SSD needed.
@@ -48,7 +48,7 @@ which is not only cheaper but also better for low-latency applications (at the c
 
 
 
-#### Environment
+#### B. Environment
 We highly recommend Conda environment, since `faiss` cannot be installed with pip.
 Note that we have two `requirements.txt` files: one in this directory, and one in `open` subfolder.
 This directory's file is for hosting a (PyTorch-based) server that maps the input question to a vector.
@@ -70,7 +70,7 @@ pip install -r open/requirements.txt
 Note that this will give you an error if you don't have `faiss` and `DrQA` already installed.
 
 
-#### Download
+#### C. Dump
 Dump files are currently provided through Google Cloud Storage under bucket `denspi`,
  so first make sure that you have installed `gsutil` ([link](https://cloud.google.com/storage/docs/gsutil_install)).
 You will then need to download four directories.
