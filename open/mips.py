@@ -37,7 +37,7 @@ def filter_results(results):
     out = []
     for result in results:
         c = Counter(result['context'])
-        if c['?'] > 0:
+        if c['?'] > 3:
             continue
         if c['!'] > 5:
             continue
