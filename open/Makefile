@@ -540,13 +540,14 @@ DUMP_DIR = $(ROOT)/$(LOCAL_DUMP_DIR)
 LOCAL_DATA_PATH = $(ROOT)/data/dev-3.json
 LOCAL_DATA_PATH = $(ROOT)/data/dev-v1.1.json
 LOCAL_DATA_PATH = $(ROOT)/data/dev-0.1.json
+WIKIPEDIA_DIR = $(ROOT)/data/wikipedia
 PARA =
 SPARSE = --sparse
 NUM_CLUSTERS = 1048576
 HNSW = --hnsw
 QUANT_TYPE = hnsw
 NPROBE = 64
-START_TOP_K = 10000
+START_TOP_K = 1000
 MID_TOP_K = 100
 TOP_K = 10
 STEP_SIZE = 1
@@ -559,7 +560,8 @@ INDEX_NAME = $(NUM_CLUSTERS)_$(QUANT_TYPE)_$(FINE_QUANT)
 PRED_NAME = $(SPARSE_TYPE)_$(SPARSE_WEIGHT)_$(START_TOP_K)_$(TOP_K)_$(NPROBE)
 FILTER = --filter
 DOC_TOP_K = 5
-SEARCH_STRATEGY = dense_first
+SEARCH_STRATEGY = hybrid
+AGG = --aggregate
 
 # Once the phrase dump is ready:
 
@@ -618,7 +620,8 @@ loop:
 
 # When the index is ready, host demo
 demo:
-	python run_demo.py $(DUMP_DIR) --nprobe $(NPROBE) \
+	python run_demo.py $(DUMP_DIR) $(WIKIPEDIA_DIR) \
+	--nprobe $(NPROBE) \
 	--start_top_k $(START_TOP_K) --mid_top_k $(MID_TOP_K) --top_k $(TOP_K) \
 	--index_name $(NUM_CLUSTERS)_$(QUANT_TYPE)_$(FINE_QUANT) \
 	$(SPARSE) \

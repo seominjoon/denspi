@@ -238,7 +238,7 @@ class MIPSSparse(MIPS):
         return start_scores, doc_idxs, para_idxs, start_idxs
 
     def search(self, query, top_k=10, nprobe=256, doc_idxs=None, para_idxs=None, start_top_k=1000, mid_top_k=100,
-               q_texts=None, filter_=False, search_strategy='dense_first', doc_top_k=5):
+               q_texts=None, filter_=False, search_strategy='dense_first', doc_top_k=5, aggregate=False):
         num_queries = query.shape[0]
         bs = int((query.shape[1] - 1) / 2)
         query_start = query[:, :bs]
@@ -274,5 +274,8 @@ class MIPSSparse(MIPS):
 
         if filter_:
             new_out = [filter_results(results) for results in new_out]
+
+        if aggregate:
+            pass
 
         return new_out

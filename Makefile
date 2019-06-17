@@ -674,4 +674,4 @@ embed_question:
 ROOT = /home/minjoon
 
 1B_serve:
-	python run_piqa.py --do_serve --load_dir $(ROOT)/models/piqateam_piqa-nfs_76 --iteration 1 --metadata_dir $(ROOT)/metadata --do_load --parallel
+	python run_piqa.py --do_serve --load_dir $(ROOT)/models/piqateam_piqa-nfs_76 --metadata_dir $(ROOT)/metadata --do_load --parallel --iteration 1

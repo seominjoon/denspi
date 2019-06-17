@@ -60,7 +60,7 @@ class MIPS(object):
         self.para = para
 
         print('reading %s' % start_index_path)
-        self.start_index = faiss.read_index(start_index_path)
+        self.start_index = faiss.read_index(start_index_path, faiss.IO_FLAG_ONDISK_SAME_DIR)
         self.idx_f = self.load_idx_f(idx2id_path)
         self.has_offset = not 'doc' in self.idx_f
         # with h5py.File(idx2id_path, 'r') as f:
