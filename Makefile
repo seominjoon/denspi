@@ -1,8 +1,8 @@
 dl:
 	python run_piqa.py \
 	--bert_model_option 'base_uncased' \
-	--train_file train-v1.1-qnad.json \
-	--do_train \
+	--train_file train-v1.1.json \
+	--do_train_neg \
 	--do_train_filter \
 	--do_predict \
 	--do_eval \
@@ -18,21 +18,8 @@ dl:
 	--compression_scale 20.0 \
 	--phrase_size 127 \
 	--split_by_para \
-	--do_train_sparse \
 	--load_dir piqateam_piqa-nfs_76 \
-	--iteration 1 \
-	--use_sparse
-
-train_base_511:
-	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
-	--fs nfs \
-	--bert_model_option 'base_uncased' \
-	--train_file train-v1.1.json \
-	--train_batch_size 18 \
-	--phrase_size 511 \
-	--do_train \
-	--do_predict \
-	--do_eval"
+	--iteration 1
 
 
 train_base_na_127:
@@ -675,3 +662,84 @@ ROOT = /home/minjoon
 
 1B_serve:
 	python run_piqa.py --do_serve --load_dir $(ROOT)/models/piqateam_piqa-nfs_76 --metadata_dir $(ROOT)/metadata --do_load --parallel --iteration 1
+
+train_base_511:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--train_file train-v1.1.json \
+	--train_batch_size 12 \
+	--phrase_size 511 \
+	--do_train \
+	--do_predict \
+	--do_eval \
+	--freeze_word_emb"
+
+train_neg_base_511:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nfs \
+	--bert_model_option 'base_uncased' \
+	--train_file train-v1.1.json \
+	--train_batch_size 9 \
+	--phrase_size 511 \
+	--do_train_neg \
+	--do_predict \
+	--do_eval \
+	--load_dir piqateam/piqa-nfs/2973 \
+	--iteration 3 \
+	--freeze_word_emb"
+
+pred_511:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 24G --nfs-output -a " \
+	--fs nsml_nfs \
+	--bert_model_option 'base_uncased' \
+	--phrase_size 511 \
+	--do_predict \
+	--load_dir piqateam/piqa-nfs/2990 \
+	--iteration 3"
+
+train_961:
+	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 24G --nfs-output -a " \
+	--fs nfs \
+	--train_file train-v1.1.json \
+	--train_batch_size 12 \
+	--phrase_size 961 \
+	--do_train \
+	--do_predict \
+	--do_eval \
+	--freeze_word_emb"
+
+train_neg_961:
+	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 24G --nfs-output -a " \
+	--fs nfs \
+	--train_file train-v1.1.json \
+	--train_batch_size 9 \
+	--phrase_size 961 \
+	--do_train_neg \
+	--do_predict \
+	--do_eval \
+	--iteration 3 \
+	--load_dir piqateam/piqa-nfs/2978 \
+	--freeze_word_emb"
+
+
+pred_961:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 24G --nfs-output -a " \
+	--fs nsml_nfs \
+	--phrase_size 961 \
+	--do_predict \
+	--do_eval \
+	--load_dir piqateam/piqa-nfs/2992 \
+	--iteration 3 \
+	--parallel"
+
+
+dump_base_511:
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
+	--fs nsml_nfs \
+	--bert_model_option 'base_uncased' \
+	--index_file phrase.hdf5 \
+	--do_index \
+	--load_dir piqateam/piqa-nfs/2973 \
+	--phrase_size 511 \
+	--iteration 3"
