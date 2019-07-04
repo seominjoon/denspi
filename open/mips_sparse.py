@@ -1,13 +1,14 @@
 import json
 from time import time
 
+import faiss
 import numpy as np
 import os
 import h5py
 import re
 from drqa.retriever import TfidfDocRanker
 
-from mips import MIPS, int8_to_float, filter_results
+from tqdm import tqdm
 from scipy.sparse import vstack
 
 
@@ -20,6 +21,22 @@ def scale_l2_to_ip(l2_scores, max_norm=None, query_norm=None):
         return -0.5 * l2_scores
     assert query_norm is not None
     return -0.5 * (l2_scores - query_norm ** 2 - max_norm ** 2)
+
+
+def filter_results(results):
+    out = []
+    for result in results:
+        c = Counter(result['context'])
+        if c['?'] > 3:
+            continue
+        if c['!'] > 5:
+            continue
+        out.append(result)
+    return out
+
+
+def int8_to_float(num, offset, factor):
+    return num.astype(np.float32) / factor + offset
 
 
 def dequant(group, input_):
@@ -50,12 +67,54 @@ def sparse_slice_ip_from_raw(q_mat, c_data_list, c_indices_list):
     return np.array(out)
 
 
-class MIPSSparse(MIPS):
+def adjust(each):
+    last = each['context'].rfind(' [PAR] ', 0, each['start_pos'])
+    last = 0 if last == -1 else last + len(' [PAR] ')
+    next = each['context'].find(' [PAR] ', each['end_pos'])
+    next = len(each['context']) if next == -1 else next
+    each['context'] = each['context'][last:next]
+    each['start_pos'] -= last
+    each['end_pos'] -= last
+    return each
+
+
+class MIPSSparse(object):
     def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, ranker_path, max_answer_length, para=False,
                  tfidf_dump_dir=None, sparse_weight=1e-1, sparse_type=None, cuda=False,
-                 max_norm_path=None):
-        super(MIPSSparse, self).__init__(phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para,
-                                         cuda=cuda)
+                 max_norm_path=None, num_dummy_zeros=0):
+
+        # Save arguments
+        self.num_dummy_zeros = num_dummy_zeros
+        self.max_answer_length = max_answer_length
+        self.num_docs_list = []
+        self.sparse_type = sparse_type
+        self.sparse_weight = sparse_weight
+        self.para = para
+        self.cuda = cuda
+        if max_norm_path is None:
+            self.max_norm = None
+        else:
+            with open(max_norm_path, 'r') as fp:
+                self.max_norm = json.load(fp)
+
+        print('loading phrase dumps from %s' % phrase_dump_dir)
+        if os.path.isdir(phrase_dump_dir):
+            self.phrase_dump_paths = sorted(
+                [os.path.join(phrase_dump_dir, name) for name in os.listdir(phrase_dump_dir) if 'hdf5' in name])
+            dump_names = [os.path.splitext(os.path.basename(path))[0] for path in self.phrase_dump_paths]
+            self.dump_ranges = [list(map(int, name.split('-'))) for name in dump_names]
+        else:
+            self.phrase_dump_paths = [phrase_dump_dir]
+        self.phrase_dumps = [h5py.File(path, 'r') for path in self.phrase_dump_paths]
+
+        print('loading start index from %s' % start_index_path)
+        self.start_index = faiss.read_index(start_index_path, faiss.IO_FLAG_ONDISK_SAME_DIR)
+
+        print('loading idx2id from %s' % idx2id_path)
+        self.idx_f = self.load_idx_f(idx2id_path)
+        self.has_offset = not 'doc' in self.idx_f
+
+        print('loading tfidf dump from %s' % tfidf_dump_dir)
         assert os.path.isdir(tfidf_dump_dir)
         self.tfidf_dump_paths = sorted(
             [os.path.join(tfidf_dump_dir, name) for name in os.listdir(tfidf_dump_dir) if 'hdf5' in name])
@@ -63,16 +122,59 @@ class MIPSSparse(MIPS):
         dump_ranges = [list(map(int, name.split('_')[0].split('-'))) for name in dump_names]
         self.tfidf_dumps = [h5py.File(path, 'r') for path in self.tfidf_dump_paths]
         assert dump_ranges == self.dump_ranges
-        self.sparse_weight = sparse_weight
-        print('reading tfidf ranker at %s' % ranker_path)
+
+        print('loading DrQA DocRanker from %s' % ranker_path)
         self.ranker = TfidfDocRanker(ranker_path)
-        self.sparse_type = sparse_type
-        self.num_docs_list = []
-        if max_norm_path is None:
-            self.max_norm = None
+
+    def load_idx_f(self, idx2id_path):
+        idx_f = {}
+        types = ['doc', 'word']
+        if self.para:
+            types.append('para')
+        with h5py.File(idx2id_path, 'r', driver='core', backing_store=False) as f:
+            for key in tqdm(f, desc='loading idx2id'):
+                idx_f_cur = {}
+                for type_ in types:
+                    idx_f_cur[type_] = f[key][type_][:]
+                idx_f[key] = idx_f_cur
+            return idx_f
+
+    def get_idxs(self, I):
+        if self.has_offset:
+            offsets = (I / 1e8).astype(np.int64) * int(1e8)
+            idxs = I % int(1e8)
+            doc = np.array(
+                [[self.idx_f[str(offset)]['doc'][idx] for offset, idx in zip(oo, ii)] for oo, ii in zip(offsets, idxs)])
+            word = np.array([[self.idx_f[str(offset)]['word'][idx] for offset, idx in zip(oo, ii)] for oo, ii in
+                             zip(offsets, idxs)])
+            if self.para:
+                para = np.array([[self.idx_f[str(offset)]['para'][idx] for offset, idx in zip(oo, ii)] for oo, ii in
+                                 zip(offsets, idxs)])
+            else:
+                para = None
         else:
-            with open(max_norm_path, 'r') as fp:
-                self.max_norm = json.load(fp)
+            doc = np.array([[self.idx_f['doc'][idx] for idx in ii] for ii in I])
+            word = np.array([[self.idx_f['word'][idx] for idx in ii] for ii in I])
+            if self.para:
+                para = np.array([[self.idx_f['para'][idx] for idx in ii] for ii in I])
+            else:
+                para = None
+
+        return doc, para, word
+
+    def close(self):
+        for phrase_dump in self.phrase_dumps:
+            phrase_dump.close()
+
+    def get_doc_group(self, doc_idx):
+        if len(self.phrase_dumps) == 1:
+            return self.phrase_dumps[0][str(doc_idx)]
+        for dump_range, dump in zip(self.dump_ranges, self.phrase_dumps):
+            if dump_range[0] * 1000 <= int(doc_idx) < dump_range[1] * 1000:
+                if str(doc_idx) not in dump:
+                    raise ValueError('%d not found in dump list' % int(doc_idx))
+                return dump[str(doc_idx)]
+        raise ValueError('%d not found in dump list' % int(doc_idx))
 
     def get_tfidf_group(self, doc_idx):
         if len(self.tfidf_dumps) == 1:
@@ -236,6 +338,80 @@ class MIPSSparse(MIPS):
             doc_idxs = np.tile(np.expand_dims(doc_idxs, -1), [1, out_top_k])
             para_idxs = np.tile(np.expand_dims(para_idxs, -1), [1, out_top_k])
         return start_scores, doc_idxs, para_idxs, start_idxs
+
+    def search_phrase(self, query, doc_idxs, start_idxs, para_idxs=None, start_scores=None):
+        # query = [Q, d]
+        # doc_idxs = [Q]
+        # start_idxs = [Q]
+        # para_idxs = [Q]
+        bs = int((query.shape[1] - 1) / 2)
+        query_start, query_end, query_span_logit = query[:, :bs], query[:, bs:2 * bs], query[:, -1:]
+
+        groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
+
+        if self.para:
+            groups = [group[str(para_idx)] for group, para_idx in zip(groups, para_idxs)]
+
+        def dequant(group, input_):
+            if 'offset' in group.attrs:
+                return int8_to_float(input_, group.attrs['offset'], group.attrs['scale'])
+            return input_
+
+        if start_scores is None:
+            start = np.stack([group['start'][start_idx, :]
+                              for group, start_idx in zip(groups, start_idxs)], 0)  # [Q, d]
+            start = dequant(groups[0], start)
+            if self.cuda:
+                cuda0 = torch.device('cuda:0')
+                start = torch.FloatTensor(start).to(cuda0)
+                query_start = torch.FloatTensor(query_start).to(cuda0)
+                start_scores = (query_start * start).sum(1).cpu().numpy()
+            else:
+                start_scores = np.sum(query_start * start, 1)  # [Q]
+
+        ends = [group['end'][:] for group in groups]
+        spans = [group['span_logits'][:] for group in groups]
+
+        default_end = np.zeros(bs).astype(np.float32)
+        end_idxs = [group['start2end'][start_idx, :] for group, start_idx in zip(groups, start_idxs)]  # [Q, L]
+        end_mask = -1e9 * (np.array(end_idxs) < 0)  # [Q, L]
+
+        end = np.stack([[each_end[each_end_idx, :] if each_end.size > 0 else default_end
+                         for each_end_idx in each_end_idxs]
+                        for each_end, each_end_idxs in zip(ends, end_idxs)], 0)  # [Q, L, d]
+        end = dequant(groups[0], end)
+        span = np.stack([[each_span[start_idx, i] for i in range(len(each_end_idxs))]
+                         for each_span, start_idx, each_end_idxs in zip(spans, start_idxs, end_idxs)], 0)  # [Q, L]
+
+        if self.cuda:
+            cuda0 = torch.device('cuda:0')
+            end = torch.FloatTensor(end).to(cuda0)
+            query_end = torch.FloatTensor(query_end).to(cuda0)
+            end_scores = (query_end.unsqueeze(1) * end).sum(2).cpu().numpy()
+        else:
+            end_scores = np.sum(np.expand_dims(query_end, 1) * end, 2)  # [Q, L]
+        span_scores = query_span_logit * span  # [Q, L]
+        scores = np.expand_dims(start_scores, 1) + end_scores + span_scores + end_mask  # [Q, L]
+        pred_end_idxs = np.stack([each[idx] for each, idx in zip(end_idxs, np.argmax(scores, 1))], 0)  # [Q]
+        max_scores = np.max(scores, 1)
+
+        out = [{'context': group.attrs['context'],
+                'title': group.attrs['title'],
+                'doc_idx': doc_idx,
+                'start_pos': group['word2char_start'][start_idx].item(),
+                'end_pos': group['word2char_end'][end_idx].item() if len(group['word2char_end']) > 0
+                else group['word2char_start'][start_idx].item() + 1,
+                'score': score}
+               for doc_idx, group, start_idx, end_idx, score in zip(doc_idxs.tolist(), groups, start_idxs.tolist(),
+                                                                    pred_end_idxs.tolist(), max_scores.tolist())]
+
+        for each in out:
+            each['answer'] = each['context'][each['start_pos']:each['end_pos']]
+
+        out = [adjust(each) for each in out]
+        # out = [each for each in out if len(each['context']) > 100 and each['score'] >= 30]
+
+        return out
 
     def search(self, query, top_k=10, nprobe=256, doc_idxs=None, para_idxs=None, start_top_k=1000, mid_top_k=100,
                q_texts=None, filter_=False, search_strategy='dense_first', doc_top_k=5, aggregate=False):
