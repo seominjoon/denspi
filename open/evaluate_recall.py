@@ -70,13 +70,17 @@ def evaluate(dataset, predictions, k, no_f1=False):
                     continue
                 ground_truths = list(map(lambda x: x['text'], qa['answers']))
                 prediction = predictions[qa['id']][:k]
-                rank, cur_exact_match = max(enumerate(metric_max_over_ground_truths(
-                    exact_match_score, each, ground_truths) for each in prediction), key=lambda item: item[1])
+                if len(prediction) == 0:
+                    rank, cur_exact_match = None, 0.0
+                else:
+                    rank, cur_exact_match = max(enumerate(metric_max_over_ground_truths(
+                        exact_match_score, each, ground_truths) for each in prediction), key=lambda item: item[1])
                 exact_match += cur_exact_match
                 ranks[qa['id']] = rank + 1 if cur_exact_match == 1.0 else 1e9
                 if not no_f1:
-                    f1 += max(metric_max_over_ground_truths(
-                        f1_score, each, ground_truths) for each in prediction)
+                    if len(prediction) > 0:
+                        f1 += max(metric_max_over_ground_truths(
+                            f1_score, each, ground_truths) for each in prediction)
 
     exact_match = 100.0 * exact_match / total
     f1 = 100.0 * f1 / total
@@ -125,8 +129,9 @@ def evaluate_recall(args):
         for k, score in scores:
             print('%d: %.2f' % (k, score * 100))
     else:
-        for k in range(args.k_start, num_answers + 1):
-            print('%d:' % k, json.dumps(evaluate(dataset, predictions, k)))
+        for k in range(args.k_start, 11):
+            e = evaluate(dataset, predictions, k)
+            print('%d: f1=%.2f, em=%.2f' % (k, e['f1'], e['exact_match']))
 
 
 def main():

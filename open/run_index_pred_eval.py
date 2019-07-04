@@ -17,7 +17,11 @@ def get_args():
     # moved from run_pred.py
     parser.add_argument('data_path')
 
-    parser.add_argument('--dump_path', default='dump.hdf5')  # not used for now
+    parser.add_argument('--dump_paths', default=None,
+                        help='Relative to `dump_dir/phrase`. '
+                             'If specified, creates subindex dir and save there with same name')
+    parser.add_argument('--subindex_name', default='index', help='used only if dump_path is specified.')
+    parser.add_argument('--offset', default=0, type=int)
 
     # relative paths in dump_dir/index_name
     parser.add_argument('--quantizer_path', default='quantizer.faiss')
@@ -36,12 +40,13 @@ def get_args():
                         help='SQ8|SQ4|PQ# where # is number of bytes per vector (for SQ it would be 480 Bytes)')
     # stable params
     parser.add_argument('--max_norm', default=None, type=float)
-    parser.add_argument('--max_norm_cf', default=1.3, type=float)
+    parser.add_argument('--max_norm_cf', default=1.0, type=float)
+    parser.add_argument('--norm_th', default=999, type=float)
     parser.add_argument('--para', default=False, action='store_true')
     parser.add_argument('--doc_sample_ratio', default=0.2, type=float)
     parser.add_argument('--vec_sample_ratio', default=0.2, type=float)
 
-    parser.add_argument('--fs', default='local')
+    parser.add_argument('--fs', default='local', help='Must be `local`. Do not change.')
     parser.add_argument('--cuda', default=False, action='store_true')
     parser.add_argument('--num_dummy_zeros', default=0, type=int)
     parser.add_argument('--replace', default=False, action='store_true')
@@ -71,7 +76,6 @@ def get_args():
     parser.add_argument('--no_od', default=False, action='store_true')
     parser.add_argument('--draft', default=False, action='store_true')
     parser.add_argument('--step_size', default=10, type=int)
-    # parser.add_argument('--fs', default='local')
 
     #### evaluate_recall.py
     # parser.add_argument('data_path', help='Dataset file')
@@ -88,10 +92,6 @@ def get_args():
     coarse = 'hnsw' if args.hnsw else 'flat'
     args.index_name = '%d_%s_%s' % (args.num_clusters, coarse, args.fine_quant)
 
-    if args.fs == 'nfs':
-        from nsml import NSML_NFS_OUTPUT
-        args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
-
     args.index_dir = os.path.join(args.dump_dir, args.index_name)
 
     args.quantizer_path = os.path.join(args.index_dir, args.quantizer_path)
@@ -101,10 +101,6 @@ def get_args():
     args.idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
 
     #### run_pred.py
-    if args.fs == 'nfs':
-        from nsml import NSML_NFS_OUTPUT
-        args.data_path = os.path.join(NSML_NFS_OUTPUT, args.data_path)
-        # args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
     phrase_dump_path = os.path.join(args.dump_dir, 'phrase.hdf5')
     args.phrase_dump_dir = phrase_dump_path if os.path.exists(phrase_dump_path) else os.path.join(args.dump_dir,
                                                                                                   'phrase')

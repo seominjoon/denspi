@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 
 def normalize(text):
-    return text.lower().replace('_', ' ')
+    return '_'.join(text.lower().split())
 
 
 def downsize_wiki(args):
@@ -55,7 +55,8 @@ def get_args():
     parser.add_argument('to_dir')
     parser.add_argument('--min_num_chars', default=50, type=int)
     parser.add_argument('--max_num_chars', default=5000, type=int)
-    parser.add_argument('--sample_ratio', default=0.1, type=float)
+    parser.add_argument('--sample_per_file', default=1000, type=int)
+    parser.add_argument('--docs_per_file', default=1000, type=int)
 
     return parser.parse_args()
 

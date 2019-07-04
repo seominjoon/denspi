@@ -10,8 +10,12 @@ def downsize_squad(args):
         dev_data = json.load(fp)
 
         for article in dev_data['data']:
-            new_paras = random.sample(article['paragraphs'], args.num_paras_per_doc)
-            article['paragraphs'] = new_paras
+            for para in article['paragraphs']:
+                new_qas = []
+                for qa in para['qas']:
+                    if random.random() < args.ratio:
+                        new_qas.append(qa)
+                para['qas'] = new_qas
 
         with open(args.to_path, 'w') as fp:
             json.dump(dev_data, fp)
@@ -21,7 +25,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('from_path')
     parser.add_argument('to_path')
-    parser.add_argument('--num_paras_per_doc', default=5, type=int)
+    parser.add_argument('--ratio', default=0.1, type=float)
     parser.add_argument('--seed', default=29, type=int)
 
     return parser.parse_args()

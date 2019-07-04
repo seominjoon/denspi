@@ -1,19 +1,3 @@
-# coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HugginFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""Run BERT on SQuAD."""
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -40,7 +24,7 @@ from bert import BertConfig
 from optimization import BERTAdam
 from phrase import BertPhraseModel
 from pre import convert_examples_to_features, read_squad_examples, convert_documents_to_features, \
-    convert_questions_to_features, SquadExample
+    convert_questions_to_features, SquadExample, inject_noise_to_features_list
 from post import write_predictions, write_hdf5, get_question_results as get_question_results_, \
     convert_question_features_to_dataloader, write_question_results
 from serve import serve
@@ -53,7 +37,7 @@ logger = logging.getLogger(__name__)
 RawResult = collections.namedtuple("RawResult", ["unique_id", "all_logits", "filter_start_logits", "filter_end_logits"])
 ContextResult = collections.namedtuple("ContextResult",
                                        ['unique_id', 'start', 'end', 'span_logits',
-                                        'filter_start_logits', 'filter_end_logits', 
+                                        'filter_start_logits', 'filter_end_logits',
                                         'sparse'])
 
 
@@ -67,9 +51,9 @@ def main():
     ## Required parameters
     parser.add_argument('--mode', type=str, default='train')
     parser.add_argument('--pause', type=int, default=0)
-    parser.add_argument('--iteration', type=str, default='0')
+    parser.add_argument('--iteration', type=str, default='1')
     parser.add_argument('--fs', type=str, default='local',
-                        help='File system: local|nsml|nfs|nfs_nsml. `nfs_nsml` uses nfs as input and nsml as output')
+                        help='must be `local`. Do not change.')
 
     # Data paths
     parser.add_argument('--data_dir', default='data/', type=str)
@@ -100,7 +84,7 @@ def main():
     parser.add_argument('--load_dir', default='out/', type=str)
 
     # Local paths (if we want to run cmd)
-    parser.add_argument('--eval_script', default='eval/evaluate-v1.1.py', type=str)
+    parser.add_argument('--eval_script', default='evaluate-v1.1.py', type=str)
 
     # Do's
     parser.add_argument("--do_load", default=False, action='store_true', help='Do load. If eval, do load automatically')
@@ -117,7 +101,7 @@ def main():
     parser.add_argument("--do_case", default=False, action='store_true',
                         help="Whether to lower case the input text. Should be True for uncased "
                              "models and False for cased models.")
-    parser.add_argument('--phrase_size', default=511, type=int)
+    parser.add_argument('--phrase_size', default=961, type=int)
     parser.add_argument('--metric', default='ip', type=str, help='ip | l2')
     parser.add_argument("--use_sparse", default=False, action='store_true')
 
@@ -229,30 +213,6 @@ def main():
                     load_fn(path, **kwargs)
 
         processor = Processor(args.load_dir)
-    elif args.fs == 'nfs':
-        import nsml
-        from nsml import NSML_NFS_OUTPUT
-        args.data_dir = os.path.join(NSML_NFS_OUTPUT, args.data_dir)
-        args.metadata_dir = os.path.join(NSML_NFS_OUTPUT, args.metadata_dir)
-        # args.load_dir should be the session name
-        processor = nsml
-        args.output_dir = os.path.join(NSML_NFS_OUTPUT, args.output_dir)
-    elif args.fs == 'nsml':
-        import nsml
-        from nsml import DATASET_PATH
-        args.data_dir = os.path.join(DATASET_PATH, 'train')
-        args.metadata_dir = os.path.join(DATASET_PATH, 'train')
-        # args.load_dir should be the session name
-        processor = nsml
-        # args.output_dir is local, so no change
-    elif args.fs == 'nsml_nfs':
-        import nsml
-        from nsml import NSML_NFS_OUTPUT
-        args.data_dir = os.path.join(NSML_NFS_OUTPUT, args.data_dir)
-        args.metadata_dir = os.path.join(NSML_NFS_OUTPUT, args.metadata_dir)
-        # args.load_dir should be the session name
-        processor = nsml
-        # args.output_dir is local, so no change
     else:
         raise ValueError(args.fs)
 
@@ -370,6 +330,12 @@ def main():
             doc_stride=args.doc_stride,
             max_query_length=args.max_query_length,
             is_training=True)
+
+        train_features = inject_noise_to_features_list(train_features,
+                                                       clamp=True,
+                                                       replace=True,
+                                                       shuffle=True)
+
         logger.info("***** Running training *****")
         logger.info("  Num orig examples = %d", len(train_examples))
         logger.info("  Num split examples = %d", len(train_features))
@@ -520,8 +486,10 @@ def main():
 
         no_decay = ['bias', 'gamma', 'beta']
         optimizer_parameters = [
-            {'params': [p for n, p in model.named_parameters() if (n not in no_decay) and ('filter' not in n)], 'weight_decay_rate': 0.01},
-            {'params': [p for n, p in model.named_parameters() if (n in no_decay) and ('filter' not in n)], 'weight_decay_rate': 0.0}
+            {'params': [p for n, p in model.named_parameters() if (n not in no_decay) and ('filter' not in n)],
+             'weight_decay_rate': 0.01},
+            {'params': [p for n, p in model.named_parameters() if (n in no_decay) and ('filter' not in n)],
+             'weight_decay_rate': 0.0}
         ]
         optimizer = BERTAdam(optimizer_parameters,
                              lr=args.learning_rate,
@@ -663,7 +631,6 @@ def main():
             import subprocess
             process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
             output, error = process.communicate()
-            print(output)
 
     if args.do_embed_question:
         question_examples = read_squad_examples(
@@ -751,7 +718,7 @@ def main():
                         input_mask = input_mask.to(device)
                         with torch.no_grad():
                             batch_start, batch_end, batch_span_logits, bs, be, batch_sparse = model(input_ids,
-                                                                                      input_mask)
+                                                                                                    input_mask)
                         for i, example_index in enumerate(example_indices):
                             start = batch_start[i].detach().cpu().numpy().astype(args.dtype)
                             end = batch_end[i].detach().cpu().numpy().astype(args.dtype)
@@ -789,7 +756,8 @@ def main():
             question_examples = [SquadExample(qas_id='serve', question_text=text)]
             query_eval_features = convert_questions_to_features(
                 examples=question_examples,
-                tokenizer=tokenizer)
+                tokenizer=tokenizer,
+                max_query_length=16)
             question_dataloader = convert_question_features_to_dataloader(query_eval_features, args.fp16,
                                                                           args.local_rank,
                                                                           args.predict_batch_size)

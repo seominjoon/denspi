@@ -1,8 +1,8 @@
-torch>=1.0
-numpy
-tqdm
-six
-flask
-flask_cors
-tornado
-h5py
+torch==1.1.0
+numpy==1.15.4
+tqdm==4.31.1
+six==1.12.0
+flask==1.0.2
+flask_cors==3.0.7
+tornado==6.0.1
+h5py==2.9.0

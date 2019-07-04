@@ -2,12 +2,13 @@ import argparse
 import json
 import os
 import random
-from collections import namedtuple
+from collections import namedtuple, Counter
 from time import time
 
 import h5py
 import numpy as np
 import faiss
+import torch
 from tqdm import tqdm
 
 
@@ -32,11 +33,24 @@ def overlap(t1, t2, a1, a2, b1, b2):
     return True
 
 
+def filter_results(results):
+    out = []
+    for result in results:
+        c = Counter(result['context'])
+        if c['?'] > 3:
+            continue
+        if c['!'] > 5:
+            continue
+        out.append(result)
+    return out
+
+
 class MIPS(object):
     def __init__(self, phrase_dump_dir, start_index_path, idx2id_path, max_answer_length, para=False,
-                 num_dummy_zeros=0):
+                 num_dummy_zeros=0, cuda=False):
         if os.path.isdir(phrase_dump_dir):
-            self.phrase_dump_paths = sorted([os.path.join(phrase_dump_dir, name) for name in os.listdir(phrase_dump_dir) if 'hdf5' in name])
+            self.phrase_dump_paths = sorted(
+                [os.path.join(phrase_dump_dir, name) for name in os.listdir(phrase_dump_dir) if 'hdf5' in name])
             dump_names = [os.path.splitext(os.path.basename(path))[0] for path in self.phrase_dump_paths]
             self.dump_ranges = [list(map(int, name.split('-'))) for name in dump_names]
         else:
@@ -46,13 +60,52 @@ class MIPS(object):
         self.para = para
 
         print('reading %s' % start_index_path)
-        self.start_index = faiss.read_index(start_index_path)
-        with h5py.File(idx2id_path, 'r') as f:
-            self.idx2doc_id = f['doc'][:]
-            self.idx2para_id = f['para'][:]
-            self.idx2word_id = f['word'][:]
+        self.start_index = faiss.read_index(start_index_path, faiss.IO_FLAG_ONDISK_SAME_DIR)
+        self.idx_f = self.load_idx_f(idx2id_path)
+        self.has_offset = not 'doc' in self.idx_f
+        # with h5py.File(idx2id_path, 'r') as f:
+        #     self.idx2doc_id = f['doc'][:]
+        #     self.idx2para_id = f['para'][:]
+        #     self.idx2word_id = f['word'][:]
 
         self.num_dummy_zeros = num_dummy_zeros
+        self.cuda = cuda
+
+    def load_idx_f(self, idx2id_path):
+        idx_f = {}
+        types = ['doc', 'word']
+        if self.para:
+            types.append('para')
+        with h5py.File(idx2id_path, 'r', driver='core', backing_store=False) as f:
+            for key in tqdm(f, desc='loading idx2id'):
+                idx_f_cur = {}
+                for type_ in types:
+                    idx_f_cur[type_] = f[key][type_][:]
+                idx_f[key] = idx_f_cur
+            return idx_f
+
+    def get_idxs(self, I):
+        if self.has_offset:
+            offsets = (I / 1e8).astype(np.int64) * int(1e8)
+            idxs = I % int(1e8)
+            doc = np.array(
+                [[self.idx_f[str(offset)]['doc'][idx] for offset, idx in zip(oo, ii)] for oo, ii in zip(offsets, idxs)])
+            word = np.array([[self.idx_f[str(offset)]['word'][idx] for offset, idx in zip(oo, ii)] for oo, ii in
+                             zip(offsets, idxs)])
+            if self.para:
+                para = np.array([[self.idx_f[str(offset)]['para'][idx] for offset, idx in zip(oo, ii)] for oo, ii in
+                                 zip(offsets, idxs)])
+            else:
+                para = None
+        else:
+            doc = np.array([[self.idx_f['doc'][idx] for idx in ii] for ii in I])
+            word = np.array([[self.idx_f['word'][idx] for idx in ii] for ii in I])
+            if self.para:
+                para = np.array([[self.idx_f['para'][idx] for idx in ii] for ii in I])
+            else:
+                para = None
+
+        return doc, para, word
 
     def close(self):
         for phrase_dump in self.phrase_dumps:
@@ -63,6 +116,8 @@ class MIPS(object):
             return self.phrase_dumps[0][str(doc_idx)]
         for dump_range, dump in zip(self.dump_ranges, self.phrase_dumps):
             if dump_range[0] * 1000 <= int(doc_idx) < dump_range[1] * 1000:
+                if str(doc_idx) not in dump:
+                    raise ValueError('%d not found in dump list' % int(doc_idx))
                 return dump[str(doc_idx)]
         raise ValueError('%d not found in dump list' % int(doc_idx))
 
@@ -80,10 +135,8 @@ class MIPS(object):
             self.start_index.nprobe = nprobe
             start_scores, I = self.start_index.search(query_start, top_k)
 
-            doc_idxs = self.idx2doc_id[I]
-            start_idxs = self.idx2word_id[I]
-            if self.para:
-                para_idxs = self.idx2para_id[I]
+            doc_idxs, para_idxs, start_idxs = self.get_idxs(I)
+            print(doc_idxs, para_idxs)
         else:
             groups = [self.get_doc_group(doc_idx)[str(para_idx)] for doc_idx, para_idx in zip(doc_idxs, para_idxs)]
             starts = [group['start'][:, :] for group in groups]
@@ -119,7 +172,13 @@ class MIPS(object):
             start = np.stack([group['start'][start_idx, :]
                               for group, start_idx in zip(groups, start_idxs)], 0)  # [Q, d]
             start = dequant(groups[0], start)
-            start_scores = np.sum(query_start * start, 1)  # [Q]
+            if self.cuda:
+                cuda0 = torch.device('cuda:0')
+                start = torch.FloatTensor(start).to(cuda0)
+                query_start = torch.FloatTensor(query_start).to(cuda0)
+                start_scores = (query_start * start).sum(1).cpu().numpy()
+            else:
+                start_scores = np.sum(query_start * start, 1)  # [Q]
 
         ends = [group['end'][:] for group in groups]
         spans = [group['span_logits'][:] for group in groups]
@@ -135,7 +194,13 @@ class MIPS(object):
         span = np.stack([[each_span[start_idx, i] for i in range(len(each_end_idxs))]
                          for each_span, start_idx, each_end_idxs in zip(spans, start_idxs, end_idxs)], 0)  # [Q, L]
 
-        end_scores = np.sum(np.expand_dims(query_end, 1) * end, 2)  # [Q, L]
+        if self.cuda:
+            cuda0 = torch.device('cuda:0')
+            end = torch.FloatTensor(end).to(cuda0)
+            query_end = torch.FloatTensor(query_end).to(cuda0)
+            end_scores = (query_end.unsqueeze(1) * end).sum(2).cpu().numpy()
+        else:
+            end_scores = np.sum(np.expand_dims(query_end, 1) * end, 2)  # [Q, L]
         span_scores = query_span_logit * span  # [Q, L]
         scores = np.expand_dims(start_scores, 1) + end_scores + span_scores + end_mask  # [Q, L]
         pred_end_idxs = np.stack([each[idx] for each, idx in zip(end_idxs, np.argmax(scores, 1))], 0)  # [Q]
@@ -146,7 +211,7 @@ class MIPS(object):
                 'doc_idx': doc_idx,
                 'start_pos': group['word2char_start'][start_idx].item(),
                 'end_pos': group['word2char_end'][end_idx].item() if len(group['word2char_end']) > 0
-                   else group['word2char_start'][start_idx].item() + 1,
+                else group['word2char_start'][start_idx].item() + 1,
                 'score': score}
                for doc_idx, group, start_idx, end_idx, score in zip(doc_idxs.tolist(), groups, start_idxs.tolist(),
                                                                     pred_end_idxs.tolist(), max_scores.tolist())]
@@ -159,7 +224,7 @@ class MIPS(object):
 
         return out
 
-    def search(self, query, top_k=5, nprobe=64, doc_idxs=None, para_idxs=None):
+    def search(self, query, top_k=5, nprobe=64, doc_idxs=None, para_idxs=None, filter_=False):
         num_queries = query.shape[0]
         bs = int((query.shape[1] - 1) / 2)
         query_start = query[:, :bs]

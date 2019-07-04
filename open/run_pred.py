@@ -26,8 +26,9 @@ def get_args():
 
     # MIPS params
     parser.add_argument('--sparse_weight', default=1e-1, type=float)
-    parser.add_argument('--start_top_k', default=100, type=int)
-    parser.add_argument('--nprobe', default=64, type=int)
+    parser.add_argument('--start_top_k', default=1000, type=int)
+    parser.add_argument('--mid_top_k', default=100, type=int)
+    parser.add_argument('--nprobe', default=256, type=int)
     parser.add_argument('--sparse_type', default='dp', type=str)
 
     # stable MIPS params
@@ -35,13 +36,16 @@ def get_args():
     parser.add_argument('--top_k', default=10, type=int)
     parser.add_argument('--para', default=False, action='store_true')
     parser.add_argument('--sparse', default=False, action='store_true')
-
     parser.add_argument('--no_od', default=False, action='store_true')
     parser.add_argument('--draft', default=False, action='store_true')
     parser.add_argument('--step_size', default=10, type=int)
     parser.add_argument('--fs', default='local')
     parser.add_argument('--num_dummy_zeros', default=0, type=int)
     parser.add_argument('--cuda', default=False, action='store_true')
+
+    parser.add_argument('--filter', default=False, action='store_true')
+    parser.add_argument('--search_strategy', default='dense_first')
+    parser.add_argument('--doc_top_k', default=5, type=int)
     args = parser.parse_args()
 
     if args.fs == 'nfs':
@@ -59,12 +63,14 @@ def get_args():
     args.index_path = os.path.join(args.index_dir, args.index_path)
     args.question_dump_path = os.path.join(args.dump_dir, args.question_dump_path)
     args.idx2id_path = os.path.join(args.index_dir, args.idx2id_path)
+    args.max_norm_path = os.path.join(args.index_dir, 'max_norm.json')
 
     args.pred_dir = os.path.join(args.dump_dir, args.pred_dir)
-    out_name = '%s_%s_%.1f_%d_%d_%d_%s' % (args.index_name, args.sparse_type,
-            args.sparse_weight, args.start_top_k, args.top_k, args.nprobe, 'sp' if args.sparse else 'ds')
+    out_name = '%s_%s_%.2f_%d_%d_%d' % (args.index_name, args.sparse_type, args.sparse_weight, args.start_top_k,
+                                        args.top_k, args.nprobe)
     args.od_out_path = os.path.join(args.pred_dir, 'od_%s.json' % out_name)
     args.cd_out_path = os.path.join(args.pred_dir, 'cd_%s.json' % out_name)
+    args.counter_path = os.path.join(args.pred_dir, 'counter.json')
 
     return args
 
@@ -97,26 +103,16 @@ def run_pred(args):
 
         query = np.stack(vecs, 0)
         if args.draft:
-            query = query[:100]
+            query = query[:3]
 
     if not args.sparse:
         mips = MIPS(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length, para=args.para,
-                    num_dummy_zeros=args.num_dummy_zeros)
+                    num_dummy_zeros=args.num_dummy_zeros, cuda=args.cuda)
     else:
-        from drqa import retriever
-        # ranker = None
-        # doc_mat = None
-        ranker = retriever.get_class('tfidf')(
-            args.ranker_path,
-            strict=False
-        )
-        print('Ranker loaded from {}'.format(args.ranker_path))
-        doc_mat = sp.load_npz(args.doc_mat_path)
-        print('Doc TFIDF matrix loaded {}'.format(doc_mat.shape))
-
-        mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.max_answer_length,
+        mips = MIPSSparse(args.phrase_dump_dir, args.index_path, args.idx2id_path, args.ranker_path,
+                          args.max_answer_length,
                           para=args.para, tfidf_dump_dir=args.tfidf_dump_dir, sparse_weight=args.sparse_weight,
-                          ranker=ranker, doc_mat=doc_mat, sparse_type=args.sparse_type)
+                          sparse_type=args.sparse_type, cuda=args.cuda, max_norm_path=args.max_norm_path)
 
     # recall at k
     cd_results = []
@@ -126,7 +122,7 @@ def run_pred(args):
     for i in tqdm(is_):
         each_query = query[i:i + step_size]
         if args.sparse:
-            each_q_text = q_texts[i:i+step_size]
+            each_q_text = q_texts[i:i + step_size]
 
         if args.no_od:
             doc_idxs, para_idxs, _, _ = zip(*pairs[i:i + step_size])
@@ -141,11 +137,11 @@ def run_pred(args):
             if not args.sparse:
                 each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe)
             else:
-                each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe, 
-                                           start_top_k=args.start_top_k, q_texts=each_q_text)
+                each_results = mips.search(each_query, top_k=args.top_k, nprobe=args.nprobe, mid_top_k=args.mid_top_k,
+                                           start_top_k=args.start_top_k, q_texts=each_q_text, filter_=args.filter,
+                                           search_strategy=args.search_strategy,
+                                           doc_top_k=args.doc_top_k)
             od_results.extend(each_results)
-        if i % 10 == 0:
-            print('%d/%d' % (i+1, len(is_)))
 
     top_k_answers = {query_id: [result['answer'] for result in each_results]
                      for (_, _, query_id, _), each_results in zip(pairs, od_results)}
@@ -160,6 +156,18 @@ def run_pred(args):
     print('dumping %s' % args.od_out_path)
     with open(args.od_out_path, 'w') as fp:
         json.dump(top_k_answers, fp)
+
+    from collections import Counter
+    counter = Counter(result['doc_idx'] for each in od_results for result in each)
+    with open(args.counter_path, 'w') as fp:
+        json.dump(counter, fp)
+
+
+def load_sparse_csr(filename):
+    loader = np.load(filename)
+    matrix = sp.csr_matrix((loader['data'], loader['indices'],
+                            loader['indptr']), shape=loader['shape'])
+    return matrix, loader['metadata'].item(0) if 'metadata' in loader else None
 
 
 def main():
