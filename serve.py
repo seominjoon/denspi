@@ -16,7 +16,8 @@ def serve(get_vec, port):
 
     @app.route('/api', methods=['GET'])
     def api():
-        query = request.args['query']
+        # query = request.args['query']
+        query = request.args.getlist('query')
         start = time()
         out = get_vec(query)
         end = time()
