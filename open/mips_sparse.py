@@ -23,6 +23,16 @@ def scale_l2_to_ip(l2_scores, max_norm=None, query_norm=None):
     return -0.5 * (l2_scores - query_norm ** 2 - max_norm ** 2)
 
 
+def int8_to_float(num, offset, factor):
+    return num.astype(np.float32) / factor + offset
+
+
+def dequant(group, input_):
+    if 'offset' in group.attrs:
+        return int8_to_float(input_, group.attrs['offset'], group.attrs['scale'])
+    return input_
+
+
 def filter_results(results):
     out = []
     for result in results:
@@ -33,16 +43,6 @@ def filter_results(results):
             continue
         out.append(result)
     return out
-
-
-def int8_to_float(num, offset, factor):
-    return num.astype(np.float32) / factor + offset
-
-
-def dequant(group, input_):
-    if 'offset' in group.attrs:
-        return int8_to_float(input_, group.attrs['offset'], group.attrs['scale'])
-    return input_
 
 
 def sparse_slice_ip_from_raw(q_mat, c_data_list, c_indices_list):
@@ -190,14 +190,13 @@ class MIPSSparse(object):
                 groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
                 groups = [group[str(para_idx)] for group, para_idx in zip(groups, para_idxs)]
             else:
-                if 'p' in self.sparse_type:
-                    groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
-                    doc_bounds = [[m.start() for m in re.finditer('\[PAR\]', group.attrs['context'])] for group in
-                                  groups]
-                    doc_starts = [group['word2char_start'][start_idx].item() for group, start_idx in
-                                  zip(groups, start_idxs)]
-                    para_idxs = [sum([1 if start > bound else 0 for bound in par_bound])
-                                 for par_bound, start in zip(doc_bounds, doc_starts)]
+                groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
+                doc_bounds = [[m.start() for m in re.finditer('\[PAR\]', group.attrs['context'])] for group in
+                              groups]
+                doc_starts = [group['word2char_start'][start_idx].item() for group, start_idx in
+                              zip(groups, start_idxs)]
+                para_idxs = [sum([1 if start > bound else 0 for bound in par_bound])
+                             for par_bound, start in zip(doc_bounds, doc_starts)]
         tfidf_groups = [self.get_tfidf_group(doc_idx) for doc_idx in doc_idxs]
         tfidf_groups = [group[str(para_idx)] for group, para_idx in zip(tfidf_groups, para_idxs)]
         data_list = [data['vals'][:] for data in tfidf_groups]
@@ -207,8 +206,7 @@ class MIPSSparse(object):
 
     def search_dense(self, query_start, start_top_k, nprobe, all_doc_scores):
         # Search space reduction with Faiss
-        query_start = np.concatenate([np.zeros([query_start.shape[0], 1]).astype(np.float32),
-                                      query_start], axis=1)
+        query_start = np.concatenate([np.zeros([query_start.shape[0], 1]).astype(np.float32), query_start], axis=1)
         if self.num_dummy_zeros > 0:
             query_start = np.concatenate([query_start, np.zeros([query_start.shape[0], self.num_dummy_zeros],
                                                                 dtype=query_start.dtype)], axis=1)
@@ -240,7 +238,7 @@ class MIPSSparse(object):
         # for now, assume 1D
         doc_idxs = np.squeeze(doc_idxs)
         if para_idxs is not None:
-            doc_idxs = np.squeeze(doc_idxs)
+            para_idxs = np.squeeze(para_idxs)
         start_idxs = np.squeeze(start_idxs)
         start_scores = np.squeeze(start_scores)
 
@@ -269,19 +267,21 @@ class MIPSSparse(object):
         return (doc_idxs, start_idxs), scores
 
     def search_start(self, query_start, doc_idxs=None, para_idxs=None,
-                     start_top_k=100, mid_top_k=20, out_top_k=5, nprobe=16, q_texts=None,
+                     start_top_k=100, mid_top_k=20, top_k=5, nprobe=16, q_texts=None,
                      doc_top_k=5, search_strategy='dense_first'):
+
         # doc_idxs = [Q], para_idxs = [Q]
         assert self.start_index is not None
         query_start = query_start.astype(np.float32)
 
-        # Open
+        # Open-domain setup (doc_idxs, para_idxs are not given)
         if doc_idxs is None:
-            if not len(self.sparse_type) == 0:
-                q_spvecs = vstack([self.ranker.text2spvec(q) for q in q_texts])
 
+            # Pre-compute doc_level sparse scores
+            q_spvecs = vstack([self.ranker.text2spvec(q) for q in q_texts])
             doc_scores = np.squeeze((q_spvecs * self.ranker.doc_mat).toarray())
 
+            # Branch based on the strategy (dense vs. sparse (doc-level))
             if search_strategy == 'dense_first':
                 (doc_idxs, para_idxs, start_idxs), start_scores = self.search_dense(query_start,
                                                                                     start_top_k,
@@ -301,7 +301,7 @@ class MIPSSparse(object):
             else:
                 raise ValueError(search_strategy)
 
-            # rerank and reduce
+            # Rerank and reduce
             rerank_idxs = start_scores.argsort()[-mid_top_k:][::-1]
             doc_idxs = doc_idxs[rerank_idxs]
             start_idxs = start_idxs[rerank_idxs]
@@ -316,7 +316,7 @@ class MIPSSparse(object):
             start_scores += self.sparse_weight * self.get_para_scores(q_spvecs, doc_idxs, start_idxs=start_idxs)
 
             rerank_scores = np.reshape(start_scores, [-1, mid_top_k])
-            rerank_idxs = np.array([scores.argsort()[-out_top_k:][::-1]
+            rerank_idxs = np.array([scores.argsort()[-top_k:][::-1]
                                     for scores in rerank_scores])
 
             doc_idxs = doc_idxs[rerank_idxs]
@@ -325,18 +325,23 @@ class MIPSSparse(object):
             start_idxs = start_idxs[rerank_idxs]
             start_scores = start_scores[rerank_idxs]
 
-        # Closed
+        # Close-domain setup
         else:
+            # Get start vectors and dequantize
             groups = [self.get_doc_group(doc_idx)[str(para_idx)] for doc_idx, para_idx in zip(doc_idxs, para_idxs)]
             starts = [group['start'][:, :] for group in groups]
             starts = [int8_to_float(start, groups[0].attrs['offset'], groups[0].attrs['scale']) for start in starts]
+
+            # Calculate start scores based on dot-product
             all_scores = [np.squeeze(np.matmul(start, query_start[i:i + 1, :].transpose()), -1)
                           for i, start in enumerate(starts)]
-            start_idxs = np.array([scores.argsort()[-out_top_k:][::-1]
-                                   for scores in all_scores])
+            start_idxs = np.array([scores.argsort()[-top_k:][::-1] for scores in all_scores])
             start_scores = np.array([scores[idxs] for scores, idxs in zip(all_scores, start_idxs)])
-            doc_idxs = np.tile(np.expand_dims(doc_idxs, -1), [1, out_top_k])
-            para_idxs = np.tile(np.expand_dims(para_idxs, -1), [1, out_top_k])
+
+            # Keep only top_k indices
+            doc_idxs = np.tile(np.expand_dims(doc_idxs, -1), [1, top_k])
+            para_idxs = np.tile(np.expand_dims(para_idxs, -1), [1, top_k])
+
         return start_scores, doc_idxs, para_idxs, start_idxs
 
     def search_phrase(self, query, doc_idxs, start_idxs, para_idxs=None, start_scores=None):
@@ -344,8 +349,8 @@ class MIPSSparse(object):
         # doc_idxs = [Q]
         # start_idxs = [Q]
         # para_idxs = [Q]
-        bs = int((query.shape[1] - 1) / 2)
-        query_start, query_end, query_span_logit = query[:, :bs], query[:, bs:2 * bs], query[:, -1:]
+        start_dim = int((query.shape[1] - 1) / 2)
+        query_start, query_end, query_span_logit = query[:, :start_dim], query[:, start_dim:2 * start_dim], query[:, -1:]
 
         groups = [self.get_doc_group(doc_idx) for doc_idx in doc_idxs]
 
@@ -372,7 +377,7 @@ class MIPSSparse(object):
         ends = [group['end'][:] for group in groups]
         spans = [group['span_logits'][:] for group in groups]
 
-        default_end = np.zeros(bs).astype(np.float32)
+        default_end = np.zeros(start_dim).astype(np.float32)
         end_idxs = [group['start2end'][start_idx, :] for group, start_idx in zip(groups, start_idxs)]  # [Q, L]
         end_mask = -1e9 * (np.array(end_idxs) < 0)  # [Q, L]
 
@@ -415,14 +420,17 @@ class MIPSSparse(object):
 
     def search(self, query, top_k=10, nprobe=256, doc_idxs=None, para_idxs=None, start_top_k=1000, mid_top_k=100,
                q_texts=None, filter_=False, search_strategy='dense_first', doc_top_k=5, aggregate=False):
-        num_queries = query.shape[0]
-        bs = int((query.shape[1] - 1) / 2)
-        query_start = query[:, :bs]
 
+        # Get dimensions
+        batch_size = query.shape[0]
+        start_dim = int((query.shape[1] - 1) / 2)
+
+        # Search based on the strategy (dense-first, sparse-first, hybrid)
+        query_start = query[:, :start_dim]
         start_scores, doc_idxs, para_idxs, start_idxs = self.search_start(query_start,
                                                                           start_top_k=start_top_k,
                                                                           mid_top_k=mid_top_k,
-                                                                          out_top_k=top_k,
+                                                                          top_k=top_k,
                                                                           nprobe=nprobe,
                                                                           doc_idxs=doc_idxs,
                                                                           para_idxs=para_idxs,
@@ -433,25 +441,27 @@ class MIPSSparse(object):
             print("Warning.. %d only retrieved" % doc_idxs.shape[1])
             top_k = doc_idxs.shape[1]
 
-        # reshape
+        # Reshape each output for broadcasting
         query = np.reshape(np.tile(np.expand_dims(query, 1), [1, top_k, 1]), [-1, query.shape[1]])
-        idxs = np.reshape(np.tile(np.expand_dims(np.arange(num_queries), 1), [1, top_k]), [-1])
+        idxs = np.reshape(np.tile(np.expand_dims(np.arange(batch_size), 1), [1, top_k]), [-1])
         start_scores = np.reshape(start_scores, [-1])
         doc_idxs = np.reshape(doc_idxs, [-1])
         para_idxs = np.reshape(para_idxs, [-1])
         start_idxs = np.reshape(start_idxs, [-1])
 
+        # Rerank top phrases based on the end/span scores
         out = self.search_phrase(query, doc_idxs, start_idxs, para_idxs=para_idxs, start_scores=start_scores)
-        # out = self.search_phrase(query, doc_idxs, start_idxs, para_idxs=para_idxs)
-        new_out = [[] for _ in range(num_queries)]
+        new_out = [[] for _ in range(batch_size)]
         for idx, each_out in zip(idxs, out):
             new_out[idx].append(each_out)
         for i in range(len(new_out)):
             new_out[i] = sorted(new_out[i], key=lambda each_out: -each_out['score'])
 
+        # Filter irrelevant outputs
         if filter_:
             new_out = [filter_results(results) for results in new_out]
 
+        # What is this for?
         if aggregate:
             pass
 
