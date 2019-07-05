@@ -584,21 +584,20 @@ def inject_noise(input_ids, input_mask,
     return input_ids, input_mask
 
 
-def inject_noise_to_features(features,
-                             clamp=False, clamp_prob=0.5, min_len=0, max_len=300, pad=0,
-                             replace=False, replace_prob=0.3, unk_prob=0.2, vocab_size=30522, unk=100, min_id=999,
-                             shuffle=False, shuffle_prob=0.2):
+def inject_noise_to_neg_features(features,
+                                 clamp=False, clamp_prob=1.0, min_len=0, max_len=300, pad=0,
+                                 replace=False, replace_prob=1.0, unk_prob=1.0, vocab_size=30522, unk=100, min_id=999,
+                                 shuffle=False, shuffle_prob=1.0):
     features = copy.deepcopy(features)
     input_ids = features.input_ids
     input_mask = features.input_mask
     if clamp and random.random() < clamp_prob:
         len_ = sum(input_mask) - 2
-        new_len = random.choice(range(min_len, max_len + 1))
-        if new_len < len_:
-            input_ids[new_len + 1] = input_ids[len_ + 1]
-            for i in range(new_len + 2, len(input_ids)):
-                input_ids[i] = pad
-                input_mask[i] = 0
+        new_len = random.choice(range(min_len, min(len_, max_len) + 1))
+        input_ids[new_len + 1] = input_ids[len_ + 1]
+        for i in range(new_len + 2, len(input_ids)):
+            input_ids[i] = pad
+            input_mask[i] = 0
 
     len_ = sum(input_mask) - 2
     if replace:
@@ -619,7 +618,7 @@ def inject_noise_to_features(features,
     return features
 
 
-def inject_noise_to_features_list(features_list, noise_prob=0.5, **kwargs):
-    out = [inject_noise_to_features(features, **kwargs) if features.start_position < 0 and random.random() < noise_prob
+def inject_noise_to_neg_features_list(features_list, noise_prob=1.0, **kwargs):
+    out = [inject_noise_to_neg_features(features, **kwargs) if random.random() < noise_prob
            else features for features in features_list]
     return out

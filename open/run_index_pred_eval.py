@@ -127,6 +127,8 @@ def get_args():
     #### evaluate_recall.py
     args.scores_path = os.path.join(args.scores_dir, 'scores_%s' % os.path.basename(args.od_out_path))
 
+    args.counter_path = os.path.join(args.pred_dir, 'counter.json')
+
     return args
 
 

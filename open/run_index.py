@@ -275,10 +275,11 @@ def add_to_index(dump_paths, trained_index_path, target_index_path, idx2id_path,
 
     print('writing index and metadata')
     with h5py.File(idx2id_path, 'w') as f:
-        f.create_dataset('doc', data=idx2doc_id)
-        f.create_dataset('para', data=idx2para_id)
-        f.create_dataset('word', data=idx2word_id)
-        f.attrs['offset'] = offset
+        g = f.create_group(str(offset))
+        g.create_dataset('doc', data=idx2doc_id)
+        g.create_dataset('para', data=idx2para_id)
+        g.create_dataset('word', data=idx2word_id)
+        g.attrs['offset'] = offset
     faiss.write_index(start_index, target_index_path)
     print('done')
 
@@ -293,11 +294,13 @@ def merge_indexes(subindex_dir, trained_index_path, target_index_path, target_id
     with h5py.File(target_idx2id_path, 'w') as out:
         for idx2id_path in tqdm(idx2id_paths, desc='copying idx2id'):
             with h5py.File(idx2id_path, 'r') as in_:
-                offset = str(in_.attrs['offset'])
-                group = out.create_group(offset)
-                group.create_dataset('doc', data=in_['doc'])
-                group.create_dataset('para', data=in_['para'])
-                group.create_dataset('word', data=in_['word'])
+                for key, g in in_.items():
+                    offset = str(g.attrs['offset'])
+                    assert key == offset
+                    group = out.create_group(offset)
+                    group.create_dataset('doc', data=in_['doc'])
+                    group.create_dataset('para', data=in_['para'])
+                    group.create_dataset('word', data=in_['word'])
 
     print('loading invlists')
     ivfs = []

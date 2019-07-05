@@ -24,7 +24,7 @@ from bert import BertConfig
 from optimization import BERTAdam
 from phrase import BertPhraseModel
 from pre import convert_examples_to_features, read_squad_examples, convert_documents_to_features, \
-    convert_questions_to_features, SquadExample, inject_noise_to_features_list
+    convert_questions_to_features, SquadExample, inject_noise_to_neg_features_list
 from post import write_predictions, write_hdf5, get_question_results as get_question_results_, \
     convert_question_features_to_dataloader, write_question_results
 from serve import serve
@@ -345,8 +345,10 @@ def main():
 
         no_decay = ['bias', 'gamma', 'beta']
         optimizer_parameters = [
-            {'params': [p for n, p in model.named_parameters() if (n not in no_decay) and is_param(n)], 'weight_decay_rate': 0.01},
-            {'params': [p for n, p in model.named_parameters() if (n in no_decay) and is_param(n)], 'weight_decay_rate': 0.0}
+            {'params': [p for n, p in model.named_parameters() if (n not in no_decay) and is_param(n)],
+             'weight_decay_rate': 0.01},
+            {'params': [p for n, p in model.named_parameters() if (n in no_decay) and is_param(n)],
+             'weight_decay_rate': 0.0}
         ]
         optimizer = BERTAdam(optimizer_parameters,
                              lr=args.learning_rate,
@@ -363,11 +365,6 @@ def main():
             doc_stride=args.doc_stride,
             max_query_length=args.max_query_length,
             is_training=True)
-
-        train_features = inject_noise_to_features_list(train_features,
-                                                       clamp=True,
-                                                       replace=True,
-                                                       shuffle=True)
 
         logger.info("***** Running training *****")
         logger.info("  Num orig examples = %d", len(train_examples))
@@ -433,8 +430,10 @@ def main():
 
         no_decay = ['bias', 'gamma', 'beta']
         optimizer_parameters = [
-            {'params': [p for n, p in model.named_parameters() if (n not in no_decay) and is_param(n)], 'weight_decay_rate': 0.01},
-            {'params': [p for n, p in model.named_parameters() if (n in no_decay) and is_param(n)], 'weight_decay_rate': 0.0}
+            {'params': [p for n, p in model.named_parameters() if (n not in no_decay) and is_param(n)],
+             'weight_decay_rate': 0.01},
+            {'params': [p for n, p in model.named_parameters() if (n in no_decay) and is_param(n)],
+             'weight_decay_rate': 0.0}
         ]
         optimizer = BERTAdam(optimizer_parameters,
                              lr=args.learning_rate,
@@ -452,10 +451,12 @@ def main():
             max_query_length=args.max_query_length,
             is_training=True)
 
-        train_features = inject_noise_to_features_list(train_features,
-                                                       clamp=True,
-                                                       replace=True,
-                                                       shuffle=True)
+        neg_train_features = random.sample(train_features, len(train_features))
+        neg_train_features = inject_noise_to_neg_features_list(neg_train_features,
+                                                               noise_prob=0.2,
+                                                               clamp=True, clamp_prob=0.1,
+                                                               replace=True, replace_prob=0.1, unk_prob=0.1,
+                                                               shuffle=True, shuffle_prob=0.1)
 
         logger.info("***** Running training *****")
         logger.info("  Num orig examples = %d", len(train_examples))
@@ -471,35 +472,36 @@ def main():
         all_input_ids_ = torch.tensor([f.input_ids for f in train_features_], dtype=torch.long)
         all_input_mask_ = torch.tensor([f.input_mask for f in train_features_], dtype=torch.long)
 
+        all_neg_input_ids = torch.tensor([f.input_ids for f in neg_train_features], dtype=torch.long)
+        all_neg_input_mask = torch.tensor([f.input_mask for f in neg_train_features], dtype=torch.long)
+
         if args.fp16:
             (all_input_ids, all_input_mask,
              all_start_positions,
              all_end_positions) = tuple(t.half() for t in (all_input_ids, all_input_mask,
                                                            all_start_positions, all_end_positions))
             all_input_ids_, all_input_mask_ = tuple(t.half() for t in (all_input_ids_, all_input_mask_))
+            all_neg_input_ids, all_neg_input_mask = tuple(t.half() for t in (all_neg_input_ids, all_neg_input_mask))
 
         train_data = TensorDataset(all_input_ids, all_input_mask,
                                    all_input_ids_, all_input_mask_,
-                                   all_start_positions, all_end_positions)
+                                   all_start_positions, all_end_positions,
+                                   all_neg_input_ids, all_neg_input_mask)
+
         if args.local_rank == -1:
             train_sampler = RandomSampler(train_data)
-            neg_sampler = RandomSampler(train_data)
         else:
             train_sampler = DistributedSampler(train_data)
-            neg_sampler = DistributedSampler(train_data)
         train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
-        neg_dataloader = DataLoader(train_data, sampler=neg_sampler, batch_size=args.train_batch_size)
 
         model.train()
         for epoch in range(int(args.num_train_epochs)):
-            for step, (batch, neg_batch) in enumerate(zip(tqdm(train_dataloader, desc="Epoch %d" % (epoch + 1)),
-                                                          neg_dataloader)):
+            for step, batch in enumerate(tqdm(train_dataloader, desc="Epoch %d" % (epoch + 1))):
                 batch = tuple(t.to(device) for t in batch)
-                neg_batch = tuple(t.to(device) for t in neg_batch)
                 (input_ids, input_mask,
                  input_ids_, input_mask_,
-                 start_positions, end_positions) = batch
-                neg_input_ids, neg_input_mask, _, _, _, _ = neg_batch
+                 start_positions, end_positions,
+                 neg_input_ids, neg_input_mask) = batch
 
                 loss, _ = model(input_ids, input_mask,
                                 input_ids_, input_mask_,
@@ -710,83 +712,78 @@ def main():
             offsets = [int(each) * 1000 for each in names]
 
         for offset, predict_file in zip(offsets, predict_files):
-            try:
-                context_examples = read_squad_examples(
-                    context_only=True,
-                    input_file=predict_file, is_training=False, draft=args.draft,
-                    draft_num_examples=args.draft_num_examples)
+            context_examples = read_squad_examples(
+                context_only=True,
+                input_file=predict_file, is_training=False, draft=args.draft,
+                draft_num_examples=args.draft_num_examples)
 
-                for example in context_examples:
-                    example.doc_idx += offset
+            for example in context_examples:
+                example.doc_idx += offset
 
-                context_features = convert_documents_to_features(
-                    examples=context_examples,
-                    tokenizer=tokenizer,
-                    max_seq_length=args.max_seq_length,
-                    doc_stride=args.doc_stride)
+            context_features = convert_documents_to_features(
+                examples=context_examples,
+                tokenizer=tokenizer,
+                max_seq_length=args.max_seq_length,
+                doc_stride=args.doc_stride)
 
-                logger.info("***** Running indexing on %s *****" % predict_file)
-                logger.info("  Num orig examples = %d", len(context_examples))
-                logger.info("  Num split examples = %d", len(context_features))
-                logger.info("  Batch size = %d", args.predict_batch_size)
+            logger.info("***** Running indexing on %s *****" % predict_file)
+            logger.info("  Num orig examples = %d", len(context_examples))
+            logger.info("  Num split examples = %d", len(context_features))
+            logger.info("  Batch size = %d", args.predict_batch_size)
 
-                all_input_ids = torch.tensor([f.input_ids for f in context_features], dtype=torch.long)
-                all_input_mask = torch.tensor([f.input_mask for f in context_features], dtype=torch.long)
-                all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
-                if args.fp16:
-                    all_input_ids, all_input_mask, all_example_index = tuple(
-                        t.half() for t in (all_input_ids, all_input_mask, all_example_index))
+            all_input_ids = torch.tensor([f.input_ids for f in context_features], dtype=torch.long)
+            all_input_mask = torch.tensor([f.input_mask for f in context_features], dtype=torch.long)
+            all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
+            if args.fp16:
+                all_input_ids, all_input_mask, all_example_index = tuple(
+                    t.half() for t in (all_input_ids, all_input_mask, all_example_index))
 
-                context_data = TensorDataset(all_input_ids, all_input_mask, all_example_index)
+            context_data = TensorDataset(all_input_ids, all_input_mask, all_example_index)
 
-                if args.local_rank == -1:
-                    context_sampler = SequentialSampler(context_data)
-                else:
-                    context_sampler = DistributedSampler(context_data)
-                context_dataloader = DataLoader(context_data, sampler=context_sampler,
-                                                batch_size=args.predict_batch_size)
+            if args.local_rank == -1:
+                context_sampler = SequentialSampler(context_data)
+            else:
+                context_sampler = DistributedSampler(context_data)
+            context_dataloader = DataLoader(context_data, sampler=context_sampler,
+                                            batch_size=args.predict_batch_size)
 
-                model.eval()
-                logger.info("Start indexing")
+            model.eval()
+            logger.info("Start indexing")
 
-                def get_context_results():
-                    for (input_ids, input_mask, example_indices) in context_dataloader:
-                        input_ids = input_ids.to(device)
-                        input_mask = input_mask.to(device)
-                        with torch.no_grad():
-                            batch_start, batch_end, batch_span_logits, bs, be, batch_sparse = model(input_ids,
-                                                                                                    input_mask)
-                        for i, example_index in enumerate(example_indices):
-                            start = batch_start[i].detach().cpu().numpy().astype(args.dtype)
-                            end = batch_end[i].detach().cpu().numpy().astype(args.dtype)
-                            sparse = None
-                            if batch_sparse is not None:
-                                sparse = batch_sparse[i].detach().cpu().numpy().astype(args.dtype)
-                            span_logits = batch_span_logits[i].detach().cpu().numpy().astype(args.dtype)
-                            filter_start_logits = bs[i].detach().cpu().numpy().astype(args.dtype)
-                            filter_end_logits = be[i].detach().cpu().numpy().astype(args.dtype)
-                            context_feature = context_features[example_index.item()]
-                            unique_id = int(context_feature.unique_id)
-                            yield ContextResult(unique_id=unique_id,
-                                                start=start,
-                                                end=end,
-                                                span_logits=span_logits,
-                                                filter_start_logits=filter_start_logits,
-                                                filter_end_logits=filter_end_logits,
-                                                sparse=sparse)
+            def get_context_results():
+                for (input_ids, input_mask, example_indices) in context_dataloader:
+                    input_ids = input_ids.to(device)
+                    input_mask = input_mask.to(device)
+                    with torch.no_grad():
+                        batch_start, batch_end, batch_span_logits, bs, be, batch_sparse = model(input_ids,
+                                                                                                input_mask)
+                    for i, example_index in enumerate(example_indices):
+                        start = batch_start[i].detach().cpu().numpy().astype(args.dtype)
+                        end = batch_end[i].detach().cpu().numpy().astype(args.dtype)
+                        sparse = None
+                        if batch_sparse is not None:
+                            sparse = batch_sparse[i].detach().cpu().numpy().astype(args.dtype)
+                        span_logits = batch_span_logits[i].detach().cpu().numpy().astype(args.dtype)
+                        filter_start_logits = bs[i].detach().cpu().numpy().astype(args.dtype)
+                        filter_end_logits = be[i].detach().cpu().numpy().astype(args.dtype)
+                        context_feature = context_features[example_index.item()]
+                        unique_id = int(context_feature.unique_id)
+                        yield ContextResult(unique_id=unique_id,
+                                            start=start,
+                                            end=end,
+                                            span_logits=span_logits,
+                                            filter_start_logits=filter_start_logits,
+                                            filter_end_logits=filter_end_logits,
+                                            sparse=sparse)
 
-                t0 = time()
-                write_hdf5(context_examples, context_features, get_context_results(),
-                           args.max_answer_length, not args.do_case, args.index_file, args.filter_threshold,
-                           args.verbose_logging,
-                           offset=args.compression_offset, scale=args.compression_scale,
-                           split_by_para=args.split_by_para,
-                           use_sparse=args.use_sparse)
-                print('%s: %.1f mins' % (predict_file, (time() - t0) / 60))
-            except Exception as e:
-                with open(os.path.join(args.output_dir, 'error_files.txt'), 'a') as fp:
-                    fp.write('error file: %s\n' % predict_file)
-                    fp.write('error message: %s\n' % str(e))
+            t0 = time()
+            write_hdf5(context_examples, context_features, get_context_results(),
+                       args.max_answer_length, not args.do_case, args.index_file, args.filter_threshold,
+                       args.verbose_logging,
+                       offset=args.compression_offset, scale=args.compression_scale,
+                       split_by_para=args.split_by_para,
+                       use_sparse=args.use_sparse)
+            print('%s: %.1f mins' % (predict_file, (time() - t0) / 60))
 
     if args.do_serve:
         def get(text):
