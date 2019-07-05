@@ -753,7 +753,8 @@ def main():
 
     if args.do_serve:
         def get(text):
-            question_examples = [SquadExample(qas_id='serve', question_text=text)]
+            # question_examples = [SquadExample(qas_id='serve', question_text=text)]
+            question_examples = [SquadExample(qas_id='serve_%d'%t_idx, question_text=t) for t_idx, t in enumerate(text)]
             query_eval_features = convert_questions_to_features(
                 examples=question_examples,
                 tokenizer=tokenizer,
@@ -766,8 +767,17 @@ def main():
 
             question_results = get_question_results_(question_examples, query_eval_features, question_dataloader,
                                                      device, model)
-            question_result = next(iter(question_results))
-            out = question_result.start.tolist(), question_result.end.tolist(), question_result.span_logit.tolist()
+            # question_result = next(iter(question_results))
+            starts = []
+            ends = []
+            spans = []
+            for question_result in question_results:
+                starts.append(question_result.start)
+                ends.append(question_result.end)
+                spans.append(question_result.span_logit)
+
+            #  out = question_result.start.tolist(), question_result.end.tolist(), question_result.span_logit.tolist()
+            out = np.concatenate(starts, 0).tolist(), np.concatenate(ends, 0).tolist(), np.concatenate(spans, 0).tolist()
             return out
 
         serve(get, args.port)
