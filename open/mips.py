@@ -249,6 +249,7 @@ class MIPS(object):
         b_doc_idxs = []
         b_start_idxs = []
         b_scores = []
+        max_phrases = 0
         for b_idx in range(batch_size):
             doc_idxs = []
             start_idxs = []
@@ -264,12 +265,18 @@ class MIPS(object):
                     doc_idxs.append(doc_idx)
                     start_idxs.append(i)
                     scores.append(cur_score + self.sparse_weight * doc_score)
+            max_phrases = len(scores) if len(scores) > max_phrases else max_phrases
 
             b_doc_idxs.append(doc_idxs)
             b_start_idxs.append(start_idxs)
             b_scores.append(scores)
 
-        doc_idxs, start_idxs, scores = np.array(b_doc_idxs), np.array(b_start_idxs), np.array(b_scores)
+        for doc_idxs, start_idxs, scores in zip(b_doc_idxs, b_start_idxs, b_scores):
+            doc_idxs += [-1] * (max_phrases - len(doc_idxs))
+            start_idxs += [-1] * (max_phrases - len(start_idxs))
+            scores += [-10**9] * (max_phrases - len(scores))
+
+        doc_idxs, start_idxs, scores = np.stack(b_doc_idxs), np.stack(b_start_idxs), np.stack(b_scores)
 
         return (doc_idxs, start_idxs), scores
 

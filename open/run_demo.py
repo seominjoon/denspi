@@ -25,9 +25,6 @@ def get_args():
     parser.add_argument('--index_path', default='index.faiss')
     parser.add_argument('--idx2id_path', default='idx2id.hdf5')
     parser.add_argument('--abs_path', default=False, action='store_true')
-    parser.add_argument('--examples_path', default='static/examples.txt')
-    parser.add_argument('--port', default=10001, type=int)
-    parser.add_argument('--api_port', default=9009, type=int)
 
     # MIPS params
     parser.add_argument('--max_answer_length', default=20, type=int)
@@ -42,6 +39,11 @@ def get_args():
     parser.add_argument('--sparse_type', default='dp', type=str, help='dp|p|d|(empty_string)')
     parser.add_argument('--cuda', default=False, action='store_true')
     parser.add_argument('--filter', default=False, action='store_true')
+
+    # Demo params
+    parser.add_argument('--examples_path', default='static/examples.txt')
+    parser.add_argument('--port', default=10001, type=int)
+    parser.add_argument('--api_port', default=9009, type=int)
 
     args = parser.parse_args()
     return args

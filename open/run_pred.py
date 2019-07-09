@@ -15,14 +15,11 @@ def get_args():
     # File paths
     parser.add_argument('dump_dir')
     parser.add_argument('wikipedia_dir')
-    parser.add_argument('data_path')
-    parser.add_argument('--question_dump_path', default='question.hdf5')
     parser.add_argument('--dump_path', default='phrase')
     parser.add_argument('--index_name', default='1048576_hnsw_SQ8')
     parser.add_argument('--index_path', default='index.faiss')
     parser.add_argument('--idx2id_path', default='idx2id.hdf5')
     parser.add_argument('--abs_path', default=False, action='store_true')
-    parser.add_argument('--pred_dir', default='predictions')
 
     # MIPS params
     parser.add_argument('--max_answer_length', default=20, type=int)
@@ -40,9 +37,12 @@ def get_args():
     parser.add_argument('--search_strategy', default='dense_first')
 
     # Eval params
+    parser.add_argument('--data_path', help='Evaluation data path')
+    parser.add_argument('--question_dump_path', default='question.hdf5')
+    parser.add_argument('--pred_dir', default='predictions')
     parser.add_argument('--no_od', default=False, action='store_true')
     parser.add_argument('--draft', default=False, action='store_true')
-    parser.add_argument('--step_size', default=32, type=int)
+    parser.add_argument('--step_size', default=20, type=int)
     parser.add_argument('--fs', default='local')
 
     args = parser.parse_args()
