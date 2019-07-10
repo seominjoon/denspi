@@ -1,3 +1,5 @@
+"""MIPS (Maximum Inner Product Search) component of DensPi"""
+
 import json
 from time import time
 
@@ -214,27 +216,21 @@ class MIPS(object):
                                                                 dtype=query_start.dtype)], axis=1)
         self.start_index.nprobe = nprobe
 
-        t = time()
         # Search with faiss
         start_scores, I = self.start_index.search(query_start, start_top_k)
         query_norm = np.linalg.norm(query_start, ord=2, axis=1)
         start_scores = scale_l2_to_ip(start_scores, max_norm=self.max_norm, query_norm=np.expand_dims(query_norm, 1))
-        # print('on-disk index search:', time()-t)
 
         # Get idxs from resulting I
         doc_idxs, para_idxs, start_idxs = self.get_idxs(I)
-        # print('get idxs:', time() - t)
 
         # For record
         num_docs = sum([len(set(doc_idx.flatten().tolist())) for doc_idx in doc_idxs]) / batch_size
         self.num_docs_list.append(num_docs)
-        # print('unique # docs: %d' % num_docs)
-        # print('avg unique # docs: %.2f' % (sum(self.num_docs_list) / len(self.num_docs_list)))
 
         # Add doc scores
         for b_idx in range(batch_size):
             start_scores[b_idx,:] += self.sparse_weight * all_doc_scores[b_idx][doc_idxs[b_idx]]
-        # print('add doc scores:', time() - t)
 
         return (doc_idxs, para_idxs, start_idxs), start_scores
 
@@ -292,7 +288,6 @@ class MIPS(object):
         # Open-domain setup (doc_idxs, para_idxs are not given)
         if doc_idxs is None:
 
-            t = time()
             # Pre-compute doc_level sparse scores
             q_spvecs = vstack([self.ranker.text2spvec(q) for q in q_texts])
             doc_scores = (q_spvecs * self.ranker.doc_mat).toarray()
@@ -317,8 +312,6 @@ class MIPS(object):
             else:
                 raise ValueError(search_strategy)
 
-            # print('search strat:', time() - t)
-
             # Rerank and reduce
             rerank_idxs = np.argsort(start_scores, axis=1)[:,-mid_top_k:][:,::-1]
             doc_idxs = doc_idxs.tolist()
@@ -328,7 +321,6 @@ class MIPS(object):
                 doc_idxs[b_idx] = np.array(doc_idxs[b_idx])[rerank_idxs[b_idx]]
                 start_idxs[b_idx] = np.array(start_idxs[b_idx])[rerank_idxs[b_idx]]
                 start_scores[b_idx] = np.array(start_scores[b_idx])[rerank_idxs[b_idx]]
-            # print('mid topk sort:', time() - t)
 
             # Para-level sparse score
             for b_idx in range(batch_size):
@@ -344,7 +336,6 @@ class MIPS(object):
             doc_idxs = np.stack(doc_idxs)
             start_idxs = np.stack(start_idxs)
             start_scores = np.stack(start_scores)
-            # print('topk sort:', time() - t)
 
         # Close-domain setup
         else:
@@ -435,7 +426,6 @@ class MIPS(object):
             each['answer'] = each['context'][each['start_pos']:each['end_pos']]
 
         out = [adjust(each) for each in out]
-        # out = [each for each in out if len(each['context']) > 100 and each['score'] >= 30]
 
         return out
 
@@ -482,7 +472,6 @@ class MIPS(object):
         if filter_:
             new_out = [filter_results(results) for results in new_out]
 
-        # What is this for?
         if aggregate:
             pass
 

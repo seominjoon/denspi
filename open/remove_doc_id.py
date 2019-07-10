@@ -1,3 +1,5 @@
+"""Remove document ids that are considered as noise"""
+
 import argparse
 import json
 import os

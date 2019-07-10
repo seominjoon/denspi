@@ -88,7 +88,6 @@ def run_demo(args):
     def query2emb(query, api_port):
         r = emb_session.get('http://localhost:%d/api' % api_port, params={'query': query})
 
-        # print(r.url)
         def map_():
             result = r.result()
             print('response status: {0}'.format(result))

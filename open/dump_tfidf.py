@@ -1,3 +1,5 @@
+"""Dump paragraph-level tf-idf vectors for sparse"""
+
 import json
 import os
 import argparse
