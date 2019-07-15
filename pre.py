@@ -17,9 +17,12 @@ import json
 import logging
 import random
 
+import h5py
 import six
+import torch
 from tqdm import tqdm
 import copy
+import numpy as np
 
 import tokenization
 from post import _improve_answer_span, _check_is_max_context
@@ -622,3 +625,46 @@ def inject_noise_to_neg_features_list(features_list, noise_prob=1.0, **kwargs):
     out = [inject_noise_to_neg_features(features, **kwargs) if random.random() < noise_prob
            else features for features in features_list]
     return out
+
+
+def sample_similar_questions(examples, features, question_emb_file, cuda=False):
+    with h5py.File(question_emb_file, 'r') as fp:
+        ids = []
+        mats = []
+        for id_, mat in fp.items():
+            ids.append(id_)
+            mats.append(mat[:])
+        id2idx = {id_: idx for idx, id_ in enumerate(ids)}
+        large_mat = np.concatenate(mats, axis=0)
+        large_mat = torch.tensor(large_mat).float()
+        if cuda:
+            large_mat = large_mat.to(torch.device('cuda'))
+        sim = large_mat.matmul(large_mat.t())
+        sim_argsort = (-sim).argsort(dim=1).cpu().numpy()
+
+        id2features = collections.defaultdict(list)
+        for feature in features:
+            id_ = examples[feature.example_index].qas_id
+            id2features[id_].append(feature)
+
+        sampled_features = []
+        for feature in features:
+            example = examples[feature.example_index]
+            example_tup = (example.title, example.doc_idx, example.pid)
+            id_ = example.qas_id
+            idx = id2idx[id_]
+            similar_feature = None
+            for target_idx in sim_argsort[idx]:
+                target_features = id2features[ids[target_idx]]
+                for target_feature in target_features:
+                    target_example = examples[target_feature.example_index]
+                    target_tup = (target_example.title, target_example.doc_idx, target_example.pid)
+                    if example_tup != target_tup:
+                        similar_feature = target_feature
+                        break
+                if similar_feature is not None:
+                    break
+
+            assert similar_feature is not None
+            sampled_features.append(similar_feature)
+        return sampled_features

@@ -2,23 +2,21 @@ dl:
 	python run_piqa.py \
 	--bert_model_option 'base_uncased' \
 	--train_file train-v1.1.json \
+	--do_train \
 	--do_train_neg \
-	--do_train_filter \
 	--do_predict \
 	--do_eval \
 	--do_embed_question \
 	--do_index \
 	--do_serve \
 	--num_train_epochs 1 \
-	--draft_num_examples 5 \
+	--draft_num_examples 10 \
 	--train_batch_size 1 \
 	--predict_batch_size 1 \
 	--draft \
 	--compression_offset 0.0 \
 	--compression_scale 20.0 \
 	--phrase_size 127 \
-	--split_by_para \
-	--load_dir piqateam_piqa-nfs_76 \
 	--iteration 1
 
 
@@ -733,22 +731,14 @@ pred_961:
 	--iteration 3 \
 	--parallel"
 
-question_961:
-	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 24G --nfs-output -a " \
-	--fs nsml_nfs \
-	--phrase_size 961 \
-	--do_embed_question \
-	--load_dir piqateam/piqa-nfs/2992 \
-	--iteration 3 \
-	--parallel"
-
 dump_961:
 	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nsml_nfs \
 	--index_file phrase.hdf5 \
 	--do_index \
-	--load_dir piqateam/piqa-nfs/2992 \
+	--do_embed_question \
+	--load_dir piqateam/piqa-nfs/76 \
 	--phrase_size 961 \
-	--iteration 3 \
+	--iteration 1 \
 	--parallel"
 

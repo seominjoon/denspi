@@ -24,7 +24,7 @@ from bert import BertConfig
 from optimization import BERTAdam
 from phrase import BertPhraseModel
 from pre import convert_examples_to_features, read_squad_examples, convert_documents_to_features, \
-    convert_questions_to_features, SquadExample, inject_noise_to_neg_features_list
+    convert_questions_to_features, SquadExample, inject_noise_to_neg_features_list, sample_similar_questions
 from post import write_predictions, write_hdf5, get_question_results as get_question_results_, \
     convert_question_features_to_dataloader, write_question_results
 from serve import serve
@@ -80,6 +80,7 @@ def main():
                         help="The output directory where the model checkpoints will be written.")
     parser.add_argument("--index_file", default='index.hdf5', type=str, help="index output file.")
     parser.add_argument("--question_emb_file", default='question.hdf5', type=str, help="question output file.")
+    parser.add_argument("--train_question_emb_file", default='train_question.hdf5', type=str, help="question output file.")
 
     parser.add_argument('--load_dir', default='out/', type=str)
 
@@ -257,6 +258,9 @@ def main():
     args.vocab_file = os.path.join(args.metadata_dir, args.vocab_file)
     args.index_file = os.path.join(args.output_dir, args.index_file)
 
+    args.question_emb_file = os.path.join(args.output_dir, args.question_emb_file)
+    args.train_question_emb_file = os.path.join(args.output_dir, args.train_question_emb_file)
+
     # Multi-GPU stuff
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -422,6 +426,25 @@ def main():
 
             processor.save(epoch + 1)
 
+    if args.do_embed_question:
+        question_examples = read_squad_examples(
+            question_only=True,
+            input_file=args.train_file, is_training=False, draft=args.draft,
+            draft_num_examples=args.draft_num_examples)
+        query_eval_features = convert_questions_to_features(
+            examples=question_examples,
+            tokenizer=tokenizer,
+            max_query_length=args.max_query_length)
+        question_dataloader = convert_question_features_to_dataloader(query_eval_features, args.fp16, args.local_rank,
+                                                                      args.predict_batch_size)
+
+        model.eval()
+        logger.info("Start embedding")
+        question_results = get_question_results_(question_examples, query_eval_features, question_dataloader, device,
+                                                 model)
+        print('Writing %s' % args.train_question_emb_file)
+        write_question_results(question_results, query_eval_features, args.train_question_emb_file)
+
     if args.do_train_neg:
         train_examples = read_squad_examples(
             input_file=args.train_file, is_training=True, draft=args.draft, draft_num_examples=args.draft_num_examples)
@@ -451,7 +474,8 @@ def main():
             max_query_length=args.max_query_length,
             is_training=True)
 
-        neg_train_features = random.sample(train_features, len(train_features))
+        neg_train_features = sample_similar_questions(train_examples, train_features, args.train_question_emb_file)
+        # neg_train_features = random.sample(train_features, len(train_features))
         neg_train_features = inject_noise_to_neg_features_list(neg_train_features,
                                                                noise_prob=0.2,
                                                                clamp=True, clamp_prob=0.1,
@@ -687,9 +711,8 @@ def main():
         logger.info("Start embedding")
         question_results = get_question_results_(question_examples, query_eval_features, question_dataloader, device,
                                                  model)
-        path = os.path.join(args.output_dir, args.question_emb_file)
-        print('Writing %s' % path)
-        write_question_results(question_results, query_eval_features, path)
+        print('Writing %s' % args.question_emb_file)
+        write_question_results(question_results, query_eval_features, args.question_emb_file)
 
     if args.do_index:
         if ':' not in args.predict_file:

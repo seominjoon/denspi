@@ -34,7 +34,7 @@ def get_args():
     parser.add_argument('--add_all', default=False, action='store_true')
 
     # coarse, fine, add
-    parser.add_argument('--num_clusters', type=int, default=4096)
+    parser.add_argument('--num_clusters', type=int, default=256)
     parser.add_argument('--hnsw', default=False, action='store_true')
     parser.add_argument('--fine_quant', default='SQ8',
                         help='SQ8|SQ4|PQ# where # is number of bytes per vector (for SQ it would be 480 Bytes)')
@@ -65,7 +65,7 @@ def get_args():
     # MIPS params
     parser.add_argument('--sparse_weight', default=3, type=float)
     parser.add_argument('--start_top_k', default=100, type=int)
-    parser.add_argument('--nprobe', default=64, type=int)
+    parser.add_argument('--nprobe', default=16, type=int)
 
     # stable MIPS params
     parser.add_argument('--max_answer_length', default=30, type=int)
