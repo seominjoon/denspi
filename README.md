@@ -55,13 +55,25 @@ This directory's file is for hosting a (PyTorch-based) server that maps the inpu
 `open`'s file is for hosting the search server and the demo itself.
 In this tutorial, we will simply install both in the same environment.
 
-1. Make sure you are using `python=3.6` through Conda.
+1. Make sure you are using `python=3.6` through Conda. For instance, once you have Conda, create the environment via
+```
+conda create -n denspi python=3.6
+```
+then activate:
+```
+conda activate denspi
+```
+
 2. First, manually install `faiss` with `conda`:
 ```
 conda install faiss-cpu=1.5.2 -c pytorch
 ```
 3. Before installing with pip, make sure that you have installed `DrQA`. 
 Visit [here](https://github.com/facebookresearch/DrQA) for instructions.
+If you are using conda, you will probably need to install java-jdk in order to install DrQA:
+```
+conda install -c cyclus java-jdk
+```
 4. Then install both requirement files:
 ```
 pip install -r requirements.txt
