@@ -639,8 +639,10 @@ def sample_similar_questions(examples, features, question_emb_file, cuda=False):
         large_mat = torch.tensor(large_mat).float()
         if cuda:
             large_mat = large_mat.to(torch.device('cuda'))
+        """
         sim = large_mat.matmul(large_mat.t())
         sim_argsort = (-sim).argsort(dim=1).cpu().numpy()
+        """
 
         id2features = collections.defaultdict(list)
         for feature in features:
@@ -648,13 +650,15 @@ def sample_similar_questions(examples, features, question_emb_file, cuda=False):
             id2features[id_].append(feature)
 
         sampled_features = []
-        for feature in features:
+        for feature in tqdm(features, desc='sampling'):
             example = examples[feature.example_index]
             example_tup = (example.title, example.doc_idx, example.pid)
             id_ = example.qas_id
             idx = id2idx[id_]
             similar_feature = None
-            for target_idx in sim_argsort[idx]:
+            sim = (large_mat.matmul(large_mat[idx:idx+1, :].t()).squeeze(1))
+            sim_argsort = (-sim).argsort(dim=0).cpu().numpy()
+            for target_idx in sim_argsort:
                 target_features = id2features[ids[target_idx]]
                 for target_feature in target_features:
                     target_example = examples[target_feature.example_index]

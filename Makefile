@@ -17,7 +17,8 @@ dl:
 	--compression_offset 0.0 \
 	--compression_scale 20.0 \
 	--phrase_size 127 \
-	--iteration 1
+	--iteration 1 \
+	--no_cuda
 
 
 train_base_na_127:
@@ -674,12 +675,13 @@ train_base_511:
 	--freeze_word_emb"
 
 train_neg_base_511:
-	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
-	--fs nfs \
+	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 48G --nfs-output -a " \
+	--fs nsml_nfs \
 	--bert_model_option 'base_uncased' \
 	--train_file train-v1.1.json \
 	--train_batch_size 9 \
 	--phrase_size 511 \
+	--do_embed_question \
 	--do_train_neg \
 	--do_predict \
 	--do_eval \
@@ -708,11 +710,12 @@ train_961:
 	--freeze_word_emb"
 
 train_neg_961:
-	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 24G --nfs-output -a " \
-	--fs nfs \
+	nsml run -d piqa-nfs -g 4 -e run_piqa.py --memory 48G --nfs-output -a " \
+	--fs nsml_nfs \
 	--train_file train-v1.1.json \
 	--train_batch_size 9 \
 	--phrase_size 961 \
+	--do_embed_question \
 	--do_train_neg \
 	--do_predict \
 	--do_eval \
@@ -737,8 +740,8 @@ dump_961:
 	--index_file phrase.hdf5 \
 	--do_index \
 	--do_embed_question \
-	--load_dir piqateam/piqa-nfs/76 \
+	--load_dir piqateam/piqa-nfs/3020 \
 	--phrase_size 961 \
-	--iteration 1 \
+	--iteration 2 \
 	--parallel"
 

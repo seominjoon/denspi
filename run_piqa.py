@@ -474,7 +474,8 @@ def main():
             max_query_length=args.max_query_length,
             is_training=True)
 
-        neg_train_features = sample_similar_questions(train_examples, train_features, args.train_question_emb_file)
+        neg_train_features = sample_similar_questions(train_examples, train_features, args.train_question_emb_file,
+                                                      cuda=not args.no_cuda)
         # neg_train_features = random.sample(train_features, len(train_features))
         neg_train_features = inject_noise_to_neg_features_list(neg_train_features,
                                                                noise_prob=0.2,
