@@ -44,7 +44,7 @@ You will need to download ~1.5 TB of files, but once you have them, it will take
 If you are using Google Cloud 
 (our demo is also being hosted on Google Cloud, with 8 vCPUs, 30 GB RAM, and 6 local SSDs),
 we highly recommend using [local SSD](https://cloud.google.com/compute/docs/disks/local-ssd), 
-which is not only cheaper but also better for low-latency applications (at the cost of persistency).
+which is not only cheaper but also offers lower disk access latency (at the cost of persistency).
 
 
 
