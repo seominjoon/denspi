@@ -78,7 +78,7 @@ def main():
     # Output and load paths
     parser.add_argument("--output_dir", default='out/', type=str,
                         help="The output directory where the model checkpoints will be written.")
-    parser.add_argument("--index_file", default='index.hdf5', type=str, help="index output file.")
+    parser.add_argument("--index_file", default='phrase.hdf5', type=str, help="index output file.")
     parser.add_argument("--question_emb_file", default='question.hdf5', type=str, help="question output file.")
     parser.add_argument("--train_question_emb_file", default='train_question.hdf5', type=str, help="question output file.")
 

@@ -58,14 +58,13 @@ def run_dump_phrase(args):
                 "-e",
                 "run_piqa.py",
                 "--memory",
-                "%dG" % args.mem_size,
+                f"{args.mem_size}G",
                 "--nfs-output",
                 "-a",
-                "--fs nfs --do_index --data_dir %s --predict_file %d:%d  --filter_threshold %.2f "
-                "--output_dir %s --index_file %d-%d.hdf5 --phrase_size %s "
-                "--load_dir %s --iteration 1 %s %s" % (args.phrase_data_dir, start_doc, end_doc, args.filter_threshold,
-                                                    args.phrase_dump_dir, start_doc, end_doc, args.phrase_size,
-                                                    args.load_dir, model_option, para)]
+                f"--fs nsml_nfs --do_index --data_dir {args.phrase_data_dir} "
+                f"--predict_file {start_doc}:{end_doc}  --filter_threshold {args.filter_threshold} "
+                f"--output_dir {args.phrase_dump_dir} --index_file {start_doc}-{end_doc}.hdf5 "
+                f"--phrase_size {args.phrase_size} --load_dir {args.load_dir} --iteration 1 {model_option} {para}"]
 
     num_docs = args.end - args.start
     num_gpus = args.num_gpus
@@ -90,12 +89,12 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dump_dir', default=None)
     parser.add_argument('--phrase_size', default=961, type=int)
-    parser.add_argument('--load_dir', default='piqateam/piqa-nfs/76')
+    parser.add_argument('--load_dir', default='piqateam/piqa-nfs/3021')
     parser.add_argument('--data_dir', default='data')
-    parser.add_argument('--data_name', default='500-2000')
+    parser.add_argument('--data_name', default='wikipedia_filtered')
     parser.add_argument('--model', default='large')
     parser.add_argument('--filter_threshold', default=-2, type=float)
-    parser.add_argument('--num_gpus', default=30, type=int)
+    parser.add_argument('--num_gpus', default=20, type=int)
     parser.add_argument('--start', default=0, type=int)
     parser.add_argument('--end', default=5076, type=int)
     parser.add_argument('--mem_size', default=32, type=int, help='mem size in GB')

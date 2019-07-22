@@ -723,6 +723,21 @@ train_neg_961:
 	--load_dir piqateam/piqa-nfs/2978 \
 	--freeze_word_emb"
 
+train_neg_filter_961:
+	nsml run -d piqa-nfs -g 2 -e run_piqa.py --memory 24G --nfs-output -a " \
+	--fs nsml_nfs \
+	--train_file train-v1.1.json \
+	--train_batch_size 12 \
+	--phrase_size 961 \
+	--do_train_filter \
+	--filter_threshold -2 \
+	--num_train_epochs 1 \
+	--do_predict \
+	--do_eval \
+	--iteration 3 \
+	--load_dir piqateam/piqa-nfs/3020 \
+	--freeze_word_emb"
+
 
 pred_961:
 	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 24G --nfs-output -a " \
@@ -737,11 +752,13 @@ pred_961:
 dump_961:
 	nsml run -d piqa-nfs -g 1 -e run_piqa.py --memory 16G --nfs-output -a " \
 	--fs nsml_nfs \
-	--index_file phrase.hdf5 \
 	--do_index \
 	--do_embed_question \
-	--load_dir piqateam/piqa-nfs/3020 \
+	--load_dir piqateam/piqa-nfs/76 \
 	--phrase_size 961 \
-	--iteration 3 \
+	--filter_threshold -2 \
+	--iteration 1 \
 	--parallel"
 
+nsml_dump:
+	python nsml_dump.py
