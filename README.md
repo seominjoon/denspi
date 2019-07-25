@@ -2,9 +2,8 @@
 
 ![teaser](figs/teaser.png)
 
-- [Paper](https://arxiv.org/abs/1906.05807)
+- [Paper](https://arxiv.org/abs/1906.05807), to appear at [ACL 2019](http://www.acl2019.org)
 - [Live Demo](http://104.154.208.227:5900/)
-- To appear at [ACL 2019](http://www.acl2019.org)
 - BibTeX:
 ```
 @inproceedings{denspi,
