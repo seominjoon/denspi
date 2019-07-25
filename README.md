@@ -3,7 +3,7 @@
 ![teaser](figs/teaser.png)
 
 - [Paper](https://arxiv.org/abs/1906.05807), to appear at [ACL 2019](http://www.acl2019.org)
-- [Live Demo](http://104.154.208.227:5900/)
+- [Live Demo][demo]
 - BibTeX:
 ```
 @inproceedings{denspi,
@@ -25,7 +25,7 @@ This section will let you host the demo that looks like
 ![demo](figs/demo.png)
  
 on your machine.
-You can also try it out [here](https://nlp.cs.washington.edu/denspi).
+You can also try it out [here][demo].
 You will need to download ~1.5 TB of files, but once you have them, it will take less than a minute to start serving.
 
 ### Prerequisites
@@ -195,3 +195,5 @@ Our code makes a heavy use of [faiss](https://github.com/facebookresearch/faiss)
 [DrQA](https://github.com/facebookresearch/DrQA) and [BERT](https://github.com/google-research/bert), in particular,
 Huggingface's [PyTorch implementation](https://github.com/huggingface/pytorch-pretrained-BERT).
 We thank them for open-sourcing these projects!
+
+[demo]: http://104.154.208.227:5900/
