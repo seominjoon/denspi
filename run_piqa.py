@@ -52,6 +52,7 @@ def main():
     parser.add_argument('--mode', type=str, default='train')
     parser.add_argument('--pause', type=int, default=0)
     parser.add_argument('--iteration', type=str, default='1')
+    # nsml:
     parser.add_argument('--fs', type=str, default='local',
                         help='File system: local|nsml|nfs|nfs_nsml. `nfs_nsml` uses nfs as input and nsml as output')
 
@@ -80,7 +81,8 @@ def main():
                         help="The output directory where the model checkpoints will be written.")
     parser.add_argument("--index_file", default='phrase.hdf5', type=str, help="index output file.")
     parser.add_argument("--question_emb_file", default='question.hdf5', type=str, help="question output file.")
-    parser.add_argument("--train_question_emb_file", default='train_question.hdf5', type=str, help="question output file.")
+    parser.add_argument("--train_question_emb_file", default='train_question.hdf5', type=str,
+                        help="question output file.")
 
     parser.add_argument('--load_dir', default='out/', type=str)
 
@@ -188,6 +190,7 @@ def main():
 
     args = parser.parse_args()
 
+    # nsml: args.fs == 'local'
     # Filesystem routines
     if args.fs == 'local':
         class Processor(object):

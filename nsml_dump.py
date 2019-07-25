@@ -50,7 +50,7 @@ def run_dump_phrase(args):
         return ["nsml",
                 "run",
                 "-d",
-                "piqa-nfs",
+                args.nsml_dataset,
                 "-g",
                 "1",
                 "-c",
@@ -61,7 +61,7 @@ def run_dump_phrase(args):
                 f"{args.mem_size}G",
                 "--nfs-output",
                 "-a",
-                f"--fs nsml_nfs --do_index --data_dir {args.phrase_data_dir} "
+                f"--fs {args.fs} --do_index --data_dir {args.phrase_data_dir} "
                 f"--predict_file {start_doc}:{end_doc}  --filter_threshold {args.filter_threshold} "
                 f"--output_dir {args.phrase_dump_dir} --index_file {start_doc}-{end_doc}.hdf5 "
                 f"--phrase_size {args.phrase_size} --load_dir {args.load_dir} --iteration 1 {model_option} {para}"]
@@ -78,15 +78,24 @@ def run_dump_phrase(args):
     print(start_docs)
     print(end_docs)
 
+    procs = []
     for start_doc, end_doc in zip(start_docs, end_docs):
         if args.no_block:
-            subprocess.Popen(get_cmd(start_doc, end_doc))
+            proc = subprocess.Popen(get_cmd(start_doc, end_doc))
         else:
-            subprocess.run(get_cmd(start_doc, end_doc))
+            proc = subprocess.run(get_cmd(start_doc, end_doc))
+        procs.append(proc)
+
+    if args.no_block:
+        for proc in procs:
+            out, err = proc.communicate()
+            print(out.decode('utf-8'))
 
 
 def get_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--nsml_dataset', default='piqa-nfs')
+    parser.add_argument('--fs', default='nsml_nfs', choices=('nsml_nfs', 'nfs', 'nsml'), help='file system type')
     parser.add_argument('--dump_dir', default=None)
     parser.add_argument('--phrase_size', default=961, type=int)
     parser.add_argument('--load_dir', default='piqateam/piqa-nfs/3021')
