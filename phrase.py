@@ -89,9 +89,14 @@ class PhraseModel(nn.Module):
     def forward(self,
                 context_ids=None, context_mask=None,
                 query_ids=None, query_mask=None,
-                start_positions=None, end_positions=None):
+                start_positions=None, end_positions=None,
+                neg_context_ids=None, neg_context_mask=None):
         if context_ids is not None:
             context_layer = self.encoder(context_ids, context_mask)
+            if neg_context_ids is not None:
+                assert neg_context_mask is not None
+                context_layer2 = self.encoder(neg_context_ids, neg_context_mask)
+                context_layer = torch.cat([context_layer, context_layer2], 1)
             start, end, span_logits = encode_phrase(context_layer, self.phrase_size)
             # print(start.min(), start.max(), end.min(), end.max())
             start_filter_logits, end_filter_logits = self.filter(start, end)
@@ -122,7 +127,6 @@ class PhraseModel(nn.Module):
                 return query_start, query_end, q_span_logits, query_sparse
 
         # pass this line only if train or eval
-
         start_logits = get_logits(start, query_start, self.metric)
         end_logits = get_logits(end, query_end, self.metric)
         cross_logits = get_logits(span_logits.unsqueeze(-1), q_span_logits.unsqueeze(-1), self.metric)

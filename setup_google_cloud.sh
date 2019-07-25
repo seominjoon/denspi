@@ -8,6 +8,9 @@ sudo chmod a+w /mnt/disks/nvme
 echo UUID=`sudo blkid -s UUID -o value /dev/md0` /mnt/disks/nvme ext4 discard,defaults,nofail 0 2 | sudo tee -a /etc/fstab
 cat /etc/fstab
 
-gcloud init
-export ROOT_DIR=/mnt/disks/nvme/denspi-v1-0
+export ROOT_DIR=/mnt/disks/nvme/denspi
+makedir $ROOT_DIR
 gsutil cp -r gs://denspi/v1-0 $ROOT_DIR
+
+# essential to install requirements for DenSPI
+sudo apt-get install unzip gcc

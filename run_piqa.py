@@ -24,7 +24,7 @@ from bert import BertConfig
 from optimization import BERTAdam
 from phrase import BertPhraseModel
 from pre import convert_examples_to_features, read_squad_examples, convert_documents_to_features, \
-    convert_questions_to_features, SquadExample, inject_noise_to_features_list
+    convert_questions_to_features, SquadExample, inject_noise_to_neg_features_list, sample_similar_questions
 from post import write_predictions, write_hdf5, get_question_results as get_question_results_, \
     convert_question_features_to_dataloader, write_question_results
 from serve import serve
@@ -52,6 +52,7 @@ def main():
     parser.add_argument('--mode', type=str, default='train')
     parser.add_argument('--pause', type=int, default=0)
     parser.add_argument('--iteration', type=str, default='1')
+    # nsml:
     parser.add_argument('--fs', type=str, default='local',
                         help='must be `local`. Do not change.')
 
@@ -78,8 +79,10 @@ def main():
     # Output and load paths
     parser.add_argument("--output_dir", default='out/', type=str,
                         help="The output directory where the model checkpoints will be written.")
-    parser.add_argument("--index_file", default='index.hdf5', type=str, help="index output file.")
+    parser.add_argument("--index_file", default='phrase.hdf5', type=str, help="index output file.")
     parser.add_argument("--question_emb_file", default='question.hdf5', type=str, help="question output file.")
+    parser.add_argument("--train_question_emb_file", default='train_question.hdf5', type=str,
+                        help="question output file.")
 
     parser.add_argument('--load_dir', default='out/', type=str)
 
@@ -89,6 +92,7 @@ def main():
     # Do's
     parser.add_argument("--do_load", default=False, action='store_true', help='Do load. If eval, do load automatically')
     parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
+    parser.add_argument("--do_train_neg", default=False, action='store_true', help="Whether to run neg training.")
     parser.add_argument("--do_train_filter", default=False, action='store_true', help='Train filter or not.')
     parser.add_argument("--do_train_sparse", default=False, action='store_true', help='Train sparse or not.')
     parser.add_argument("--do_predict", default=False, action='store_true', help="Whether to run eval on the dev set.")
@@ -182,9 +186,11 @@ def main():
                         help="random seed for initialization")
     parser.add_argument('--draft', default=False, action='store_true')
     parser.add_argument('--draft_num_examples', type=int, default=12)
+    parser.add_argument('--freeze_word_emb', default=False, action='store_true')
 
     args = parser.parse_args()
 
+    # nsml: args.fs == 'local'
     # Filesystem routines
     if args.fs == 'local':
         class Processor(object):
@@ -230,6 +236,9 @@ def main():
                                         "_" + args.bert_model_option + ".bin")
     args.vocab_file = os.path.join(args.metadata_dir, args.vocab_file)
     args.index_file = os.path.join(args.output_dir, args.index_file)
+
+    args.question_emb_file = os.path.join(args.output_dir, args.question_emb_file)
+    args.train_question_emb_file = os.path.join(args.output_dir, args.train_question_emb_file)
 
     # Multi-GPU stuff
     if args.local_rank == -1 or args.no_cuda:
@@ -304,6 +313,13 @@ def main():
         bind_model(processor, model)
         processor.load(args.iteration, session=args.load_dir)
 
+    def is_param(name):
+        if args.freeze_word_emb:
+            if name.endswith("encoder.bert.embeddings.word_embeddings.weight"):
+                print(f'freezeing {name}')
+                return False
+        return True
+
     if args.do_train:
         train_examples = read_squad_examples(
             input_file=args.train_file, is_training=True, draft=args.draft, draft_num_examples=args.draft_num_examples)
@@ -312,8 +328,10 @@ def main():
 
         no_decay = ['bias', 'gamma', 'beta']
         optimizer_parameters = [
-            {'params': [p for n, p in model.named_parameters() if n not in no_decay], 'weight_decay_rate': 0.01},
-            {'params': [p for n, p in model.named_parameters() if n in no_decay], 'weight_decay_rate': 0.0}
+            {'params': [p for n, p in model.named_parameters() if (n not in no_decay) and is_param(n)],
+             'weight_decay_rate': 0.01},
+            {'params': [p for n, p in model.named_parameters() if (n in no_decay) and is_param(n)],
+             'weight_decay_rate': 0.0}
         ]
         optimizer = BERTAdam(optimizer_parameters,
                              lr=args.learning_rate,
@@ -330,11 +348,6 @@ def main():
             doc_stride=args.doc_stride,
             max_query_length=args.max_query_length,
             is_training=True)
-
-        train_features = inject_noise_to_features_list(train_features,
-                                                       clamp=True,
-                                                       replace=True,
-                                                       shuffle=True)
 
         logger.info("***** Running training *****")
         logger.info("  Num orig examples = %d", len(train_examples))
@@ -376,6 +389,128 @@ def main():
                 loss, _ = model(input_ids, input_mask,
                                 input_ids_, input_mask_,
                                 start_positions, end_positions)
+                if n_gpu > 1:
+                    loss = loss.mean()  # mean() to average on multi-gpu.
+                if args.gradient_accumulation_steps > 1:
+                    loss = loss / args.gradient_accumulation_steps
+                loss.backward()
+                if (step + 1) % args.gradient_accumulation_steps == 0:
+                    if args.optimize_on_cpu:
+                        model.to('cpu')
+                    optimizer.step()  # We have accumulated enought gradients
+                    model.zero_grad()
+                    if args.optimize_on_cpu:
+                        model.to(device)
+                    global_step += 1
+
+            processor.save(epoch + 1)
+
+    if args.do_embed_question:
+        question_examples = read_squad_examples(
+            question_only=True,
+            input_file=args.train_file, is_training=False, draft=args.draft,
+            draft_num_examples=args.draft_num_examples)
+        query_eval_features = convert_questions_to_features(
+            examples=question_examples,
+            tokenizer=tokenizer,
+            max_query_length=args.max_query_length)
+        question_dataloader = convert_question_features_to_dataloader(query_eval_features, args.fp16, args.local_rank,
+                                                                      args.predict_batch_size)
+
+        model.eval()
+        logger.info("Start embedding")
+        question_results = get_question_results_(question_examples, query_eval_features, question_dataloader, device,
+                                                 model)
+        print('Writing %s' % args.train_question_emb_file)
+        write_question_results(question_results, query_eval_features, args.train_question_emb_file)
+
+    if args.do_train_neg:
+        train_examples = read_squad_examples(
+            input_file=args.train_file, is_training=True, draft=args.draft, draft_num_examples=args.draft_num_examples)
+        num_train_steps = int(
+            len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
+
+        no_decay = ['bias', 'gamma', 'beta']
+        optimizer_parameters = [
+            {'params': [p for n, p in model.named_parameters() if (n not in no_decay) and is_param(n)],
+             'weight_decay_rate': 0.01},
+            {'params': [p for n, p in model.named_parameters() if (n in no_decay) and is_param(n)],
+             'weight_decay_rate': 0.0}
+        ]
+        optimizer = BERTAdam(optimizer_parameters,
+                             lr=args.learning_rate,
+                             warmup=args.warmup_proportion,
+                             t_total=num_train_steps)
+
+        bind_model(processor, model, optimizer)
+
+        global_step = 0
+        train_features, train_features_ = convert_examples_to_features(
+            examples=train_examples,
+            tokenizer=tokenizer,
+            max_seq_length=args.max_seq_length,
+            doc_stride=args.doc_stride,
+            max_query_length=args.max_query_length,
+            is_training=True)
+
+        neg_train_features = sample_similar_questions(train_examples, train_features, args.train_question_emb_file,
+                                                      cuda=not args.no_cuda)
+        # neg_train_features = random.sample(train_features, len(train_features))
+        neg_train_features = inject_noise_to_neg_features_list(neg_train_features,
+                                                               noise_prob=0.2,
+                                                               clamp=True, clamp_prob=0.1,
+                                                               replace=True, replace_prob=0.1, unk_prob=0.1,
+                                                               shuffle=True, shuffle_prob=0.1)
+
+        logger.info("***** Running training *****")
+        logger.info("  Num orig examples = %d", len(train_examples))
+        logger.info("  Num split examples = %d", len(train_features))
+        logger.info("  Batch size = %d", args.train_batch_size)
+        logger.info("  Num steps = %d", num_train_steps)
+
+        all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
+        all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
+        all_start_positions = torch.tensor([f.start_position for f in train_features], dtype=torch.long)
+        all_end_positions = torch.tensor([f.end_position for f in train_features], dtype=torch.long)
+
+        all_input_ids_ = torch.tensor([f.input_ids for f in train_features_], dtype=torch.long)
+        all_input_mask_ = torch.tensor([f.input_mask for f in train_features_], dtype=torch.long)
+
+        all_neg_input_ids = torch.tensor([f.input_ids for f in neg_train_features], dtype=torch.long)
+        all_neg_input_mask = torch.tensor([f.input_mask for f in neg_train_features], dtype=torch.long)
+
+        if args.fp16:
+            (all_input_ids, all_input_mask,
+             all_start_positions,
+             all_end_positions) = tuple(t.half() for t in (all_input_ids, all_input_mask,
+                                                           all_start_positions, all_end_positions))
+            all_input_ids_, all_input_mask_ = tuple(t.half() for t in (all_input_ids_, all_input_mask_))
+            all_neg_input_ids, all_neg_input_mask = tuple(t.half() for t in (all_neg_input_ids, all_neg_input_mask))
+
+        train_data = TensorDataset(all_input_ids, all_input_mask,
+                                   all_input_ids_, all_input_mask_,
+                                   all_start_positions, all_end_positions,
+                                   all_neg_input_ids, all_neg_input_mask)
+
+        if args.local_rank == -1:
+            train_sampler = RandomSampler(train_data)
+        else:
+            train_sampler = DistributedSampler(train_data)
+        train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
+
+        model.train()
+        for epoch in range(int(args.num_train_epochs)):
+            for step, batch in enumerate(tqdm(train_dataloader, desc="Epoch %d" % (epoch + 1))):
+                batch = tuple(t.to(device) for t in batch)
+                (input_ids, input_mask,
+                 input_ids_, input_mask_,
+                 start_positions, end_positions,
+                 neg_input_ids, neg_input_mask) = batch
+
+                loss, _ = model(input_ids, input_mask,
+                                input_ids_, input_mask_,
+                                start_positions, end_positions,
+                                neg_input_ids, neg_input_mask)
                 if n_gpu > 1:
                     loss = loss.mean()  # mean() to average on multi-gpu.
                 if args.gradient_accumulation_steps > 1:
@@ -452,98 +587,6 @@ def main():
                  input_ids_, input_mask_,
                  start_positions, end_positions) = batch
                 _, loss = model(input_ids, input_mask,
-                                input_ids_, input_mask_,
-                                start_positions, end_positions)
-                if n_gpu > 1:
-                    loss = loss.mean()  # mean() to average on multi-gpu.
-                if args.gradient_accumulation_steps > 1:
-                    loss = loss / args.gradient_accumulation_steps
-                loss.backward()
-                if (step + 1) % args.gradient_accumulation_steps == 0:
-                    if args.optimize_on_cpu:
-                        model.to('cpu')
-                    optimizer.step()  # We have accumulated enought gradients
-                    model.zero_grad()
-                    if args.optimize_on_cpu:
-                        model.to(device)
-                    global_step += 1
-
-            processor.save(epoch + 1)
-
-    if args.do_train_sparse:
-        train_examples = read_squad_examples(
-            input_file=args.train_file, is_training=True, draft=args.draft, draft_num_examples=args.draft_num_examples)
-        num_train_steps = int(
-            len(
-                train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_sparse_epochs)
-
-        '''
-        if args.parallel or n_gpu > 1:
-            optimizer = Adam(model.module.sparse_layer.parameters())
-        else:
-            optimizer = Adam(model.sparse_layer.parameters())
-        '''
-
-        no_decay = ['bias', 'gamma', 'beta']
-        optimizer_parameters = [
-            {'params': [p for n, p in model.named_parameters() if (n not in no_decay) and ('filter' not in n)],
-             'weight_decay_rate': 0.01},
-            {'params': [p for n, p in model.named_parameters() if (n in no_decay) and ('filter' not in n)],
-             'weight_decay_rate': 0.0}
-        ]
-        optimizer = BERTAdam(optimizer_parameters,
-                             lr=args.learning_rate,
-                             warmup=args.warmup_proportion,
-                             t_total=num_train_steps)
-
-        bind_model(processor, model, optimizer)
-
-        global_step = 0
-        train_features, train_features_ = convert_examples_to_features(
-            examples=train_examples,
-            tokenizer=tokenizer,
-            max_seq_length=args.max_seq_length,
-            doc_stride=args.doc_stride,
-            max_query_length=args.max_query_length,
-            is_training=True)
-        logger.info("***** Running sparse training *****")
-        logger.info("  Num orig examples = %d", len(train_examples))
-        logger.info("  Num split examples = %d", len(train_features))
-        logger.info("  Batch size = %d", args.train_batch_size)
-        logger.info("  Num steps = %d", num_train_steps)
-
-        all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
-        all_start_positions = torch.tensor([f.start_position for f in train_features], dtype=torch.long)
-        all_end_positions = torch.tensor([f.end_position for f in train_features], dtype=torch.long)
-
-        all_input_ids_ = torch.tensor([f.input_ids for f in train_features_], dtype=torch.long)
-        all_input_mask_ = torch.tensor([f.input_mask for f in train_features_], dtype=torch.long)
-
-        if args.fp16:
-            (all_input_ids, all_input_mask,
-             all_start_positions,
-             all_end_positions) = tuple(t.half() for t in (all_input_ids, all_input_mask,
-                                                           all_start_positions, all_end_positions))
-            all_input_ids_, all_input_mask_ = tuple(t.half() for t in (all_input_ids_, all_input_mask_))
-
-        train_data = TensorDataset(all_input_ids, all_input_mask,
-                                   all_input_ids_, all_input_mask_,
-                                   all_start_positions, all_end_positions)
-        if args.local_rank == -1:
-            train_sampler = RandomSampler(train_data)
-        else:
-            train_sampler = DistributedSampler(train_data)
-        train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
-
-        model.train()
-        for epoch in range(int(args.num_train_sparse_epochs)):
-            for step, batch in enumerate(tqdm(train_dataloader, desc="Epoch %d" % (epoch + 1))):
-                batch = tuple(t.to(device) for t in batch)
-                (input_ids, input_mask,
-                 input_ids_, input_mask_,
-                 start_positions, end_positions) = batch
-                loss, _ = model(input_ids, input_mask,
                                 input_ids_, input_mask_,
                                 start_positions, end_positions)
                 if n_gpu > 1:
@@ -648,9 +691,8 @@ def main():
         logger.info("Start embedding")
         question_results = get_question_results_(question_examples, query_eval_features, question_dataloader, device,
                                                  model)
-        path = os.path.join(args.output_dir, args.question_emb_file)
-        print('Writing %s' % path)
-        write_question_results(question_results, query_eval_features, path)
+        print('Writing %s' % args.question_emb_file)
+        write_question_results(question_results, query_eval_features, args.question_emb_file)
 
     if args.do_index:
         if ':' not in args.predict_file:
@@ -673,83 +715,78 @@ def main():
             offsets = [int(each) * 1000 for each in names]
 
         for offset, predict_file in zip(offsets, predict_files):
-            try:
-                context_examples = read_squad_examples(
-                    context_only=True,
-                    input_file=predict_file, is_training=False, draft=args.draft,
-                    draft_num_examples=args.draft_num_examples)
+            context_examples = read_squad_examples(
+                context_only=True,
+                input_file=predict_file, is_training=False, draft=args.draft,
+                draft_num_examples=args.draft_num_examples)
 
-                for example in context_examples:
-                    example.doc_idx += offset
+            for example in context_examples:
+                example.doc_idx += offset
 
-                context_features = convert_documents_to_features(
-                    examples=context_examples,
-                    tokenizer=tokenizer,
-                    max_seq_length=args.max_seq_length,
-                    doc_stride=args.doc_stride)
+            context_features = convert_documents_to_features(
+                examples=context_examples,
+                tokenizer=tokenizer,
+                max_seq_length=args.max_seq_length,
+                doc_stride=args.doc_stride)
 
-                logger.info("***** Running indexing on %s *****" % predict_file)
-                logger.info("  Num orig examples = %d", len(context_examples))
-                logger.info("  Num split examples = %d", len(context_features))
-                logger.info("  Batch size = %d", args.predict_batch_size)
+            logger.info("***** Running indexing on %s *****" % predict_file)
+            logger.info("  Num orig examples = %d", len(context_examples))
+            logger.info("  Num split examples = %d", len(context_features))
+            logger.info("  Batch size = %d", args.predict_batch_size)
 
-                all_input_ids = torch.tensor([f.input_ids for f in context_features], dtype=torch.long)
-                all_input_mask = torch.tensor([f.input_mask for f in context_features], dtype=torch.long)
-                all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
-                if args.fp16:
-                    all_input_ids, all_input_mask, all_example_index = tuple(
-                        t.half() for t in (all_input_ids, all_input_mask, all_example_index))
+            all_input_ids = torch.tensor([f.input_ids for f in context_features], dtype=torch.long)
+            all_input_mask = torch.tensor([f.input_mask for f in context_features], dtype=torch.long)
+            all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
+            if args.fp16:
+                all_input_ids, all_input_mask, all_example_index = tuple(
+                    t.half() for t in (all_input_ids, all_input_mask, all_example_index))
 
-                context_data = TensorDataset(all_input_ids, all_input_mask, all_example_index)
+            context_data = TensorDataset(all_input_ids, all_input_mask, all_example_index)
 
-                if args.local_rank == -1:
-                    context_sampler = SequentialSampler(context_data)
-                else:
-                    context_sampler = DistributedSampler(context_data)
-                context_dataloader = DataLoader(context_data, sampler=context_sampler,
-                                                batch_size=args.predict_batch_size)
+            if args.local_rank == -1:
+                context_sampler = SequentialSampler(context_data)
+            else:
+                context_sampler = DistributedSampler(context_data)
+            context_dataloader = DataLoader(context_data, sampler=context_sampler,
+                                            batch_size=args.predict_batch_size)
 
-                model.eval()
-                logger.info("Start indexing")
+            model.eval()
+            logger.info("Start indexing")
 
-                def get_context_results():
-                    for (input_ids, input_mask, example_indices) in context_dataloader:
-                        input_ids = input_ids.to(device)
-                        input_mask = input_mask.to(device)
-                        with torch.no_grad():
-                            batch_start, batch_end, batch_span_logits, bs, be, batch_sparse = model(input_ids,
-                                                                                                    input_mask)
-                        for i, example_index in enumerate(example_indices):
-                            start = batch_start[i].detach().cpu().numpy().astype(args.dtype)
-                            end = batch_end[i].detach().cpu().numpy().astype(args.dtype)
-                            sparse = None
-                            if batch_sparse is not None:
-                                sparse = batch_sparse[i].detach().cpu().numpy().astype(args.dtype)
-                            span_logits = batch_span_logits[i].detach().cpu().numpy().astype(args.dtype)
-                            filter_start_logits = bs[i].detach().cpu().numpy().astype(args.dtype)
-                            filter_end_logits = be[i].detach().cpu().numpy().astype(args.dtype)
-                            context_feature = context_features[example_index.item()]
-                            unique_id = int(context_feature.unique_id)
-                            yield ContextResult(unique_id=unique_id,
-                                                start=start,
-                                                end=end,
-                                                span_logits=span_logits,
-                                                filter_start_logits=filter_start_logits,
-                                                filter_end_logits=filter_end_logits,
-                                                sparse=sparse)
+            def get_context_results():
+                for (input_ids, input_mask, example_indices) in context_dataloader:
+                    input_ids = input_ids.to(device)
+                    input_mask = input_mask.to(device)
+                    with torch.no_grad():
+                        batch_start, batch_end, batch_span_logits, bs, be, batch_sparse = model(input_ids,
+                                                                                                input_mask)
+                    for i, example_index in enumerate(example_indices):
+                        start = batch_start[i].detach().cpu().numpy().astype(args.dtype)
+                        end = batch_end[i].detach().cpu().numpy().astype(args.dtype)
+                        sparse = None
+                        if batch_sparse is not None:
+                            sparse = batch_sparse[i].detach().cpu().numpy().astype(args.dtype)
+                        span_logits = batch_span_logits[i].detach().cpu().numpy().astype(args.dtype)
+                        filter_start_logits = bs[i].detach().cpu().numpy().astype(args.dtype)
+                        filter_end_logits = be[i].detach().cpu().numpy().astype(args.dtype)
+                        context_feature = context_features[example_index.item()]
+                        unique_id = int(context_feature.unique_id)
+                        yield ContextResult(unique_id=unique_id,
+                                            start=start,
+                                            end=end,
+                                            span_logits=span_logits,
+                                            filter_start_logits=filter_start_logits,
+                                            filter_end_logits=filter_end_logits,
+                                            sparse=sparse)
 
-                t0 = time()
-                write_hdf5(context_examples, context_features, get_context_results(),
-                           args.max_answer_length, not args.do_case, args.index_file, args.filter_threshold,
-                           args.verbose_logging,
-                           offset=args.compression_offset, scale=args.compression_scale,
-                           split_by_para=args.split_by_para,
-                           use_sparse=args.use_sparse)
-                print('%s: %.1f mins' % (predict_file, (time() - t0) / 60))
-            except Exception as e:
-                with open(os.path.join(args.output_dir, 'error_files.txt'), 'a') as fp:
-                    fp.write('error file: %s\n' % predict_file)
-                    fp.write('error message: %s\n' % str(e))
+            t0 = time()
+            write_hdf5(context_examples, context_features, get_context_results(),
+                       args.max_answer_length, not args.do_case, args.index_file, args.filter_threshold,
+                       args.verbose_logging,
+                       offset=args.compression_offset, scale=args.compression_scale,
+                       split_by_para=args.split_by_para,
+                       use_sparse=args.use_sparse)
+            print('%s: %.1f mins' % (predict_file, (time() - t0) / 60))
 
     if args.do_serve:
         def get(text):

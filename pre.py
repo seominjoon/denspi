@@ -17,9 +17,12 @@ import json
 import logging
 import random
 
+import h5py
 import six
+import torch
 from tqdm import tqdm
 import copy
+import numpy as np
 
 import tokenization
 from post import _improve_answer_span, _check_is_max_context
@@ -584,21 +587,20 @@ def inject_noise(input_ids, input_mask,
     return input_ids, input_mask
 
 
-def inject_noise_to_features(features,
-                             clamp=False, clamp_prob=0.5, min_len=0, max_len=300, pad=0,
-                             replace=False, replace_prob=0.3, unk_prob=0.2, vocab_size=30522, unk=100, min_id=999,
-                             shuffle=False, shuffle_prob=0.2):
+def inject_noise_to_neg_features(features,
+                                 clamp=False, clamp_prob=1.0, min_len=0, max_len=300, pad=0,
+                                 replace=False, replace_prob=1.0, unk_prob=1.0, vocab_size=30522, unk=100, min_id=999,
+                                 shuffle=False, shuffle_prob=1.0):
     features = copy.deepcopy(features)
     input_ids = features.input_ids
     input_mask = features.input_mask
     if clamp and random.random() < clamp_prob:
         len_ = sum(input_mask) - 2
-        new_len = random.choice(range(min_len, max_len + 1))
-        if new_len < len_:
-            input_ids[new_len + 1] = input_ids[len_ + 1]
-            for i in range(new_len + 2, len(input_ids)):
-                input_ids[i] = pad
-                input_mask[i] = 0
+        new_len = random.choice(range(min_len, min(len_, max_len) + 1))
+        input_ids[new_len + 1] = input_ids[len_ + 1]
+        for i in range(new_len + 2, len(input_ids)):
+            input_ids[i] = pad
+            input_mask[i] = 0
 
     len_ = sum(input_mask) - 2
     if replace:
@@ -619,7 +621,54 @@ def inject_noise_to_features(features,
     return features
 
 
-def inject_noise_to_features_list(features_list, noise_prob=0.5, **kwargs):
-    out = [inject_noise_to_features(features, **kwargs) if features.start_position < 0 and random.random() < noise_prob
+def inject_noise_to_neg_features_list(features_list, noise_prob=1.0, **kwargs):
+    out = [inject_noise_to_neg_features(features, **kwargs) if random.random() < noise_prob
            else features for features in features_list]
     return out
+
+
+def sample_similar_questions(examples, features, question_emb_file, cuda=False):
+    with h5py.File(question_emb_file, 'r') as fp:
+        ids = []
+        mats = []
+        for id_, mat in fp.items():
+            ids.append(id_)
+            mats.append(mat[:])
+        id2idx = {id_: idx for idx, id_ in enumerate(ids)}
+        large_mat = np.concatenate(mats, axis=0)
+        large_mat = torch.tensor(large_mat).float()
+        if cuda:
+            large_mat = large_mat.to(torch.device('cuda'))
+        """
+        sim = large_mat.matmul(large_mat.t())
+        sim_argsort = (-sim).argsort(dim=1).cpu().numpy()
+        """
+
+        id2features = collections.defaultdict(list)
+        for feature in features:
+            id_ = examples[feature.example_index].qas_id
+            id2features[id_].append(feature)
+
+        sampled_features = []
+        for feature in tqdm(features, desc='sampling'):
+            example = examples[feature.example_index]
+            example_tup = (example.title, example.doc_idx, example.pid)
+            id_ = example.qas_id
+            idx = id2idx[id_]
+            similar_feature = None
+            sim = (large_mat.matmul(large_mat[idx:idx+1, :].t()).squeeze(1))
+            sim_argsort = (-sim).argsort(dim=0).cpu().numpy()
+            for target_idx in sim_argsort:
+                target_features = id2features[ids[target_idx]]
+                for target_feature in target_features:
+                    target_example = examples[target_feature.example_index]
+                    target_tup = (target_example.title, target_example.doc_idx, target_example.pid)
+                    if example_tup != target_tup:
+                        similar_feature = target_feature
+                        break
+                if similar_feature is not None:
+                    break
+
+            assert similar_feature is not None
+            sampled_features.append(similar_feature)
+        return sampled_features
