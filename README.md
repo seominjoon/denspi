@@ -189,7 +189,7 @@ Coming soon; for now, please download the dump from Google Cloud Storage (see "C
 
 
 ## Questions?
-Please use Github Issues or email [Minjoon Seo](http://seominjoon.github.io/) (soeminjoon@gmail.com).
+Please use Github Issues.
 
 ## Acknowledgment
 Our code makes a heavy use of [faiss](https://github.com/facebookresearch/faiss), 
