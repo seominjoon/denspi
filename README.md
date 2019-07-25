@@ -14,10 +14,6 @@
 }
 ```
 
-While the entire codebase is here, please understand that it still **requires substantial work on documentation**.
-Please stay tuned for the full documentation including how to start from scratch 
-(though you are more than welcome to look into our undocumented code).
-
 
 ## Demo
 This section will let you host the demo that looks like
