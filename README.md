@@ -37,14 +37,14 @@ You will need to download ~1.5 TB of files, but once you have them, it will take
 
 #### A. Hardware
 - CPUs: at least 4 cores recommended.
-- RAM: at least 32GB needed.
-- Storage: at least 2TB of SSD needed.
+- RAM: at least 30GB needed.
+- Storage: at least 1.5TB of SSD needed.
 - GPUs: not needed.
 
 If you are using Google Cloud 
-(our demo is also being hosted on Google Cloud, with 24 vCPUs, 128 GB RAM, and 6 local SSDs),
+(our demo is also being hosted on Google Cloud, with 8 vCPUs, 30 GB RAM, and 6 local SSDs),
 we highly recommend using [local SSD](https://cloud.google.com/compute/docs/disks/local-ssd), 
-which is not only cheaper but also better for low-latency applications (at the cost of persistency).
+which is not only cheaper but also offers lower disk access latency (at the cost of persistency).
 
 
 
@@ -55,13 +55,25 @@ This directory's file is for hosting a (PyTorch-based) server that maps the inpu
 `open`'s file is for hosting the search server and the demo itself.
 In this tutorial, we will simply install both in the same environment.
 
-1. Make sure you are using `python=3.6` through Conda.
+1. Make sure you are using `python=3.6` through Conda. For instance, once you have Conda, create the environment via
+```
+conda create -n denspi python=3.6
+```
+then activate:
+```
+conda activate denspi
+```
+
 2. First, manually install `faiss` with `conda`:
 ```
 conda install faiss-cpu=1.5.2 -c pytorch
 ```
 3. Before installing with pip, make sure that you have installed `DrQA`. 
 Visit [here](https://github.com/facebookresearch/DrQA) for instructions.
+If you are using conda, you will probably need to install java-jdk in order to install DrQA:
+```
+conda install -c cyclus java-jdk
+```
 4. Then install both requirement files:
 ```
 pip install -r requirements.txt
@@ -95,7 +107,6 @@ gsutil cp -r gs://denspi/v1-0/data .
 gsutil cp -r gs://denspi/v1-0/model .
 ``` 
 5. You will need to download the entire phrase index dump. **Warning**: this will take up 1.5 TB!
-Skip this if you will dump the vectors yourself.
 ```
 gsutil cp -r gs://denspi/v1-0/dump .
 ```
