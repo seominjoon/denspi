@@ -14,6 +14,8 @@
 }
 ```
 
+In this paper, we enumerate, embed and index every phrase in Wikipedia (60 Billion) so that open-domain QA can be formulated as a pure phrase retrieval problem. Our model is able to read the entire Wikpedia in 0.5s with CPUs, allowing it to reach long-tail answers with much faster inference speed, at least 58x. Feel free to check it out in our [demo][demo].
+
 
 ## Demo
 This section will let you host the demo that looks like
