@@ -1,10 +1,10 @@
-# Real-Time Open-Domain QA with Dense-Sparse Phrase Index (DenSPI)
+# Real-Time Open-Domain QA with Dense-Sparse Phrase Index
 
 ![teaser](figs/teaser.png)
 
 - [Paper](https://arxiv.org/abs/1906.05807)
 - [Live Demo](http://104.154.208.227:5900/)
-- To appear at ACL 2019
+- To appear at [ACL 2019](http://www.acl2019.org)
 - BibTeX:
 ```
 @inproceedings{denspi,
