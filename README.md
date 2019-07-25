@@ -74,23 +74,28 @@ Note that this will give you an error if you don't have `faiss` and `DrQA` alrea
 Model and dump files are currently provided through Google Cloud Storage under bucket `denspi`,
  so first make sure that you have installed `gsutil` ([link](https://cloud.google.com/storage/docs/gsutil_install)).
 You will then need to download four directories.
-1. Create `$ROOT_DIR` and cd to it:
+0. Create `$ROOT_DIR` and cd to it:
 ```
 mkdir $ROOT_DIR; cd $ROOT_DIR
 ```
-2. You will need the model files.
-```
-gsutil cp -r gs://denspi/v1-0/model .
-``` 
-3. You will need BERT-related files. 
+1. You will need BERT-related files. 
 ```
 gsutil cp -r gs://denspi/v1-0/bert .
 ```
-4. You will need tfidf-related information from DrQA. 
+2. You will need tfidf-related information from DrQA. 
 ```
 gsutil cp -r gs://denspi/v1-0/wikipedia .
 ```
+3. You will need training and eval data. Skip this if you will not be training the model yourself.
+```
+gsutil cp -r gs://denspi/v1-0/data .
+```
+4. You will need the model files. Skip this if you will train yourself (see "Train" below).
+```
+gsutil cp -r gs://denspi/v1-0/model .
+``` 
 5. You will need to download the entire phrase index dump. **Warning**: this will take up 1.5 TB!
+Skip this if you will dump the vectors yourself.
 ```
 gsutil cp -r gs://denspi/v1-0/dump .
 ```
@@ -117,6 +122,63 @@ python run_demo.py $ROOT_DIR/dump $ROOT_DIR/wikipedia --api_port $API_PORT --por
 ```
 
 Demo will be served in ~1 minute.
+
+
+## Train
+Note that we provide pretrained model at Google Coud Storage `gs://denspi/v1-0/model` and you can simply download it.
+This section will be only applicable if you want to train on your own.
+
+Note that you will need 4 x P40 GPUs (24 GB) for the specified batch size.
+
+1. Train on SQuAD v1.1: this will train the model on vanilla `train-v1.1.json` without negative examples
+at `$SAVE1_DIR` of your choice. This will take approximately 16 hours (~5 hours per epoch, 3 epochs).
+```
+python run_piqa.py --train_batch_size 12 --do_train --freeze_word_emb --save_dir $SAVE1_DIR
+```
+
+2. Train with negative samples: this will finetune the model once more with negative examples sampled 
+from other documents so that the model can better behave in open-domain environment.
+This also takes approximately 16 hours with 3 epochs.
+```
+python run_piqa.py --train_batch_size  9 --do_embed_question --do_train_neg --freeze_word_emb --load_dir $SAVE1_DIR --iteration 3 --save_dir $SAVE2_DIR
+
+``` 
+
+3. Finally train a phrase classifier, 
+which freezes every parameter except the linear layer at the end for classification.
+This will be much faster, less than 4 hours.
+```
+python run_piqa.py --train_batch_size 12 --do_train_filter --num_train_epochs 1 --load_dir $SAVE2_DIR --iteration 3 --save_dir $SAVE3_DIR
+```
+
+
+
+## Create Phrase Index
+For sanity check, we will first test with a small phrase index that corresponds to the entire dev data of SQuAD,
+which contains approximately 300k words. Note that Wikipedia has 3 Billion words,
+so this will be approximately 1/10k-th size experiment.
+
+### Create Small (Dense-Only) Phrase Index
+
+First, dump phrase vectors:
+```
+python run_piqa.py --do_embed_question --do_index --output_dir $ROOT_DIR/dump_small --load_dir $SAVE3_DIR --iteration 1 --filter_threshold -2 --parallel
+```
+
+Then create the phrase index and perform evaluation on the question embeddings:
+
+```
+cd open
+python run_index_pred_eval.py $ROOT_DIR/dump_small $ROOT_DIR/data/dev-v1.1.jon --question_dump_path $ROOT_DIR/dump_small/question.hdf5
+```
+where 
+
+You should obtain around 53 EM.
+
+
+### Create Full Phrase Index
+Here we want to extend the scale to full Wikipedia (3B tokens). 
+Coming soon; for now, please download the dump from Google Cloud Storage (see "C. Download" above.)
 
 
 ## Questions?

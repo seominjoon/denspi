@@ -52,9 +52,6 @@ def main():
     parser.add_argument('--mode', type=str, default='train')
     parser.add_argument('--pause', type=int, default=0)
     parser.add_argument('--iteration', type=str, default='1')
-    # nsml:
-    parser.add_argument('--fs', type=str, default='local',
-                        help='must be `local`. Do not change.')
 
     # Data paths
     parser.add_argument('--data_dir', default='data/', type=str)
@@ -84,7 +81,8 @@ def main():
     parser.add_argument("--train_question_emb_file", default='train_question.hdf5', type=str,
                         help="question output file.")
 
-    parser.add_argument('--load_dir', default='out/', type=str)
+    parser.add_argument('--save_dir', default='save/', type=str)
+    parser.add_argument('--load_dir', default='save/', type=str)
 
     # Local paths (if we want to run cmd)
     parser.add_argument('--eval_script', default='evaluate-v1.1.py', type=str)
@@ -190,37 +188,32 @@ def main():
 
     args = parser.parse_args()
 
-    # nsml: args.fs == 'local'
     # Filesystem routines
-    if args.fs == 'local':
-        class Processor(object):
-            def __init__(self, path):
-                self._save = None
-                self._load = None
-                self._path = path
+    class Processor(object):
+        def __init__(self, save_path):
+            self._save = None
+            self._load = None
+            self._save_path = save_path
 
-            def bind(self, save, load):
-                self._save = save
-                self._load = load
+        def bind(self, save, load):
+            self._save = save
+            self._load = load
 
-            def save(self, checkpoint=None, save_fn=None, **kwargs):
-                path = os.path.join(self._path, str(checkpoint))
-                if save_fn is None:
-                    self._save(path, **kwargs)
-                else:
-                    save_fn(path, **kwargs)
+        def save(self, checkpoint=None, save_fn=None, **kwargs):
+            path = os.path.join(self._save_path, str(checkpoint))
+            if save_fn is None:
+                self._save(path, **kwargs)
+            else:
+                save_fn(path, **kwargs)
 
-            def load(self, checkpoint, load_fn=None, session=None, **kwargs):
-                assert self._path == session
-                path = os.path.join(self._path, str(checkpoint), 'model.pt')
-                if load_fn is None:
-                    self._load(path, **kwargs)
-                else:
-                    load_fn(path, **kwargs)
+        def load(self, checkpoint, load_fn=None, session=None, **kwargs):
+            path = os.path.join(session, str(checkpoint), 'model.pt')
+            if load_fn is None:
+                self._load(path, **kwargs)
+            else:
+                load_fn(path, **kwargs)
 
-        processor = Processor(args.load_dir)
-    else:
-        raise ValueError(args.fs)
+    processor = Processor(args.save_dir)
 
     if not args.do_train:
         args.do_load = True
