@@ -92,7 +92,6 @@ def main():
     parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
     parser.add_argument("--do_train_neg", default=False, action='store_true', help="Whether to run neg training.")
     parser.add_argument("--do_train_filter", default=False, action='store_true', help='Train filter or not.')
-    parser.add_argument("--do_train_sparse", default=False, action='store_true', help='Train sparse or not.')
     parser.add_argument("--do_predict", default=False, action='store_true', help="Whether to run eval on the dev set.")
     parser.add_argument('--do_eval', default=False, action='store_true')
     parser.add_argument('--do_embed_question', default=False, action='store_true')
@@ -117,6 +116,7 @@ def main():
                         help="The maximum number of tokens for the question. Questions longer than this will "
                              "be truncated to this length.")
     parser.add_argument("--train_batch_size", default=12, type=int, help="Total batch size for training.")
+    parser.add_argument("--train_neg_batch_size", default=9, type=int, help="Total batch size for training.")
     parser.add_argument("--predict_batch_size", default=16, type=int, help="Total batch size for predictions.")
     parser.add_argument('--gradient_accumulation_steps',
                         type=int,
@@ -141,12 +141,12 @@ def main():
 
     # Training options: only effective during training
     parser.add_argument("--learning_rate", default=3e-5, type=float, help="The initial learning rate for Adam.")
-    parser.add_argument("--num_train_epochs", default=3.0, type=float,
+    parser.add_argument("--num_train_epochs", default=2.0, type=float,
                         help="Total number of training epochs to perform.")
+    parser.add_argument("--num_train_neg_epochs", default=2.0, type=float,
+                        help="Total number of neg training epochs to perform.")
     parser.add_argument("--num_train_filter_epochs", default=1.0, type=float,
                         help="Total number of training epochs for filter to perform.")
-    parser.add_argument("--num_train_sparse_epochs", default=3.0, type=float,
-                        help="Total number of training epochs for sparse to perform.")
     parser.add_argument("--warmup_proportion", default=0.1, type=float,
                         help="Proportion of training to perform linear learning rate warmup for. E.g., 0.1 = 10% "
                              "of training.")
@@ -184,7 +184,7 @@ def main():
                         help="random seed for initialization")
     parser.add_argument('--draft', default=False, action='store_true')
     parser.add_argument('--draft_num_examples', type=int, default=12)
-    parser.add_argument('--freeze_word_emb', default=False, action='store_true')
+    parser.add_argument('--train_word_emb', default=False, action='store_true')
 
     args = parser.parse_args()
 
@@ -249,6 +249,7 @@ def main():
             args.gradient_accumulation_steps))
 
     args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
+    args.train_neg_batch_size = int(args.train_neg_batch_size / args.gradient_accumulation_steps)
 
     # Seed for reproducibility
     random.seed(args.seed)
@@ -307,7 +308,7 @@ def main():
         processor.load(args.iteration, session=args.load_dir)
 
     def is_param(name):
-        if args.freeze_word_emb:
+        if not args.train_word_emb:
             if name.endswith("encoder.bert.embeddings.word_embeddings.weight"):
                 print(f'freezeing {name}')
                 return False
@@ -421,7 +422,8 @@ def main():
         train_examples = read_squad_examples(
             input_file=args.train_file, is_training=True, draft=args.draft, draft_num_examples=args.draft_num_examples)
         num_train_steps = int(
-            len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
+            len(train_examples) / args.train_neg_batch_size / args.gradient_accumulation_steps *
+            args.num_train_neg_epochs)
 
         no_decay = ['bias', 'gamma', 'beta']
         optimizer_parameters = [
@@ -458,7 +460,7 @@ def main():
         logger.info("***** Running training *****")
         logger.info("  Num orig examples = %d", len(train_examples))
         logger.info("  Num split examples = %d", len(train_features))
-        logger.info("  Batch size = %d", args.train_batch_size)
+        logger.info("  Batch size = %d", args.train_neg_batch_size)
         logger.info("  Num steps = %d", num_train_steps)
 
         all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
@@ -489,7 +491,7 @@ def main():
             train_sampler = RandomSampler(train_data)
         else:
             train_sampler = DistributedSampler(train_data)
-        train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
+        train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_neg_batch_size)
 
         model.train()
         for epoch in range(int(args.num_train_epochs)):
@@ -525,7 +527,8 @@ def main():
             input_file=args.train_file, is_training=True, draft=args.draft, draft_num_examples=args.draft_num_examples)
         num_train_steps = int(
             len(
-                train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_filter_epochs)
+                train_examples) / args.train_batch_size / args.gradient_accumulation_steps *
+            args.num_train_filter_epochs)
 
         if args.parallel or n_gpu > 1:
             optimizer = Adam(model.module.filter.parameters())

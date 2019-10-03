@@ -115,6 +115,7 @@ class QuestionFeatures(object):
 def read_squad_examples(input_file, is_training, context_only=False, question_only=False,
                         draft=False, draft_num_examples=12, tokenizer=None):
     """Read a SQuAD json file into a list of SquadExample."""
+    print("reading", input_file)
     with open(input_file, "r") as reader:
         input_data = json.load(reader)["data"]
 
