@@ -194,4 +194,4 @@ Our code makes a heavy use of [faiss](https://github.com/facebookresearch/faiss)
 Huggingface's [PyTorch implementation](https://github.com/huggingface/pytorch-pretrained-BERT).
 We thank them for open-sourcing these projects!
 
-[demo]: http://104.154.208.227:5900/
+[demo]: http://allgood.cs.washington.edu:15001/
