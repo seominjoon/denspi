@@ -1,14 +1,10 @@
-# Dense-Sparse Phrase Index (DenSPI)
-
-
-This is the official code for 
-[Real-Time Open-Domain Question Answering with Dense-Sparse Phrase Index](https://arxiv.org/abs/1906.05807),
-to appear at ACL 2019.
-Check out our [Live Demo](https://nlp.cs.washington.edu/denspi).
+# Real-Time Open-Domain QA with Dense-Sparse Phrase Index
 
 ![teaser](figs/teaser.png)
 
-BibTeX:
+- [Paper](https://arxiv.org/abs/1906.05807), to appear at [ACL 2019](http://www.acl2019.org)
+- [Live Demo][demo]
+- BibTeX:
 ```
 @inproceedings{denspi,
   title={Real-Time Open-Domain Question Answering with Dense-Sparse Phrase Index},
@@ -18,10 +14,7 @@ BibTeX:
 }
 ```
 
-While the entire codebase is here, please understand that it still **requires substantial work on documentation**.
-As of now, we only have instructions for hosting your own demo with the pre-dumped index and pre-trained model that we provide.
-Please stay tuned for the full documentation including how to start from scratch 
-(though you are more than welcome to look into our undocumented code).
+We enumerate, embed and index every phrase in Wikipedia (60 Billion) so that open-domain QA can be formulated as a pure phrase retrieval problem. Our model is able to read the entire Wikpedia in 0.5s with CPUs, allowing it to reach long-tail answers with much faster inference speed than "retrieve & read" models (at least 58x). Feel free to check it out in our [demo][demo].
 
 
 ## Demo
@@ -30,7 +23,7 @@ This section will let you host the demo that looks like
 ![demo](figs/demo.png)
  
 on your machine.
-You can also try it out [here](https://nlp.cs.washington.edu/denspi).
+You can also try it out [here][demo].
 You will need to download ~1.5 TB of files, but once you have them, it will take less than a minute to start serving.
 
 ### Prerequisites
@@ -193,10 +186,12 @@ Coming soon; for now, please download the dump from Google Cloud Storage (see "C
 
 
 ## Questions?
-Please use Github Issues or email [Minjoon Seo](http://seominjoon.github.io/) (soeminjoon@gmail.com).
+Please use Github Issues.
 
 ## Acknowledgment
 Our code makes a heavy use of [faiss](https://github.com/facebookresearch/faiss), 
 [DrQA](https://github.com/facebookresearch/DrQA) and [BERT](https://github.com/google-research/bert), in particular,
 Huggingface's [PyTorch implementation](https://github.com/huggingface/pytorch-pretrained-BERT).
 We thank them for open-sourcing these projects!
+
+[demo]: http://allgood.cs.washington.edu:15001/
