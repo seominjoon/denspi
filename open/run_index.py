@@ -34,7 +34,7 @@ def get_args():
     parser.add_argument('--add_all', default=False, action='store_true')
 
     # coarse, fine, add
-    parser.add_argument('--num_clusters', type=int, default=4096)
+    parser.add_argument('--num_clusters', type=int, default=64)
     parser.add_argument('--hnsw', default=False, action='store_true')
     parser.add_argument('--fine_quant', default='SQ8',
                         help='SQ8|SQ4|PQ# where # is number of bytes per vector (for SQ it would be 480 Bytes)')

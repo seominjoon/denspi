@@ -13,11 +13,6 @@ from drqa.retriever import utils
 
 logger = logging.getLogger(__name__)
 
-RANKER_PATH = os.path.join(
-    os.path.expanduser('~'),
-    'github/DrQA/data/wikipedia/docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz'
-)
-
 
 class MyTfidfDocRanker(retriever.get_class('tfidf')):
     def text2spvec(self, query, data_val=False):
@@ -91,7 +86,7 @@ def get_args():
     parser.add_argument('out_dir')
     parser.add_argument('--start', default=0, type=int)
     parser.add_argument('--end', default=1, type=int)
-    parser.add_argument('--ranker_path', default=RANKER_PATH, type=str)
+    parser.add_argument('--ranker_path', default='docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz', type=str)
     parser.add_argument('--nfs', default=False, action='store_true')
     return parser.parse_args()
 
@@ -103,6 +98,7 @@ def main():
         args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
         args.out_dir = os.path.join(NSML_NFS_OUTPUT, args.out_dir)
         args.ranker_path = os.path.join(NSML_NFS_OUTPUT, args.ranker_path)
+    os.makedirs(args.out_dir)
     assert os.path.isdir(args.dump_dir)
     dump_paths = sorted([os.path.join(args.dump_dir, name) for name in os.listdir(args.dump_dir) if 'hdf5' in name])[
                  args.start:args.end]

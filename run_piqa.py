@@ -76,7 +76,7 @@ def main():
     # Output and load paths
     parser.add_argument("--output_dir", default='out/', type=str,
                         help="The output directory where the model checkpoints will be written.")
-    parser.add_argument("--index_file", default='phrase.hdf5', type=str, help="index output file.")
+    parser.add_argument("--dump_file", default='phrase.hdf5', type=str, help="dump output file.")
     parser.add_argument("--question_emb_file", default='question.hdf5', type=str, help="question output file.")
     parser.add_argument("--train_question_emb_file", default='train_question.hdf5', type=str,
                         help="question output file.")
@@ -94,8 +94,8 @@ def main():
     parser.add_argument("--do_train_filter", default=False, action='store_true', help='Train filter or not.')
     parser.add_argument("--do_predict", default=False, action='store_true', help="Whether to run eval on the dev set.")
     parser.add_argument('--do_eval', default=False, action='store_true')
-    parser.add_argument('--do_embed_question', default=False, action='store_true')
-    parser.add_argument('--do_index', default=False, action='store_true')
+    parser.add_argument('--do_dump_question', default=False, action='store_true')
+    parser.add_argument('--do_dump', default=False, action='store_true')
     parser.add_argument('--do_serve', default=False, action='store_true')
 
     # Model options: if you change these, you need to train again
@@ -228,7 +228,7 @@ def main():
     args.init_checkpoint = os.path.join(args.metadata_dir, args.init_checkpoint.replace(".bin", "") +
                                         "_" + args.bert_model_option + ".bin")
     args.vocab_file = os.path.join(args.metadata_dir, args.vocab_file)
-    args.index_file = os.path.join(args.output_dir, args.index_file)
+    args.dump_file = os.path.join(args.output_dir, args.dump_file)
 
     args.question_emb_file = os.path.join(args.output_dir, args.question_emb_file)
     args.train_question_emb_file = os.path.join(args.output_dir, args.train_question_emb_file)
@@ -399,7 +399,7 @@ def main():
 
             processor.save(epoch + 1)
 
-    if args.do_embed_question:
+    if args.do_dump_question:
         question_examples = read_squad_examples(
             question_only=True,
             input_file=args.train_file, is_training=False, draft=args.draft,
@@ -671,7 +671,7 @@ def main():
             process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
             output, error = process.communicate()
 
-    if args.do_embed_question:
+    if args.do_dump_question:
         question_examples = read_squad_examples(
             question_only=True,
             input_file=args.predict_file, is_training=False, draft=args.draft,
@@ -690,7 +690,7 @@ def main():
         print('Writing %s' % args.question_emb_file)
         write_question_results(question_results, query_eval_features, args.question_emb_file)
 
-    if args.do_index:
+    if args.do_dump:
         if ':' not in args.predict_file:
             predict_files = [args.predict_file]
             offsets = [0]
@@ -700,11 +700,11 @@ def main():
             start, end = list(map(int, basename.split(':')))
 
             # skip files if possible
-            if os.path.exists(args.index_file):
-                with h5py.File(args.index_file, 'r') as f:
+            if os.path.exists(args.dump_file):
+                with h5py.File(args.dump_file, 'r') as f:
                     dids = list(map(int, f.keys()))
                 start = int(max(dids) / 1000)
-                print('%s exists; starting from %d' % (args.index_file, start))
+                print('%s exists; starting from %d' % (args.dump_file, start))
 
             names = [str(i).zfill(4) for i in range(start, end)]
             predict_files = [os.path.join(dirname, name) for name in names]
@@ -725,7 +725,7 @@ def main():
                 max_seq_length=args.max_seq_length,
                 doc_stride=args.doc_stride)
 
-            logger.info("***** Running indexing on %s *****" % predict_file)
+            logger.info("***** Running dumping on %s *****" % predict_file)
             logger.info("  Num orig examples = %d", len(context_examples))
             logger.info("  Num split examples = %d", len(context_features))
             logger.info("  Batch size = %d", args.predict_batch_size)
@@ -747,7 +747,7 @@ def main():
                                             batch_size=args.predict_batch_size)
 
             model.eval()
-            logger.info("Start indexing")
+            logger.info("Start dumping")
 
             def get_context_results():
                 for (input_ids, input_mask, example_indices) in context_dataloader:
@@ -777,7 +777,7 @@ def main():
 
             t0 = time()
             write_hdf5(context_examples, context_features, get_context_results(),
-                       args.max_answer_length, not args.do_case, args.index_file, args.filter_threshold,
+                       args.max_answer_length, not args.do_case, args.dump_file, args.filter_threshold,
                        args.verbose_logging,
                        offset=args.compression_offset, scale=args.compression_scale,
                        split_by_para=args.split_by_para,

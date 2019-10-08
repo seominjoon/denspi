@@ -133,7 +133,8 @@ class MIPSSparse(MIPS):
         start_idxs = np.reshape(start_idxs, [-1])
         start_scores = np.reshape(start_scores, [-1])
 
-        start_scores += self.sparse_weight * all_doc_scores[doc_idxs]
+        if all_doc_scores is not None:
+            start_scores += self.sparse_weight * all_doc_scores[doc_idxs]
 
         # for now, assume 1D
         doc_idxs = np.squeeze(doc_idxs)
@@ -178,7 +179,10 @@ class MIPSSparse(MIPS):
             if not len(self.sparse_type) == 0:
                 q_spvecs = vstack([self.ranker.text2spvec(q) for q in q_texts])
 
-            doc_scores = np.squeeze((q_spvecs * self.ranker.doc_mat).toarray())
+            if 'd' in self.sparse_type:
+                doc_scores = np.squeeze((q_spvecs * self.ranker.doc_mat).toarray())
+            else:
+                doc_scores = None
 
             if search_strategy == 'dense_first':
                 (doc_idxs, para_idxs, start_idxs), start_scores = self.search_dense(query_start,
@@ -186,8 +190,10 @@ class MIPSSparse(MIPS):
                                                                                     nprobe,
                                                                                     doc_scores)
             elif search_strategy == 'sparse_first':
+                assert 'd' in self.sparse_type
                 (doc_idxs, start_idxs), start_scores = self.search_sparse(query_start, doc_scores, doc_top_k)
             elif search_strategy == 'hybrid':
+                assert 'd' in self.sparse_type
                 (doc_idxs, para_idxs, start_idxs), start_scores = self.search_dense(query_start,
                                                                                     start_top_k,
                                                                                     nprobe,
