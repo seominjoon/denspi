@@ -156,33 +156,61 @@ python run_piqa.py --train_batch_size 12 --do_train_filter --num_train_epochs 1 
 ```
 
 
-
-## Create Phrase Index
+## Create a Custom Phrase Index
 For sanity check, we will first test with a small phrase index that corresponds to the entire dev data of SQuAD,
 which contains approximately 300k words. Note that Wikipedia has 3 Billion words,
 so this will be approximately 1/10k-th size experiment.
 
-### Create Small (Dense-Only) Phrase Index
+For a fast sanity check, we provide `gs://denspi/v1-0/data/dev-v1.1/` that contains two small json files, `0000` and `0001`, each of which corresponds to approximately half of 
+`dev-v1.1.json` (i.e. identical when concatenated).
+Of course, as long as you follow the same data format, you can use your own documents.
+Note that you only need to provide `title` field of each article and `context` of the paragraphs in the article.
+Other fields (such as `qas` of each paragraph) are all ignored.
 
-First, dump phrase vectors:
+Given the trained model from the above, we first dump the dense phrase vectors:
 ```
-python run_piqa.py --do_embed_question --do_index --output_dir $ROOT_DIR/dump_small --load_dir $SAVE3_DIR --iteration 1 --filter_threshold -2 --parallel
+python run_piqa.py --do_dump --filter_threshold -2 --save_dir $SAVE3_DIR --metadata_dir $ROOT_DIR/bert --data_dir $ROOT_DIR/data/dev-v1.1 --predict_file 0:1 --output_dir $ROOT_DIR/your_dump/phrase --dump_file 0-1.hdf5
+```
+Note that this only dumps the first file, `0000`. You can basically dump in a distributed way by controlling `--predict_file` range.
+Of course, you can simply give `predict_file 0:2` to dump everything into a single hdf5.
+But when the number of documents get big, you will need to make this distributed.
+`--dump_file` must exactly correspond to the range of input file names that you use.
+
+Now move to the `./open` folder (`cd open/`).
+Then create a faiss index:
+```
+python run_index.py $ROOT_DIR/your_dump all
 ```
 
-Then create the phrase index and perform evaluation on the question embeddings:
+You also need to create (paragraph-level) tf-idf vectors corresponding to your custom documents:
+```
+python dump_tfidf.py $ROOT_DIR/your_dump/phrase/ $ROOT_DIR/your_dump/tfidf $ROOT_DIR/wikipedia --start 0 --end 2 
+```
+Here `--end` indicates the range of your original input files.
+
+
+Now you are ready to run your demo on your own dump! Just change the dump directory from the old `$ROOT_DIR/dump`
+to your new `$ROOT_DIR/your_dump` with two little changes:
 
 ```
-cd open
-python run_index_pred_eval.py $ROOT_DIR/dump_small $ROOT_DIR/data/dev-v1.1.jon --question_dump_path $ROOT_DIR/dump_small/question.hdf5
+python run_demo.py $ROOT_DIR/dump $ROOT_DIR/wikipedia --api_port $API_PORT --port $DEMO_PORT --index_name 64_hnsw_SQ8 --sparse_type p
 ```
-where 
 
-You should obtain around 53 EM.
+`--index_name` is different because we use a different parameters (no hnsw, 64 clusters) in `python run_index.py` (since we have a small corpus).
+We will explain what it means in the below section.
+`--sparse_type` can be either `p` or `dp`, meaning whether we use just paragraph tf-idf vectors or also use document-level tf-idf vectors.
+Current version only supports `p`. Using the document vectors as well is trivially easy and will be updated soon.
 
 
-### Create Full Phrase Index
-Here we want to extend the scale to full Wikipedia (3B tokens). 
-Coming soon; for now, please download the dump from Google Cloud Storage (see "C. Download" above.)
+## Create a Large Phrase Index
+You can follow a similar procedure from the above to extend this small phrase index to a large one, as large as Wikipedia.
+We just outline a few things that you should be aware of when the scale grows:
+
+1. As mentioned above, you might want to distribute dumping because you will need 500 GPU hours for 3 Billion words to be processed.
+2. You will need a large `--num_clusters` during `run_index.py`, e.g. 1M for Wikipedia. You also want to use `--hnsw` flag for faster inference (not necessary though if speed is not your concern).
+3. Running `run_index.py` will consume a lot of CPU RAM memory. Basically, your RAM needs to be able to store the entire faiss index if not built in a distributed fashion (on-disk distribution).
+It is possible to distribute it so that we can do it faster and also consume less memory in each machine. We will add procedures for this soon.
+
 
 
 ## Questions?

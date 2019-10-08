@@ -84,9 +84,9 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('dump_dir')
     parser.add_argument('out_dir')
+    parser.add_argument('ranker_path')
     parser.add_argument('--start', default=0, type=int)
     parser.add_argument('--end', default=1, type=int)
-    parser.add_argument('--ranker_path', default='docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz', type=str)
     parser.add_argument('--nfs', default=False, action='store_true')
     return parser.parse_args()
 
@@ -98,6 +98,7 @@ def main():
         args.dump_dir = os.path.join(NSML_NFS_OUTPUT, args.dump_dir)
         args.out_dir = os.path.join(NSML_NFS_OUTPUT, args.out_dir)
         args.ranker_path = os.path.join(NSML_NFS_OUTPUT, args.ranker_path)
+    args.ranker_path = os.path.join(args.ranker_path, 'docs-tfidf-ngram=2-hash=16777216-tokenizer=simple.npz')
     os.makedirs(args.out_dir)
     assert os.path.isdir(args.dump_dir)
     dump_paths = sorted([os.path.join(args.dump_dir, name) for name in os.listdir(args.dump_dir) if 'hdf5' in name])[
