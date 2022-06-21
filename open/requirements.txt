@@ -1,4 +1,4 @@
-numpy==1.15.4
+numpy==1.22.0
 tqdm==4.31.1
 h5py==2.9.0
 requests_futures==0.9.9
